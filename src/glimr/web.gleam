@@ -1,9 +1,8 @@
-import app/config/config.{type Config}
 import gleam/bool
 import wisp
 
 pub type Context {
-  Context(static_directory: String, config: Config)
+  Context(static_directory: String)
 }
 
 pub fn middleware(
