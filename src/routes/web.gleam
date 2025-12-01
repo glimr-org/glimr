@@ -1,9 +1,13 @@
-import app/controllers/contact_controller
-import app/controllers/home_controller
-import app/middleware/logger.{handle as logger}
+import app/http/controllers/contact_controller
+import app/http/controllers/home_controller
+import app/http/middleware/logger.{handle as logger}
 import glimr/route
 
 // TODO: create ability for route groups.
+
+// TODO: figure out how to have different routes. api routes, etc. ?
+
+// TODO: figure out how we're getting routes by name
 
 pub fn get() -> List(route.Route) {
   [
