@@ -1,12 +1,20 @@
 import app/controllers/contact_controller
 import app/controllers/home_controller
-import glimr/router
+import app/middleware/logger.{handle as logger}
+import glimr/route
 
-pub fn get() -> List(router.Route) {
+// TODO: create ability for route groups.
+
+pub fn get() -> List(route.Route) {
   [
-    router.get("/", home_controller.show),
+    route.get("/", home_controller.show)
+      |> route.middleware([logger])
+      |> route.name("home.show"),
 
-    router.get("/contact-us", contact_controller.show),
-    router.post("/contact-us", contact_controller.store),
+    route.get("/contact-us", contact_controller.show)
+      |> route.name("contact.show"),
+
+    route.post("/contact-us", contact_controller.store)
+      |> route.name("contact.store"),
   ]
 }
