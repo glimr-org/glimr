@@ -29,6 +29,8 @@ pub fn default_responses(handle_request: fn() -> wisp.Response) -> wisp.Response
     return: response,
   )
 
+  // TODO: we need better error messages
+
   case response.status {
     404 ->
       "<h1>Not Found</h1>"
@@ -47,7 +49,7 @@ pub fn default_responses(handle_request: fn() -> wisp.Response) -> wisp.Response
       |> wisp.html_body(response, _)
 
     500 ->
-      "<h1>Internal Server Errorsss</h1>"
+      "<h1>Internal Server Error</h1>"
       |> wisp.html_body(response, _)
 
     _ -> response
