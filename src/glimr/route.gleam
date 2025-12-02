@@ -1,16 +1,16 @@
-import gleam/dict.{type Dict}
-import gleam/http.{type Method}
+import gleam/dict
+import gleam/http
 import gleam/list
 import gleam/result
 import gleam/string
-import glimr/context.{type Context}
+import glimr/context
 import glimr/kernel
-import wisp.{type Request, type Response}
+import wisp
 
 // TODO: document all this
 
 pub type RouteRequest {
-  RouteRequest(request: Request, params: Dict(String, String))
+  RouteRequest(request: wisp.Request, params: dict.Dict(String, String))
 }
 
 pub type RouteGroup {
@@ -18,10 +18,11 @@ pub type RouteGroup {
 }
 
 type RouteHandler =
-  fn(RouteRequest, Context) -> Response
+  fn(RouteRequest, context.Context) -> wisp.Response
 
 pub type Middleware =
-  fn(Request, Context, fn(Request) -> Response) -> Response
+  fn(wisp.Request, context.Context, fn(wisp.Request) -> wisp.Response) ->
+    wisp.Response
 
 pub fn get_param(req: RouteRequest, key: String) -> Result(String, Nil) {
   dict.get(req.params, key)
@@ -33,7 +34,7 @@ pub fn get_param_or(req: RouteRequest, key: String, default: String) -> String {
 
 pub type Route {
   Route(
-    method: Method,
+    method: http.Method,
     path: String,
     handler: RouteHandler,
     middleware: List(Middleware),
