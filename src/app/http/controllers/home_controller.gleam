@@ -1,4 +1,4 @@
-import app/config/config_app
+import config/config_app
 import glimr/route.{type RouteRequest}
 import glimr/web.{type Context}
 import wisp.{type Response}
