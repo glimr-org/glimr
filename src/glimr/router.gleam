@@ -1,41 +1,66 @@
-import gleam/dict.{type Dict}
+import gleam/dict
 import gleam/http
-import gleam/http/response.{Response}
 import gleam/list
 import gleam/string
-import glimr/route.{type Middleware, type Route, type RouteRequest, RouteRequest}
-import glimr/web.{type Context}
-import routes/web as routes_web
-import wisp.{type Request, type Response, Text}
+import glimr/context
+import glimr/kernel
+import glimr/route
+import wisp
 
-pub fn handle(req: Request, ctx: Context) -> Response {
-  use req <- web.middleware(req, ctx)
-
-  let path = "/" <> string.join(wisp.path_segments(req), "/")
-  let method = req.method
-
-  case find_matching_route(routes_web.routes(), path, method) {
-    Ok(#(route, params)) -> {
-      let route_req = RouteRequest(request: req, params: params)
-      apply_middleware(route_req, ctx, route.middleware, route.handler)
+pub fn find_matching_route_in_groups(
+  route_groups: List(route.RouteGroup),
+  path: String,
+  method: http.Method,
+) -> Result(
+  #(route.Route, dict.Dict(String, String), kernel.MiddlewareGroup),
+  Nil,
+) {
+  route_groups
+  |> list.find_map(fn(group) {
+    case find_matching_route(group.routes, path, method) {
+      Ok(#(route, params)) -> Ok(#(route, params, group.middleware_group))
+      Error(_) -> Error(Nil)
     }
-    Error(_) -> {
-      case
-        routes_web.routes()
-        |> list.any(fn(route) { matches_path(route.path, path) })
-      {
-        True -> Response(405, [], Text(""))
-        False -> Response(404, [], Text(""))
-      }
+  })
+}
+
+pub fn get_all_routes(route_groups: List(route.RouteGroup)) -> List(route.Route) {
+  route_groups
+  |> list.flat_map(fn(group) { group.routes })
+}
+
+pub fn matches_path(pattern: String, path: String) -> Bool {
+  let pattern_segments = string.split(pattern, "/")
+  let path_segments = string.split(path, "/")
+
+  case list.length(pattern_segments) == list.length(path_segments) {
+    False -> False
+    True -> do_match_segments(pattern_segments, path_segments)
+  }
+}
+
+pub fn apply_middleware(
+  route_req: route.RouteRequest,
+  ctx: context.Context,
+  middleware: List(route.Middleware),
+  handler: fn(route.RouteRequest, context.Context) -> wisp.Response,
+) -> wisp.Response {
+  case middleware {
+    [] -> handler(route_req, ctx)
+    [first, ..rest] -> {
+      use req <- first(route_req.request, ctx)
+
+      let updated_route_req = route.RouteRequest(..route_req, request: req)
+      apply_middleware(updated_route_req, ctx, rest, handler)
     }
   }
 }
 
 fn find_matching_route(
-  routes: List(Route),
+  routes: List(route.Route),
   path: String,
   method: http.Method,
-) -> Result(#(Route, Dict(String, String)), Nil) {
+) -> Result(#(route.Route, dict.Dict(String, String)), Nil) {
   routes
   |> list.find_map(fn(route) {
     case route.method == method && matches_path(route.path, path) {
@@ -46,16 +71,6 @@ fn find_matching_route(
       False -> Error(Nil)
     }
   })
-}
-
-fn matches_path(pattern: String, path: String) -> Bool {
-  let pattern_segments = string.split(pattern, "/")
-  let path_segments = string.split(path, "/")
-
-  case list.length(pattern_segments) == list.length(path_segments) {
-    False -> False
-    True -> do_match_segments(pattern_segments, path_segments)
-  }
 }
 
 fn do_match_segments(
@@ -85,7 +100,7 @@ fn is_param(segment: String) -> Bool {
   // after the : (in this case id) 
 }
 
-fn extract_params(pattern: String, path: String) -> Dict(String, String) {
+fn extract_params(pattern: String, path: String) -> dict.Dict(String, String) {
   // TODO: if param contains a : use that to extract the correct value
   // and we can possibly throw an error from here like a 404 for example
   // if we get {user:id} and the url value is "10" but a user of id 10
@@ -101,8 +116,8 @@ fn extract_params(pattern: String, path: String) -> Dict(String, String) {
 fn do_extract_params(
   pattern_segments: List(String),
   path_segments: List(String),
-  params: Dict(String, String),
-) -> Dict(String, String) {
+  params: dict.Dict(String, String),
+) -> dict.Dict(String, String) {
   case pattern_segments, path_segments {
     [], [] -> params
     [p, ..rest_p], [s, ..rest_s] -> {
@@ -119,22 +134,5 @@ fn do_extract_params(
       do_extract_params(rest_p, rest_s, new_params)
     }
     _, _ -> params
-  }
-}
-
-fn apply_middleware(
-  route_req: RouteRequest,
-  ctx: Context,
-  middleware: List(Middleware),
-  handler: fn(RouteRequest, Context) -> Response,
-) -> Response {
-  case middleware {
-    [] -> handler(route_req, ctx)
-    [first, ..rest] -> {
-      use req <- first(route_req.request, ctx)
-
-      let updated_route_req = RouteRequest(..route_req, request: req)
-      apply_middleware(updated_route_req, ctx, rest, handler)
-    }
   }
 }

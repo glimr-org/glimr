@@ -1,9 +1,9 @@
+import bootstrap/router
 import dot_env
-import glimr/request_handler
-import glimr/web.{Context}
-import wisp.{type Request, type Response}
+import glimr/context
+import wisp
 
-pub fn init() -> fn(Request) -> Response {
+pub fn init() -> fn(wisp.Request) -> wisp.Response {
   wisp.configure_logger()
 
   load_env_variables()
@@ -19,9 +19,9 @@ fn load_env_variables() {
 }
 
 fn configure_request_handler() -> fn(wisp.Request) -> wisp.Response {
-  let ctx = Context(static_directory: get_static_directory())
+  let ctx = context.Context(static_directory: get_static_directory())
 
-  request_handler.handle(_, ctx)
+  router.handle(_, ctx)
 }
 
 fn get_static_directory() -> String {

@@ -1,6 +1,6 @@
 import gleam/http/response.{type Response}
+import glimr/context.{type Context}
 import glimr/route.{type RouteRequest}
-import glimr/web.{type Context}
 import wisp.{type Body}
 
 pub fn show(_req: RouteRequest, _ctx: Context) -> Response(Body) {

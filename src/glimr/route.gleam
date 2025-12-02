@@ -3,13 +3,18 @@ import gleam/http.{type Method}
 import gleam/list
 import gleam/result
 import gleam/string
-import glimr/web.{type Context}
+import glimr/context.{type Context}
+import glimr/kernel
 import wisp.{type Request, type Response}
 
 // TODO: document all this
 
 pub type RouteRequest {
   RouteRequest(request: Request, params: Dict(String, String))
+}
+
+pub type RouteGroup {
+  RouteGroup(middleware_group: kernel.MiddlewareGroup, routes: List(Route))
 }
 
 type RouteHandler =

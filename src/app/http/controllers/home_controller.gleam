@@ -1,6 +1,6 @@
 import config/config_app
+import glimr/context.{type Context}
 import glimr/route.{type RouteRequest}
-import glimr/web.{type Context}
 import wisp.{type Response}
 
 pub fn show(_req: RouteRequest, _ctx: Context) -> Response {

@@ -18,14 +18,6 @@ pub fn routes() -> List(route.Route) {
       ]
     }),
 
-    route.group_path_prefix("/api", fn() {
-      [
-        route.get("/testing", home_controller.show),
-        route.get("/testing-2", home_controller.show),
-        route.get("/testing-3", home_controller.show),
-      ]
-    }),
-
     [
       route.post("/contact-us", contact_controller.store)
         |> route.name("contact.store"),

@@ -1,5 +1,5 @@
+import glimr/context.{type Context}
 import glimr/route.{type RouteRequest}
-import glimr/web.{type Context}
 import wisp.{type Response}
 
 pub fn show(req: RouteRequest, _ctx: Context) -> Response {
