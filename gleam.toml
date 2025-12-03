@@ -1,5 +1,5 @@
-name = "glimr"
-version = "0.0.1"
+name = "glimr_app"
+version = "1.0.0"
 
 # Fill out these fields if you intend to generate HTML documentation or publish
 # your project to the Hex package manager.
@@ -14,6 +14,7 @@ version = "0.0.1"
 
 [dependencies]
 gleam_stdlib = ">= 0.44.0 and < 2.0.0"
+glimr = { path = "../framework" }
 wisp = ">= 2.1.0 and < 3.0.0"
 lustre = ">= 5.4.0 and < 6.0.0"
 mist = ">= 5.0.3 and < 6.0.0"
