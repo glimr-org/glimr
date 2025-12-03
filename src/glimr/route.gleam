@@ -92,27 +92,24 @@ pub fn name(route: Route, name: String) -> Route {
 
 pub fn group_middleware(
   middleware: List(Middleware),
-  routes: fn() -> List(Route),
+  routes: List(List(Route)),
 ) -> List(Route) {
-  use route <- list.map(routes())
+  use route <- list.map(list.flatten(routes))
 
   Route(..route, middleware: list.append(middleware, route.middleware))
 }
 
 pub fn group_path_prefix(
   prefix: String,
-  routes: fn() -> List(Route),
+  routes: List(List(Route)),
 ) -> List(Route) {
-  use route <- list.map(routes())
+  use route <- list.map(list.flatten(routes))
 
   Route(..route, path: normalize_path(prefix) <> route.path)
 }
 
-pub fn group_name_prefix(
-  name: String,
-  routes: fn() -> List(Route),
-) -> List(Route) {
-  use route <- list.map(routes())
+pub fn group_name_prefix(name: String, routes: List(List(Route))) -> List(Route) {
+  use route <- list.map(list.flatten(routes))
 
   Route(..route, name: name <> route.name)
 }
