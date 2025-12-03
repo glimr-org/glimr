@@ -1,8 +1,8 @@
+import app/http/context/ctx
 import config/config_app
-import glimr/context.{type Context}
-import glimr/route.{type RouteRequest}
-import wisp.{type Response}
+import glimr/routing/route
+import wisp
 
-pub fn show(_req: RouteRequest, _ctx: Context) -> Response {
+pub fn show(_req: route.RouteRequest, _ctx: ctx.Context) -> wisp.Response {
   wisp.html_response("This is the home page for: " <> config_app.name(), 200)
 }

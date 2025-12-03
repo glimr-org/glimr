@@ -2,17 +2,33 @@ import gleam/dict
 import gleam/http
 import gleam/list
 import gleam/string
-import glimr/context
-import glimr/kernel
-import glimr/route
+import glimr/http/kernel
+import glimr/routing/route
 import wisp
 
+pub fn apply_middleware(
+  route_req: route.RouteRequest,
+  ctx: context,
+  middleware: List(route.Middleware(context)),
+  handler: fn(route.RouteRequest, context) -> wisp.Response,
+) -> wisp.Response {
+  case middleware {
+    [] -> handler(route_req, ctx)
+    [first, ..rest] -> {
+      use req <- first(route_req.request, ctx)
+
+      let updated_route_req = route.RouteRequest(..route_req, request: req)
+      apply_middleware(updated_route_req, ctx, rest, handler)
+    }
+  }
+}
+
 pub fn find_matching_route_in_groups(
-  route_groups: List(route.RouteGroup),
+  route_groups: List(route.RouteGroup(context)),
   path: String,
   method: http.Method,
 ) -> Result(
-  #(route.Route, dict.Dict(String, String), kernel.MiddlewareGroup),
+  #(route.Route(context), dict.Dict(String, String), kernel.MiddlewareGroup),
   Nil,
 ) {
   route_groups
@@ -24,7 +40,9 @@ pub fn find_matching_route_in_groups(
   })
 }
 
-pub fn get_all_routes(route_groups: List(route.RouteGroup)) -> List(route.Route) {
+pub fn get_all_routes(
+  route_groups: List(route.RouteGroup(context)),
+) -> List(route.Route(context)) {
   route_groups
   |> list.flat_map(fn(group) { group.routes })
 }
@@ -39,28 +57,11 @@ pub fn matches_path(pattern: String, path: String) -> Bool {
   }
 }
 
-pub fn apply_middleware(
-  route_req: route.RouteRequest,
-  ctx: context.Context,
-  middleware: List(route.Middleware),
-  handler: fn(route.RouteRequest, context.Context) -> wisp.Response,
-) -> wisp.Response {
-  case middleware {
-    [] -> handler(route_req, ctx)
-    [first, ..rest] -> {
-      use req <- first(route_req.request, ctx)
-
-      let updated_route_req = route.RouteRequest(..route_req, request: req)
-      apply_middleware(updated_route_req, ctx, rest, handler)
-    }
-  }
-}
-
 fn find_matching_route(
-  routes: List(route.Route),
+  routes: List(route.Route(context)),
   path: String,
   method: http.Method,
-) -> Result(#(route.Route, dict.Dict(String, String)), Nil) {
+) -> Result(#(route.Route(context), dict.Dict(String, String)), Nil) {
   routes
   |> list.find_map(fn(route) {
     case route.method == method && matches_path(route.path, path) {

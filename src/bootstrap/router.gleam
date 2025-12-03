@@ -1,16 +1,16 @@
+import app/http/context/ctx
 import app/http/kernel
 import app/providers/route_provider
 import config/config_api
 import gleam/http/response
 import gleam/list
 import gleam/string
-import glimr/context
-import glimr/kernel as base_kernel
-import glimr/route
-import glimr/router
+import glimr/http/kernel as base_kernel
+import glimr/routing/route
+import glimr/routing/router
 import wisp
 
-pub fn handle(req: wisp.Request, ctx: context.Context) -> wisp.Response {
+pub fn handle(req: wisp.Request, ctx: ctx.Context) -> wisp.Response {
   let path = "/" <> string.join(wisp.path_segments(req), "/")
   let method = req.method
   let route_groups = route_provider.register()

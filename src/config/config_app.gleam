@@ -3,8 +3,8 @@
 //// --------------------------------------------------------------------------
 //// 
 //// Application configuration module for managing environment settings
-//// Provides access to configuration values loaded from .env file
-//// Used throughout the application for runtime configuration
+//// which provides access to configuration values loaded from the
+//// .env file and used throughout for runtime configuration.
 ////
 
 import dot_env/env
@@ -14,9 +14,9 @@ import gleam/result
 /// Application Name (Default: Glimr)
 /// --------------------------------------------------------------------------
 /// 
-/// The name used when displaying your app in responses and error pages.
-/// This reads from APP_NAME and defaults to "Glimr" if not present.
-/// Used throughout the framework wherever a name is displayed.
+/// The name that's used when displaying your app in responses and error 
+/// pages. This value is used throughout the entire framework where the
+/// the app name is displayed. Defaults to "Glimr" if it's not set.
 ///
 pub fn name() -> String {
   env.get_string("APP_NAME") |> result.unwrap("Glimr")
@@ -27,7 +27,7 @@ pub fn name() -> String {
 /// --------------------------------------------------------------------------
 /// 
 /// The network port the web server listens on for incoming HTTP requests.
-/// Read from APP_PORT, defaults to 8000, a common development port.
+/// Reads from APP_PORT, defaults to 8000, a common development port.
 /// This port typically doesn't require administrator privileges.
 ///
 pub fn port() -> Int {

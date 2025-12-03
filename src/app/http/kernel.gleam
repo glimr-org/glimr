@@ -1,11 +1,11 @@
-import glimr/context
-import glimr/error_handler
-import glimr/kernel
+import app/http/context/ctx
+import glimr/http/error_handler
+import glimr/http/kernel
 import wisp
 
 pub fn handle(
   req: wisp.Request,
-  ctx: context.Context,
+  ctx: ctx.Context,
   middleware_group: kernel.MiddlewareGroup,
   router: fn(wisp.Request) -> wisp.Response,
 ) -> wisp.Response {
@@ -22,10 +22,14 @@ pub fn handle(
 
 fn handle_web_middleware(
   req: wisp.Request,
-  ctx: context.Context,
+  ctx: ctx.Context,
   router: fn(wisp.Request) -> wisp.Response,
 ) -> wisp.Response {
-  use <- wisp.serve_static(req, under: "/static", from: ctx.static_directory)
+  use <- wisp.serve_static(
+    req,
+    under: "/static",
+    from: ctx.app.static_directory,
+  )
   use <- wisp.log_request(req)
   use <- error_handler.default_html_responses()
   use <- wisp.rescue_crashes
@@ -36,7 +40,7 @@ fn handle_web_middleware(
 
 fn handle_api_middleware(
   req: wisp.Request,
-  _ctx: context.Context,
+  _ctx: ctx.Context,
   router: fn(wisp.Request) -> wisp.Response,
 ) -> wisp.Response {
   use <- wisp.log_request(req)

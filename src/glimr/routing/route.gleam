@@ -3,8 +3,7 @@ import gleam/http
 import gleam/list
 import gleam/result
 import gleam/string
-import glimr/context
-import glimr/kernel
+import glimr/http/kernel
 import wisp
 
 // TODO: document all this
@@ -13,15 +12,15 @@ pub type RouteRequest {
   RouteRequest(request: wisp.Request, params: dict.Dict(String, String))
 }
 
-pub type RouteGroup {
-  RouteGroup(middleware_group: kernel.MiddlewareGroup, routes: List(Route))
+pub type RouteGroup(context) {
+  RouteGroup(middleware_group: kernel.MiddlewareGroup, routes: List(Route(context)))
 }
 
-type RouteHandler =
-  fn(RouteRequest, context.Context) -> wisp.Response
+pub type RouteHandler(context) =
+  fn(RouteRequest, context) -> wisp.Response
 
-pub type Middleware =
-  fn(wisp.Request, context.Context, fn(wisp.Request) -> wisp.Response) ->
+pub type Middleware(context) =
+  fn(wisp.Request, context, fn(wisp.Request) -> wisp.Response) ->
     wisp.Response
 
 pub fn get_param(req: RouteRequest, key: String) -> Result(String, Nil) {
@@ -32,17 +31,17 @@ pub fn get_param_or(req: RouteRequest, key: String, default: String) -> String {
   dict.get(req.params, key) |> result.unwrap(default)
 }
 
-pub type Route {
+pub type Route(context) {
   Route(
     method: http.Method,
     path: String,
-    handler: RouteHandler,
-    middleware: List(Middleware),
+    handler: RouteHandler(context),
+    middleware: List(Middleware(context)),
     name: String,
   )
 }
 
-pub fn get(path: String, handler: RouteHandler) -> Route {
+pub fn get(path: String, handler: RouteHandler(context)) -> Route(context) {
   Route(
     method: http.Get,
     path: normalize_path(path),
@@ -52,7 +51,7 @@ pub fn get(path: String, handler: RouteHandler) -> Route {
   )
 }
 
-pub fn post(path: String, handler: RouteHandler) -> Route {
+pub fn post(path: String, handler: RouteHandler(context)) -> Route(context) {
   Route(
     method: http.Post,
     path: normalize_path(path),
@@ -62,7 +61,7 @@ pub fn post(path: String, handler: RouteHandler) -> Route {
   )
 }
 
-pub fn put(path: String, handler: RouteHandler) -> Route {
+pub fn put(path: String, handler: RouteHandler(context)) -> Route(context) {
   Route(
     method: http.Put,
     path: normalize_path(path),
@@ -72,7 +71,7 @@ pub fn put(path: String, handler: RouteHandler) -> Route {
   )
 }
 
-pub fn delete(path: String, handler: RouteHandler) -> Route {
+pub fn delete(path: String, handler: RouteHandler(context)) -> Route(context) {
   Route(
     method: http.Delete,
     path: normalize_path(path),
@@ -82,18 +81,18 @@ pub fn delete(path: String, handler: RouteHandler) -> Route {
   )
 }
 
-pub fn middleware(route: Route, middleware: List(Middleware)) -> Route {
+pub fn middleware(route: Route(context), middleware: List(Middleware(context))) -> Route(context) {
   Route(..route, middleware: middleware)
 }
 
-pub fn name(route: Route, name: String) -> Route {
+pub fn name(route: Route(context), name: String) -> Route(context) {
   Route(..route, name: name)
 }
 
 pub fn group_middleware(
-  middleware: List(Middleware),
-  routes: List(List(Route)),
-) -> List(Route) {
+  middleware: List(Middleware(context)),
+  routes: List(List(Route(context))),
+) -> List(Route(context)) {
   use route <- list.map(list.flatten(routes))
 
   Route(..route, middleware: list.append(middleware, route.middleware))
@@ -101,14 +100,14 @@ pub fn group_middleware(
 
 pub fn group_path_prefix(
   prefix: String,
-  routes: List(List(Route)),
-) -> List(Route) {
+  routes: List(List(Route(context))),
+) -> List(Route(context)) {
   use route <- list.map(list.flatten(routes))
 
   Route(..route, path: normalize_path(prefix) <> route.path)
 }
 
-pub fn group_name_prefix(name: String, routes: List(List(Route))) -> List(Route) {
+pub fn group_name_prefix(name: String, routes: List(List(Route(context)))) -> List(Route(context)) {
   use route <- list.map(list.flatten(routes))
 
   Route(..route, name: name <> route.name)

@@ -1,10 +1,11 @@
+import app/http/context/ctx
 import app/http/controllers/contact_controller
 import app/http/controllers/home_controller
 import app/http/controllers/test_controller
 import app/http/middleware/logger.{handle as logger}
-import glimr/route
+import glimr/routing/route
 
-pub fn routes() -> List(List(route.Route)) {
+pub fn routes() -> List(List(route.Route(ctx.Context))) {
   [
     route.group_middleware([logger], [
       [

@@ -1,6 +1,6 @@
+import app/providers/ctx_provider
 import bootstrap/router
 import dot_env
-import glimr/context
 import wisp
 
 pub fn init() -> fn(wisp.Request) -> wisp.Response {
@@ -19,13 +19,5 @@ fn load_env_variables() {
 }
 
 fn configure_request_handler() -> fn(wisp.Request) -> wisp.Response {
-  let ctx = context.Context(static_directory: get_static_directory())
-
-  router.handle(_, ctx)
-}
-
-fn get_static_directory() -> String {
-  let assert Ok(priv_dir) = wisp.priv_directory("glimr")
-
-  priv_dir <> "/static"
+  router.handle(_, ctx_provider.register())
 }
