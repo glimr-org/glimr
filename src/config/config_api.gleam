@@ -8,7 +8,7 @@
 ////
 
 /// --------------------------------------------------------------------------
-/// API Route Prefix (Default: "/api")
+/// API Route Prefix
 /// --------------------------------------------------------------------------
 ///
 /// The URL prefix automatically prepended to all API route definitions.
