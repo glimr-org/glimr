@@ -1,10 +1,10 @@
-import app/http/context/ctx_app
+import app/http/context/ctx_app.{type Context as AppContext}
 
 pub type Context {
   Context(
-    app: ctx_app.Context,
+    app: AppContext,
     // add other third-party contexts here
     // ex.
-    // custom_package: custom_package.Context
+    // custom_package: CustomPackageContext
   )
 }

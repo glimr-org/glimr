@@ -1,11 +1,10 @@
-import app/http/context/ctx
-import glimr/routing/route
-import wisp
+import app/http/context/ctx.{type Context}
+import app/http/requests/store_contact
+import glimr/routing/route.{type RouteRequest}
+import wisp.{type Response}
 
-pub fn show(_req: route.RouteRequest, _ctx: ctx.Context) -> wisp.Response {
-  wisp.html_response("This is the contact page", 200)
-}
+pub fn store(req: RouteRequest, _ctx: Context) -> Response {
+  use _form <- store_contact.validate(req)
 
-pub fn store(_req: route.RouteRequest, _ctx: ctx.Context) -> wisp.Response {
-  wisp.html_response("Handle contact form...", 200)
+  wisp.html_response("Contact form submitted successfully!", 200)
 }

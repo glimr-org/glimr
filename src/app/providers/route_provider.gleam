@@ -1,12 +1,11 @@
-import app/http/context/ctx
+import app/http/context/ctx.{type Context}
 import gleam/list
 import glimr/http/kernel
-import glimr/routing/route
+import glimr/routing/route.{type RouteGroup}
 import routes/api
 import routes/web
 
-// TODO: document this
-pub fn register() -> List(route.RouteGroup(ctx.Context)) {
+pub fn register() -> List(RouteGroup(Context)) {
   [
     route.RouteGroup(
       middleware_group: kernel.Web,
@@ -17,5 +16,6 @@ pub fn register() -> List(route.RouteGroup(ctx.Context)) {
       middleware_group: kernel.Api,
       routes: list.flatten(api.routes()),
     ),
+    // register other route groups here...
   ]
 }

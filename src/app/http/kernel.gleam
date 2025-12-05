@@ -1,14 +1,14 @@
-import app/http/context/ctx
+import app/http/context/ctx.{type Context}
 import glimr/http/error_handler
-import glimr/http/kernel
-import wisp
+import glimr/http/kernel.{type MiddlewareGroup}
+import wisp.{type Request, type Response}
 
 pub fn handle(
-  req: wisp.Request,
-  ctx: ctx.Context,
-  middleware_group: kernel.MiddlewareGroup,
-  router: fn(wisp.Request) -> wisp.Response,
-) -> wisp.Response {
+  req: Request,
+  ctx: Context,
+  middleware_group: MiddlewareGroup,
+  router: fn(Request) -> Response,
+) -> Response {
   let req = wisp.method_override(req)
 
   case middleware_group {
@@ -21,10 +21,10 @@ pub fn handle(
 }
 
 fn handle_web_middleware(
-  req: wisp.Request,
-  ctx: ctx.Context,
-  router: fn(wisp.Request) -> wisp.Response,
-) -> wisp.Response {
+  req: Request,
+  ctx: Context,
+  router: fn(Request) -> Response,
+) -> Response {
   use <- wisp.serve_static(
     req,
     under: "/static",
@@ -39,10 +39,10 @@ fn handle_web_middleware(
 }
 
 fn handle_api_middleware(
-  req: wisp.Request,
-  _ctx: ctx.Context,
-  router: fn(wisp.Request) -> wisp.Response,
-) -> wisp.Response {
+  req: Request,
+  _ctx: Context,
+  router: fn(Request) -> Response,
+) -> Response {
   use <- wisp.log_request(req)
   use <- error_handler.default_json_responses()
   use <- wisp.rescue_crashes
