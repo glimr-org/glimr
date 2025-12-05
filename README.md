@@ -153,6 +153,76 @@ pub fn show(req: route.RouteRequest, ctx: ctx.Context) -> wisp.Response {
 }
 ```
 
+### Form Validation
+
+Glimr provides a declarative, rule-based validation system for form data. Create form request modules to define validation rules and handle requests.
+
+#### Creating Form Requests
+
+Form request modules live in `src/app/http/requests/`:
+
+```gleam
+// src/app/http/requests/store_contact.gleam
+import glimr/helpers/validation.{Email, MaxLength, MinLength, Required}
+import wisp
+
+pub fn rules(form: wisp.FormData) {
+  validation.start([
+    form |> validation.for("name", [Required, MinLength(2)]),
+    form |> validation.for("email", [Required, Email, MaxLength(255)]),
+  ])
+}
+
+pub fn validate(req, on_valid) {
+  rules |> validation.handle(req, on_valid)
+}
+```
+
+#### Using Validation in Controllers
+
+Use the `use` syntax for clean, readable validation handling:
+
+```gleam
+import app/http/requests/store_contact
+
+pub fn store(req: route.RouteRequest, ctx: ctx.Context) -> wisp.Response {
+  use _form <- store_contact.validate(req)
+
+  // Form is valid, handle success case
+  wisp.html_response("Contact form submitted successfully!", 200)
+}
+```
+
+If validation fails, a 422 response with validation errors is automatically returned.
+
+#### Available Validation Rules
+
+- **Required** - Field must have a value
+- **Email** - Field must be a valid email address
+- **MinLength(Int)** - Field must be at least n characters
+- **MaxLength(Int)** - Field must be at most n characters
+- **Min(Int)** - Numeric field must be at least n
+- **Max(Int)** - Numeric field must be at most n
+- **Numeric** - Field must be numeric
+- **Url** - Field must be a valid URL
+
+#### Accessing Form Data
+
+Extract individual form field values:
+
+```gleam
+import glimr/helpers/form
+
+pub fn store(req: route.RouteRequest, ctx: ctx.Context) -> wisp.Response {
+  use form <- store_contact.validate(req)
+
+  let name = form |> form.get("name")
+  let email = form |> form.get("email")
+
+  // Process the data...
+}
+```
+
 ### Middleware
 
 Create custom middleware in `src/app/http/middleware/`:
