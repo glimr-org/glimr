@@ -1,4 +1,7 @@
-import glimr/helpers/validation.{Email, MaxLength, MinLength, Required}
+import glimr/helpers/validation.{
+  Email, FileExtension, FileMinSize, FileRequired, MaxLength, MinLength,
+  Required,
+}
 
 pub fn rules(form) {
   validation.start([
@@ -10,6 +13,13 @@ pub fn rules(form) {
         Email,
         MinLength(2),
         MaxLength(255),
+      ]),
+
+    form
+      |> validation.for_file("avatar", [
+        FileRequired,
+        FileExtension(["jpg", "png"]),
+        FileMinSize(5000),
       ]),
   ])
 }

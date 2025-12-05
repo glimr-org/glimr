@@ -1,4 +1,4 @@
-# Glimr
+# Glimr ✨
 
 A type-safe web framework for Gleam that brings functional programming elegance and developer productivity to web development.
 
