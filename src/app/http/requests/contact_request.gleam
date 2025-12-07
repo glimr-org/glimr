@@ -1,4 +1,4 @@
-import glimr/helpers/validation.{
+import glimr/forms/validation.{
   Email, FileExtension, FileMaxSize, FileRequired, MaxLength, MinLength,
   Required,
 }

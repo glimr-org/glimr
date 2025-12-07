@@ -178,7 +178,7 @@ Form request modules live in `src/app/http/requests/`:
 
 ```gleam
 // src/app/http/requests/contact_request.gleam
-import glimr/helpers/validation.{Email, MaxLength, MinLength, Required}
+import glimr/forms/validation.{Email, MaxLength, MinLength, Required}
 import wisp
 
 pub fn rules(form: wisp.FormData) {
@@ -246,7 +246,7 @@ If validation fails, a 422 response with validation errors is automatically retu
 Extract individual form field values:
 
 ```gleam
-import glimr/helpers/form
+import glimr/forms/form
 
 pub fn store(req: route.RouteRequest, ctx: ctx.Context) -> wisp.Response {
   use form <- store_contact.validate(req)
