@@ -12,7 +12,7 @@ Glimr is a Laravel-inspired web framework built for Gleam. It provides a delight
 
 ## Features
 
-- **Type-Safe Routing** - Laravel-style routing with compile-time safety and parameter extraction
+- **Routing** - Laravel-style routing with parameter extraction
 - **View Builder** - Fluent API for rendering HTML and Lustre components with layouts
 - **Template Engine** - Simple `{{variable}}` syntax for dynamic content
 - **Redirect Builder** - Clean redirect API with flash message support
@@ -130,21 +130,25 @@ Controllers live in `src/app/http/controllers/`:
 ```gleam
 import app/http/context/ctx
 import glimr/routing/route
+import glimr/response/view
+import glimr/response/redirect
 import wisp
 
 pub fn show(req: route.RouteRequest, ctx: ctx.Context) -> wisp.Response {
-  case route.get_param(req, "id") {
-    Ok(id) -> {
-      let html = "<h1>User ID: " <> id <> "</h1>"
-      wisp.html_response(html, 200)
-    }
-    Error(_) -> wisp.html_response("<h1>User not found</h1>", 404)
-  }
+  let assert Ok(id) = route.get_param(req, "id")
+
+  view.build()
+  |> view.html("users/show.html")
+  |> view.render()
 }
 
 pub fn store(req: route.RouteRequest, ctx: ctx.Context) -> wisp.Response {
-  // Handle POST request
-  wisp.json_response("{\"message\": \"User created\"}", 201)
+  // Handle POST request...
+
+  redirect.build()
+  |> redirect.back(req)
+  |> redirect.flash([#("message", "User created!")])
+  |> redirect.go()    
 }
 ```
 
@@ -530,7 +534,7 @@ gleam build
 
 Glimr is built on top of these excellent Gleam libraries:
 
-- [**Wisp**](https://hexdocs.pm/wisp/) - The web server foundation that powers Glimr's HTTP handling
+- [**Wisp**](https://hexdocs.pm/wisp/) - The web framework that powers Glimr's HTTP handling
 - [**gleam_http**](https://hexdocs.pm/gleam_http/) - HTTP types and utilities
 - [**gleam_json**](https://hexdocs.pm/gleam_json/) - JSON encoding and decoding
 - [**gleam_stdlib**](https://hexdocs.pm/gleam_stdlib/) - Gleam's standard library
