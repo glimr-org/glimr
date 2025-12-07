@@ -2,6 +2,8 @@
 
 A type-safe web framework for Gleam that brings functional programming elegance and developer productivity to web development.
 
+If you'd like to stay updated on Glimr's development, Follow [@migueljarias](https://x.com/migueljarias) on X (that's me) for updates, behind-the-scenes stuff and overall nonsense.
+
 ## About Glimr
 
 Glimr is a Laravel-inspired web framework built for Gleam. It provides a delightful developer experience with type-safe routing, middleware, singletons, and more - all leveraging Gleam's functional programming paradigm.
@@ -11,10 +13,14 @@ Glimr is a Laravel-inspired web framework built for Gleam. It provides a delight
 ## Features
 
 - **Type-Safe Routing** - Laravel-style routing with compile-time safety and parameter extraction
+- **View Builder** - Fluent API for rendering HTML and Lustre components with layouts
+- **Template Engine** - Simple `{{variable}}` syntax for dynamic content
+- **Redirect Builder** - Clean redirect API with flash message support
 - **Middleware System** - Composable middleware at route and group levels
 - **Middleware Groups** - Pre-configured middleware stacks for different route types
 - **Form Validation** - Elegant form validation layer to easily validate requests
-- **Context/DI System** - Type-safe dependency injection throughout your application
+- **Lustre Integration** - Server-side rendering of Lustre components
+- **Context/Singleton System** - Type-safe use of singletons throughout your application
 - **Controller Pattern** - Organized request handlers with clear separation of concerns
 - **Configuration Management** - Environment-based configuration with `.env` support
 - **Web & API Routes** - Separate route groups with appropriate error handling (HTML vs JSON)
@@ -96,20 +102,25 @@ Routes are defined in `src/routes/web.gleam` and `src/routes/api.gleam`:
 import glimr/routing/route
 import app/http/controllers/home_controller
 
-pub fn routes() -> List(List(route.Route(ctx.Context))) {
+pub fn routes() {
   [
     [
-      route.get("/", home_controller.show)
-        |> route.name("home.show"),
+      route.get("/", home_controller.show),
 
-      route.get("/users/{id}", user_controller.show)
-        |> route.name("users.show"),
-
+      route.get("/users/{id}", user_controller.show),
       route.post("/users", user_controller.store)
-        |> route.name("users.store"),
     ],
   ]
 }
+```
+
+#### Route Redirects
+
+Define redirects directly in your routes:
+
+```gleam
+// Redirect old URLs to new ones
+route.redirect("/old-contact", "/contact")
 ```
 
 ### Creating Controllers
@@ -147,7 +158,10 @@ route.get("/posts/{slug}/comments/{id}", comment_controller.show)
 
 // Controller
 pub fn show(req: route.RouteRequest, ctx: ctx.Context) -> wisp.Response {
-  let slug = route.get_param_or(req, "slug", "")
+  // Without a fallback
+  let assert Ok(slug) = route.get_param(req, "slug")
+
+  // With a fallback
   let id = route.get_param_or(req, "id", "0")
 
   // Use slug and id...
@@ -163,7 +177,7 @@ Glimr provides a declarative, rule-based validation system for form data. Create
 Form request modules live in `src/app/http/requests/`:
 
 ```gleam
-// src/app/http/requests/store_contact.gleam
+// src/app/http/requests/contact_request.gleam
 import glimr/helpers/validation.{Email, MaxLength, MinLength, Required}
 import wisp
 
@@ -184,28 +198,48 @@ pub fn validate(req, on_valid) {
 Use the `use` syntax for clean, readable validation handling:
 
 ```gleam
-import app/http/requests/store_contact
+import app/http/requests/contact_request
 
 pub fn store(req: route.RouteRequest, ctx: ctx.Context) -> wisp.Response {
-  use _form <- store_contact.validate(req)
+  // Form validation errors are handled automatically 
+  use _form <- contact_request.validate(req)
 
-  // Form is valid, handle success case
-  wisp.html_response("Contact form submitted successfully!", 200)
+  // Form is valid, redirect back with a success message
+  redirect.build()
+  |> redirect.back(req)
+  |> redirect.flash([#("message", "Contact form submitted successfully!")])
+  |> redirect.go()
 }
 ```
 
+> **Note:** Flash messaging isn't supported yet, as session support hasn't been implemented.
+
 If validation fails, a 422 response with validation errors is automatically returned.
+
+> **Note:** Currently, validation errors just show up in a basic view. Eventually, web routes will redirect back with the errors, and API routes will return a 422 JSON response.
 
 #### Available Validation Rules
 
+**Text & String Rules:**
 - **Required** - Field must have a value
 - **Email** - Field must be a valid email address
 - **MinLength(Int)** - Field must be at least n characters
 - **MaxLength(Int)** - Field must be at most n characters
+- **Url** - Field must be a valid URL
+
+**Numeric Rules:**
+- **Numeric** - Field must be numeric
 - **Min(Int)** - Numeric field must be at least n
 - **Max(Int)** - Numeric field must be at most n
-- **Numeric** - Field must be numeric
-- **Url** - Field must be a valid URL
+- **Digits(Int)** - Field must have exactly n digits
+- **MinDigits(Int)** - Field must have at least n digits
+- **MaxDigits(Int)** - Field must have at most n digits
+
+**File Upload Rules:**
+- **FileRequired** - File field must have a file uploaded
+- **FileMinSize(Int)** - File must be at least n KB
+- **FileMaxSize(Int)** - File must be at most n KB
+- **FileExtension(List(String))** - File must have one of the allowed extensions (e.g., `["jpg", "png"]`)
 
 #### Accessing Form Data
 
@@ -221,6 +255,119 @@ pub fn store(req: route.RouteRequest, ctx: ctx.Context) -> wisp.Response {
   let email = form |> form.get("email")
 
   // Process the data...
+}
+```
+
+### Views & Responses
+
+Glimr provides a fluent builder pattern for rendering views with layouts and template variables.
+
+#### Rendering Views
+
+```gleam
+import glimr/response/view
+import config/config_app
+
+pub fn show(req: route.RouteRequest, ctx: ctx.Context) -> wisp.Response {
+  view.build()
+  |> view.html("welcome.html")
+  |> view.data([#("title", "Welcome")])
+  |> view.render()
+}
+```
+
+#### Rendering Lustre Components
+
+Glimr seamlessly integrates with [Lustre](https://hexdocs.pm/lustre/) for server-side rendering:
+
+```gleam
+import glimr/response/view
+import resources/views/contact/contact_form
+
+pub fn show(req: route.RouteRequest, ctx: ctx.Context) -> wisp.Response {
+  let model = contact_form.init(Nil)
+
+  view.build()
+  |> view.lustre(contact_form.view(model))
+  |> view.data([#("title", "Contact Us")])
+  |> view.render()
+}
+```
+
+#### Custom Layouts
+
+Override the default layout for specific views:
+
+```gleam
+view.build()
+|> view.html("dashboard.html")
+// Layouts are found in src/resources/views/layouts/*
+|> view.layout("admin.html")
+|> view.data([#("title", "Admin Dashboard")])
+|> view.render()
+```
+
+#### Template Variables
+
+Views use `{{variable}}` syntax for template substitution. The special `{{_content_}}` variable is reserved for the main content:
+
+```html
+<!-- layouts/app.html -->
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>{{title}} - {{app_name}}</title>
+  </head>
+  <body>
+    {{_content_}}
+  </body>
+</html>
+```
+
+### Redirects
+
+Glimr's redirect builder provides a clean API for redirecting users with flash messages.
+
+#### Basic Redirects
+
+```gleam
+import glimr/response/redirect
+
+pub fn store(req: route.RouteRequest, ctx: ctx.Context) -> wisp.Response {
+  // Process form...
+
+  redirect.build()
+  |> redirect.to("/contact/success")
+  |> redirect.go()
+}
+```
+
+#### Redirects with Flash Messages
+
+Flash messages persist data across redirects (requires session support):
+
+```gleam
+pub fn store(req: route.RouteRequest, ctx: ctx.Context) -> wisp.Response {
+  // Process form...
+
+  redirect.build()
+  |> redirect.to("/dashboard")
+  |> redirect.flash([#("success", "Contact form submitted!")])
+  |> redirect.go()
+}
+```
+
+> **Note:** Flash messaging isn't supported yet, as session support hasn't been implemented.
+
+#### Redirect Back
+
+Redirect users back to the previous page:
+
+```gleam
+pub fn cancel(req: route.RouteRequest, ctx: ctx.Context) -> wisp.Response {
+  redirect.build()
+  |> redirect.back(req.request)
+  |> redirect.go()
 }
 ```
 
@@ -246,10 +393,10 @@ pub fn handle(
 Apply middleware to routes:
 
 ```gleam
-import app/http/middleware/logger
+import app/http/middleware/logger.{handle as logger}
 
 route.get("/dashboard", dashboard_controller.show)
-  |> route.middleware([logger.handle])
+  |> route.middleware([logger])
 ```
 
 ### Route Groups
@@ -258,7 +405,7 @@ Group routes with shared configuration:
 
 ```gleam
 // Group with middleware
-route.group_middleware([auth_middleware, logger_middleware], [
+route.group_middleware([auth, logger], [
   [
     route.get("/dashboard", dashboard_controller.show),
     route.get("/profile", profile_controller.show),

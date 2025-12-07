@@ -1,5 +1,5 @@
 import glimr/helpers/validation.{
-  Email, FileExtension, FileMinSize, FileRequired, MaxLength, MinLength,
+  Email, FileExtension, FileMaxSize, FileRequired, MaxLength, MinLength,
   Required,
 }
 
@@ -19,7 +19,7 @@ pub fn rules(form) {
       |> validation.for_file("avatar", [
         FileRequired,
         FileExtension(["jpg", "png"]),
-        FileMinSize(5000),
+        FileMaxSize(5000),
       ]),
   ])
 }
