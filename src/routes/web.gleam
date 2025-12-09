@@ -8,7 +8,7 @@ pub fn routes() {
       route.redirect("/", "/contact"),
     ],
 
-    route.group_path_prefix("/contact", [
+    route.prefix_path("/contact", [
       [
         route.get("/", contact_controller.show),
         route.post("/", contact_controller.store),

@@ -1,7 +1,6 @@
 import app/http/context/ctx.{type Context}
 import app/http/kernel
 import app/providers/route_provider
-import config/config_api
 import gleam/http/response
 import gleam/list
 import gleam/string
@@ -15,35 +14,47 @@ pub fn handle(req: Request, ctx: Context) -> Response {
   let method = req.method
   let route_groups = route_provider.register()
 
-  case router.find_matching_route_in_groups(route_groups, path, method) {
-    Ok(#(route, params, group)) -> {
-      let route_req = route.RouteRequest(request: req, params: params)
-      use req <- kernel.handle(route_req.request, ctx, group)
-      let updated_route_req = route.RouteRequest(..route_req, request: req)
-      router.apply_middleware(
-        updated_route_req,
-        ctx,
-        route.middleware,
-        route.handler,
-      )
+  let matching_group =
+    list.find(route_groups, fn(group) {
+      case group.prefix {
+        "" -> True
+        prefix -> string.starts_with(path, prefix)
+      }
+    })
+
+  case matching_group {
+    Ok(group) -> {
+      let loaded_routes = group.routes()
+
+      case router.find_matching_route(loaded_routes, path, method) {
+        Ok(#(route, params)) -> {
+          let route_req = route.RouteRequest(request: req, params: params)
+          use req <- kernel.handle(
+            route_req.request,
+            ctx,
+            group.middleware_group,
+          )
+          let updated_route_req = route.RouteRequest(..route_req, request: req)
+          router.apply_middleware(
+            updated_route_req,
+            ctx,
+            route.middleware,
+            route.handler,
+          )
+        }
+        Error(router.NoRouteFound) -> {
+          use _req <- kernel.handle(req, ctx, group.middleware_group)
+          response.Response(404, [], wisp.Text(""))
+        }
+        Error(router.MethodNotAllowed) -> {
+          use _req <- kernel.handle(req, ctx, group.middleware_group)
+          response.Response(405, [], wisp.Text(""))
+        }
+      }
     }
     Error(_) -> {
-      let group = case string.starts_with(path, config_api.route_prefix()) {
-        True -> base_kernel.Api
-        False -> base_kernel.Web
-      }
-
-      let all_routes = router.get_all_routes(route_groups)
-      let status = case
-        all_routes
-        |> list.any(fn(route) { router.matches_path(route.path, path) })
-      {
-        True -> 405
-        False -> 404
-      }
-
-      use _req <- kernel.handle(req, ctx, group)
-      response.Response(status, [], wisp.Text(""))
+      use _req <- kernel.handle(req, ctx, base_kernel.Web)
+      response.Response(404, [], wisp.Text(""))
     }
   }
 }

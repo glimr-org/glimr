@@ -12,10 +12,8 @@ pub fn handle(
   let req = wisp.method_override(req)
 
   case middleware_group {
-    kernel.Web -> handle_web_middleware(req, ctx, router)
     kernel.Api -> handle_api_middleware(req, ctx, router)
-    // Add custom middleware groups here
-    // ex: kernel.Custom("admin") -> handle_admin_middleware(req, ctx, router)
+    // Custom middleware groups
     _ -> handle_web_middleware(req, ctx, router)
   }
 }

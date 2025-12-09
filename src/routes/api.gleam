@@ -3,7 +3,7 @@ import glimr/routing/route
 
 pub fn routes() {
   [
-    route.group_path_prefix(config_api.route_prefix(), [
+    route.prefix_path(config_api.route_prefix(), [
       [
         // route.get("/me", user_controller.show) ...
       ],

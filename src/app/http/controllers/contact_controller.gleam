@@ -15,7 +15,7 @@ pub fn show(_req: RouteRequest, _ctx: Context) -> Response {
 }
 
 pub fn store(req: RouteRequest, _ctx: Context) -> Response {
-  use _form <- contact_request.validate(req)
+  use _form <- contact_request.validate(req.request)
 
   redirect.build()
   |> redirect.to("/contact/success")
