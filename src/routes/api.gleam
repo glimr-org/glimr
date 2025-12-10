@@ -1,9 +1,12 @@
 import wisp
 
-pub fn routes(path, method, _req, _ctx) {
-  case path, method {
-    // ["users"], Get -> user_controller.index(req, ctx)
-    // ["users", user_id], Get -> user_controller.show(user_id, req, ctx)
-    _, _ -> wisp.response(404)
+pub fn routes(path, _method, _req, _ctx) {
+  case path {
+    // Below resolves to /api/users/123 for example.
+    // 
+    // ["users", user_id] -> router.handle_methods(method, [
+    //   #(Get, fn() { user_controller.show(user_id, req, ctx)})
+    // ])
+    _ -> wisp.response(404)
   }
 }

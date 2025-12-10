@@ -1,24 +1,35 @@
 import app/http/controllers/contact_controller
 import app/http/controllers/contact_success_controller
+import app/http/controllers/user_controller
 import app/http/middleware/logger.{handle as logger}
 import gleam/http.{Get, Post}
 import glimr/http/middleware
+import glimr/routing/router
 import wisp
 
 pub fn routes(path, method, req, ctx) {
-  case path, method {
-    [], Get -> wisp.redirect("/contact")
+  case path {
+    [] -> wisp.redirect("/contact")
 
-    ["contact"], Get -> contact_controller.show(req, ctx)
-    ["contact"], Post -> contact_controller.store(req, ctx)
+    ["contact"] ->
+      router.match(method, [
+        #(Get, fn() { contact_controller.show(req, ctx) }),
+        #(Post, fn() { contact_controller.store(req, ctx) }),
+      ])
 
-    ["test"], Post -> wisp.html_response("Hello", 200)
+    ["contact", "success"] ->
+      router.match(method, [
+        #(Get, fn() {
+          use req <- middleware.apply([logger], req, ctx)
+          contact_success_controller.show(req, ctx)
+        }),
+      ])
 
-    ["contact", "success"], Get -> {
-      use req <- middleware.apply([logger], req, ctx)
-      contact_success_controller.show(req, ctx)
-    }
+    ["users", user_id] ->
+      router.match(method, [
+        #(Get, fn() { user_controller.show(user_id, req, ctx) }),
+      ])
 
-    _, _ -> wisp.response(404)
+    _ -> wisp.response(404)
   }
 }

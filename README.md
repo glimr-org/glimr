@@ -12,18 +12,17 @@ Glimr is a Laravel-inspired web framework built for Gleam. It provides a delight
 
 ## Features
 
-- **Type Safe Routing** - Laravel-style routing with type safe parameter extraction and handling
+- **Type Safe Routing** - Pattern matching routes with compile-time type safety and automatic 404/405 handling
 - **View Builder** - Fluent API for rendering HTML and Lustre components with layouts
 - **Template Engine** - Simple `{{variable}}` syntax for dynamic content
 - **Redirect Builder** - Clean redirect API with flash message support
 - **Middleware System** - Composable middleware at route and group levels
-- **Middleware Groups** - Pre-configured middleware stacks for different route types
+- **Middleware Groups** - Pre-configured middleware stacks for different route types (Web, API, Custom)
 - **Form Validation** - Elegant form validation layer to easily validate requests
 - **Lustre Integration** - Server-side rendering of Lustre components
 - **Context/Singleton System** - Type-safe use of singletons throughout your application
 - **Controller Pattern** - Organized request handlers with clear separation of concerns
 - **Configuration Management** - Environment-based configuration with `.env` support
-- **Web & API Routes** - Separate route groups with appropriate error handling (HTML vs JSON)
 - **Provider Pattern** - Service providers for bootstrapping application services
 
 ## Installation
@@ -79,9 +78,10 @@ Visit `http://localhost:8000` in your browser.
 │   │   │   ├── context/          # Application context
 │   │   │   └── kernel.gleam      # HTTP middleware configuration
 │   │   └── providers/            # Service providers
+│   │       ├── ctx_provider.gleam   # Context registration
+│   │       └── route_provider.gleam # Route group registration
 │   ├── bootstrap/
-│   │   ├── app.gleam            # Application bootstrapping
-│   │   └── router.gleam         # Router setup
+│   │   └── app.gleam            # Application bootstrapping
 │   ├── config/                  # Configuration files
 │   ├── routes/
 │   │   ├── web.gleam            # Web routes
@@ -96,31 +96,54 @@ Visit `http://localhost:8000` in your browser.
 
 ### Defining Routes
 
-Routes are defined in `src/routes/web.gleam` and `src/routes/api.gleam`:
+Routes are defined using pattern matching in `src/routes/web.gleam`, `src/routes/api.gleam`, or any other route file you register:
 
 ```gleam
-import glimr/routing/route
+import gleam/http.{Get, Post}
+import glimr/routing/router
 import app/http/controllers/home_controller
+import app/http/controllers/user_controller
+import wisp
 
-pub fn routes() {
-  [
-    [
-      route.get("/", home_controller.show),
+pub fn routes(path, method, req, ctx) {
+  case path {
+    // equivalent to "/"
+    [] ->
+      router.match(method, [
+        #(Get, fn() { home_controller.show(req, ctx) }),
+      ])
 
-      route.get("/users/{id}", user_controller.show),
-      route.post("/users", user_controller.store)
-    ],
-  ]
+    // equivalent to "/users"
+    ["users"] ->
+      router.match(method, [
+        #(Get, fn() { user_controller.index(req, ctx) }),
+        #(Post, fn() { user_controller.store(req, ctx) }),
+      ])
+
+    // equivalent to "/users/:user_id"
+    ["users", user_id] ->
+      router.match(method, [
+        #(Get, fn() { user_controller.show(user_id, req, ctx) }),
+      ])
+
+    _ -> wisp.response(404)
+  }
 }
 ```
+
+**How it works:**
+- Pattern match on `path` (list of URL segments)
+- Use `router.match()` to handle different HTTP methods
+- Automatically returns **405** for unsupported methods
+- Returns **404** for unknown paths
+- Type-safe parameter extraction from the path
 
 #### Route Redirects
 
 Define redirects directly in your routes:
 
 ```gleam
-// Redirect old URLs to new ones
-route.redirect("/old-contact", "/contact")
+["old-contact"] -> wisp.redirect("/contact")
 ```
 
 ### Creating Controllers
@@ -129,46 +152,56 @@ Controllers live in `src/app/http/controllers/`:
 
 ```gleam
 import app/http/context/ctx
-import glimr/routing/route
 import glimr/response/view
 import glimr/response/redirect
 import wisp
 
-pub fn show(req: route.RouteRequest, ctx: ctx.Context) -> wisp.Response {
-  let assert Ok(id) = route.get_param(req, "id")
+pub fn show(user_id: String, req: wisp.Request, ctx: ctx.Context) -> wisp.Response {
+  // user_id is passed directly from the route pattern match
 
   view.build()
   |> view.html("users/show.html")
+  |> view.data([#("user_id", user_id)])
   |> view.render()
 }
 
-pub fn store(req: route.RouteRequest, ctx: ctx.Context) -> wisp.Response {
+pub fn store(req: wisp.Request, ctx: ctx.Context) -> wisp.Response {
   // Handle POST request...
 
   redirect.build()
   |> redirect.back(req)
   |> redirect.flash([#("message", "User created!")])
-  |> redirect.go()    
+  |> redirect.go()
 }
 ```
 
 ### Route Parameters
 
-Extract parameters from the URL:
+Parameters are extracted directly via pattern matching:
 
 ```gleam
-// Route definition
-route.get("/posts/{slug}/comments/{id}", comment_controller.show)
+// Route definition with type-safe parameter extraction
+pub fn routes(path, method, req, ctx) {
+  case path {
+    ["posts", slug, "comments", comment_id] ->
+      router.match(method, [
+        #(Get, fn() {
+          comment_controller.show(slug, comment_id, req, ctx)
+        }),
+      ])
 
-// Controller
-pub fn show(req: route.RouteRequest, ctx: ctx.Context) -> wisp.Response {
-  // Without a fallback
-  let assert Ok(slug) = route.get_param(req, "slug")
+    ...
+  }
+}
 
-  // With a fallback
-  let id = route.get_param_or(req, "id", "0")
-
-  // Use slug and id...
+// Controller receives parameters directly
+pub fn show(
+  slug: String,
+  comment_id: String,
+  req: wisp.Request,
+  ctx: ctx.Context
+) -> wisp.Response {
+  // Use slug and comment_id...
 }
 ```
 
@@ -204,8 +237,8 @@ Use the `use` syntax for clean, readable validation handling:
 ```gleam
 import app/http/requests/contact_request
 
-pub fn store(req: route.RouteRequest, ctx: ctx.Context) -> wisp.Response {
-  // Form validation errors are handled automatically 
+pub fn store(req: wisp.Request, ctx: ctx.Context) -> wisp.Response {
+  // Form validation errors are handled automatically
   use _form <- contact_request.validate(req)
 
   // Form is valid, redirect back with a success message
@@ -252,7 +285,7 @@ Extract individual form field values:
 ```gleam
 import glimr/forms/form
 
-pub fn store(req: route.RouteRequest, ctx: ctx.Context) -> wisp.Response {
+pub fn store(req: wisp.Request, ctx: ctx.Context) -> wisp.Response {
   use form <- store_contact.validate(req)
 
   let name = form |> form.get("name")
@@ -272,7 +305,7 @@ Glimr provides a fluent builder pattern for rendering views with layouts and tem
 import glimr/response/view
 import config/config_app
 
-pub fn show(req: route.RouteRequest, ctx: ctx.Context) -> wisp.Response {
+pub fn show(req: wisp.Request, ctx: ctx.Context) -> wisp.Response {
   view.build()
   |> view.html("welcome.html")
   |> view.data([#("title", "Welcome")])
@@ -288,7 +321,7 @@ Glimr seamlessly integrates with [Lustre](https://hexdocs.pm/lustre/) for server
 import glimr/response/view
 import resources/views/contact/contact_form
 
-pub fn show(req: route.RouteRequest, ctx: ctx.Context) -> wisp.Response {
+pub fn show(req: wisp.Request, ctx: ctx.Context) -> wisp.Response {
   let model = contact_form.init(Nil)
 
   view.build()
@@ -337,7 +370,7 @@ Glimr's redirect builder provides a clean API for redirecting users with flash m
 ```gleam
 import glimr/response/redirect
 
-pub fn store(req: route.RouteRequest, ctx: ctx.Context) -> wisp.Response {
+pub fn store(req: wisp.Request, ctx: ctx.Context) -> wisp.Response {
   // Process form...
 
   redirect.build()
@@ -351,7 +384,7 @@ pub fn store(req: route.RouteRequest, ctx: ctx.Context) -> wisp.Response {
 Flash messages persist data across redirects (requires session support):
 
 ```gleam
-pub fn store(req: route.RouteRequest, ctx: ctx.Context) -> wisp.Response {
+pub fn store(req: wisp.Request, ctx: ctx.Context) -> wisp.Response {
   // Process form...
 
   redirect.build()
@@ -368,9 +401,9 @@ pub fn store(req: route.RouteRequest, ctx: ctx.Context) -> wisp.Response {
 Redirect users back to the previous page:
 
 ```gleam
-pub fn cancel(req: route.RouteRequest, ctx: ctx.Context) -> wisp.Response {
+pub fn cancel(req: wisp.Request, ctx: ctx.Context) -> wisp.Response {
   redirect.build()
-  |> redirect.back(req.request)
+  |> redirect.back(req)
   |> redirect.go()
 }
 ```
@@ -394,43 +427,61 @@ pub fn handle(
 }
 ```
 
-Apply middleware to routes:
+Apply middleware to specific routes using the helper:
 
 ```gleam
 import app/http/middleware/logger.{handle as logger}
+import app/http/middleware/auth.{handle as auth}
+import glimr/http/middleware
 
-route.get("/dashboard", dashboard_controller.show)
-  |> route.middleware([logger])
+pub fn routes(path, method, req, ctx) {
+  case path {
+    ["dashboard"] ->
+      router.match(method, [
+        #(Get, fn() {
+          // Apply multiple middleware to this route
+          use req <- middleware.apply([auth, logger], req, ctx)
+          dashboard_controller.show(req, ctx)
+        }),
+      ])
+
+    ...
+  }
+}
 ```
 
 ### Route Groups
 
-Group routes with shared configuration:
+Route groups are defined in `src/app/providers/route_provider.gleam`. Each group has a prefix and middleware stack:
 
 ```gleam
-// Group with middleware
-route.group_middleware([auth, logger], [
-  [
-    route.get("/dashboard", dashboard_controller.show),
-    route.get("/profile", profile_controller.show),
-  ],
-])
+import glimr/routing/router.{type RouteGroup}
+import glimr/http/kernel
 
-// Group with path prefix
-route.group_path_prefix("/admin", [
+pub fn register() -> List(RouteGroup(Context)) {
   [
-    route.get("/users", admin_users_controller.index),
-    route.get("/settings", admin_settings_controller.index),
-  ],
-])
+    // API routes - prefixed with "/api"
+    router.RouteGroup(
+      prefix: "/api",
+      middleware_group: kernel.Api,  // JSON error responses
+      routes: api.routes,
+    ),
 
-// Group with name prefix
-route.group_name_prefix("admin.", [
-  [
-    route.get("/users", users_controller.index)
-      |> route.name("users.index"),  // Full name: "admin.users.index"
-  ],
-])
+    // Admin routes - prefixed with "/admin"
+    router.RouteGroup(
+      prefix: "/admin",
+      middleware_group: kernel.Custom("admin"),  // Custom middleware stack
+      routes: admin.routes,
+    ),
+
+    // Default web routes - no prefix (must be last)
+    router.RouteGroup(
+      prefix: "",
+      middleware_group: kernel.Web,  // HTML error responses
+      routes: web.routes,
+    ),
+  ]
+}
 ```
 
 ### API Routes
@@ -439,21 +490,31 @@ API routes automatically return JSON error responses:
 
 ```gleam
 // src/routes/api.gleam
-import config/config_api
+import gleam/http.{Get, Post}
+import glimr/routing/router
+import wisp
 
-pub fn routes() -> List(List(route.Route(ctx.Context))) {
-  [
-    route.group_path_prefix(config_api.route_prefix(), [
-      [
-        route.get("/users", api_users_controller.index),
-        route.post("/users", api_users_controller.store),
-      ],
-    ]),
-  ]
+pub fn routes(path, method, req, ctx) {
+  case path {
+    ["users"] ->
+      router.match(method, [
+        #(Get, fn() { api_users_controller.index(req, ctx) }),
+        #(Post, fn() { api_users_controller.store(req, ctx) }),
+      ])
+
+    ["users", user_id] ->
+      router.match(method, [
+        #(Get, fn() { api_users_controller.show(user_id, req, ctx) }),
+      ])
+
+    ...
+  }
 }
 ```
 
-API routes are automatically prefixed with `/api` and return JSON errors (404, 500, etc.) instead of HTML.
+API routes are automatically:
+- Prefixed with `/api` (configured in `route_provider.gleam`)
+- Return JSON error responses (404, 405, 500, etc.) instead of HTML
 
 ### Configuration
 
@@ -462,7 +523,7 @@ Access configuration values anywhere in your application:
 ```gleam
 import config/config_app
 
-pub fn show(req: route.RouteRequest, ctx: ctx.Context) -> wisp.Response {
+pub fn show(req: wisp.Request, ctx: ctx.Context) -> wisp.Response {
   let app_name = config_app.name()
   let app_url = config_app.url()
   let debug_mode = config_app.debug()
@@ -504,7 +565,7 @@ pub fn register() -> ctx.Context {
 Access context in controllers:
 
 ```gleam
-pub fn show(req: route.RouteRequest, ctx: ctx.Context) -> wisp.Response {
+pub fn show(req: wisp.Request, ctx: ctx.Context) -> wisp.Response {
   let static_dir = ctx.app.static_directory
   // Use context...
 }
