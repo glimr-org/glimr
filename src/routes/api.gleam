@@ -1,12 +1,9 @@
-import config/config_api
-import glimr/routing/route
+import wisp
 
-pub fn routes() {
-  [
-    route.prefix_path(config_api.route_prefix(), [
-      [
-        // route.get("/me", user_controller.show) ...
-      ],
-    ]),
-  ]
+pub fn routes(path, method, _req, _ctx) {
+  case path, method {
+    // ["users"], Get -> user_controller.index(req, ctx)
+    // ["users", user_id], Get -> user_controller.show(user_id, req, ctx)
+    _, _ -> wisp.response(404)
+  }
 }

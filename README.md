@@ -12,7 +12,7 @@ Glimr is a Laravel-inspired web framework built for Gleam. It provides a delight
 
 ## Features
 
-- **Routing** - Laravel-style routing with parameter extraction
+- **Type Safe Routing** - Laravel-style routing with type safe parameter extraction and handling
 - **View Builder** - Fluent API for rendering HTML and Lustre components with layouts
 - **Template Engine** - Simple `{{variable}}` syntax for dynamic content
 - **Redirect Builder** - Clean redirect API with flash message support
