@@ -10,6 +10,7 @@ pub fn show(_req: Request, _ctx: Context) -> Response {
 
   view.build()
   |> view.lustre(show.view(model))
+  |> view.layout("app.html")
   |> view.render()
 }
 

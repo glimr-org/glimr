@@ -14,7 +14,7 @@ Glimr is a Laravel-inspired web framework built for Gleam. It provides a delight
 
 - **Type Safe Routing** - Pattern matching routes with compile-time type safety and automatic 404/405 handling
 - **View Builder** - Fluent API for rendering HTML and Lustre components with layouts
-- **Template Engine** - Simple `{{variable}}` syntax for dynamic content
+- **Template Engine** - Simple `{{ variable }}` syntax for dynamic content
 - **Redirect Builder** - Clean redirect API with flash message support
 - **Middleware System** - Composable middleware at route and group levels
 - **Middleware Groups** - Pre-configured middleware stacks for different route types (Web, API, Custom)
@@ -109,32 +109,34 @@ pub fn routes(path, method, req, ctx) {
   case path {
     // equivalent to "/"
     [] ->
-      router.match(method, [
-        #(Get, fn() { home_controller.show(req, ctx) }),
-      ])
+      case method {
+        Get -> home_controller.show(req, ctx)
+        _ -> wisp.response(405)
+      }
 
     // equivalent to "/users"
     ["users"] ->
-      router.match(method, [
-        #(Get, fn() { user_controller.index(req, ctx) }),
-        #(Post, fn() { user_controller.store(req, ctx) }),
-      ])
+      case method {
+        Get -> user_controller.index(req, ctx)
+        Post -> user_controller.store(req, ctx)
+        _ -> wisp.response(405)
+      }
 
     // equivalent to "/users/:user_id"
     ["users", user_id] ->
-      router.match(method, [
-        #(Get, fn() { user_controller.show(user_id, req, ctx) }),
-      ])
+      case method {
+        Get -> user_controller.show(user_id, req, ctx)
+        _ -> wisp.response(405)
+      }
 
-    _ -> wisp.response(404)
+    _ -> wisp.not_found()
   }
 }
 ```
 
 **How it works:**
 - Pattern match on `path` (list of URL segments)
-- Use `router.match()` to handle different HTTP methods
-- Automatically returns **405** for unsupported methods
+- Pattern match on `method` to handle different HTTP methods
 - Returns **404** for unknown paths
 - Type-safe parameter extraction from the path
 
@@ -184,11 +186,9 @@ Parameters are extracted directly via pattern matching:
 pub fn routes(path, method, req, ctx) {
   case path {
     ["posts", slug, "comments", comment_id] ->
-      router.match(method, [
-        #(Get, fn() {
-          comment_controller.show(slug, comment_id, req, ctx)
-        }),
-      ])
+      case method {
+        Get -> comment_controller.show(slug, comment_id, req, ctx)
+      }
 
     ...
   }
@@ -437,13 +437,13 @@ import glimr/http/middleware
 pub fn routes(path, method, req, ctx) {
   case path {
     ["dashboard"] ->
-      router.match(method, [
-        #(Get, fn() {
+      case method {
+        Get -> {
           // Apply multiple middleware to this route
           use req <- middleware.apply([auth, logger], req, ctx)
           dashboard_controller.show(req, ctx)
-        }),
-      ])
+        }
+      }
 
     ...
   }
@@ -485,32 +485,6 @@ pub fn register() -> List(RouteGroup(Context)) {
 ```
 
 ### API Routes
-
-API routes automatically return JSON error responses:
-
-```gleam
-// src/routes/api.gleam
-import gleam/http.{Get, Post}
-import glimr/routing/router
-import wisp
-
-pub fn routes(path, method, req, ctx) {
-  case path {
-    ["users"] ->
-      router.match(method, [
-        #(Get, fn() { api_users_controller.index(req, ctx) }),
-        #(Post, fn() { api_users_controller.store(req, ctx) }),
-      ])
-
-    ["users", user_id] ->
-      router.match(method, [
-        #(Get, fn() { api_users_controller.show(user_id, req, ctx) }),
-      ])
-
-    ...
-  }
-}
-```
 
 API routes are automatically:
 - Prefixed with `/api` (configured in `route_provider.gleam`)

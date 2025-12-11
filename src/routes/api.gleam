@@ -7,6 +7,6 @@ pub fn routes(path, _method, _req, _ctx) {
     // ["users", user_id] -> router.handle_methods(method, [
     //   #(Get, fn() { user_controller.show(user_id, req, ctx)})
     // ])
-    _ -> wisp.response(404)
+    _ -> wisp.not_found()
   }
 }

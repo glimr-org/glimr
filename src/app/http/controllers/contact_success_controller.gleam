@@ -7,5 +7,6 @@ pub fn show(_req: Request, _ctx: Context) -> Response {
   view.build()
   |> view.html("contact/success.html")
   |> view.data([#("title", config_app.name())])
+  |> view.layout("app.html")
   |> view.render()
 }

@@ -9,7 +9,7 @@ pub fn load() -> Context {
 }
 
 fn get_static_directory() -> String {
-  let assert Ok(priv_dir) = wisp.priv_directory("glimr")
+  let assert Ok(priv_dir) = wisp.priv_directory("glimr_app")
 
   priv_dir <> "/static"
 }
