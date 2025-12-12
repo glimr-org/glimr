@@ -409,23 +409,27 @@ pub fn cancel(req: Request, ctx: Context) -> Response {
 
 ### Middleware
 
+Middleware intercepts requests before they reach your controllers. Middleware can modify both the request and context, with changes flowing through to subsequent middleware and controllers.
+
+#### Creating Middleware
+
 Create custom middleware in `src/app/http/middleware/`:
 
 ```gleam
 import wisp
+import glimr/http/kernel.{type Next}
 
-pub fn handle(
-  req: Request,
-  ctx: Context,
-  next: fn(Request) -> Response,
-) -> Response {
+pub fn handle(req: Request, ctx: Context, next: Next(Context)) -> Response {
   io.println("Request received")
 
-  next(req)
+  // Pass both request and context to next middleware/handler
+  next(req, ctx)
 }
 ```
 
-Apply middleware to specific controller functions using the helper:
+#### Applying Middleware to Route Handlers
+
+Apply middleware to specific controller functions:
 
 ```gleam
 import app/http/middleware/logger.{handle as logger}
@@ -434,11 +438,70 @@ import glimr/http/middleware
 ...
 
 pub fn show(req: Request, ctx: Context) -> Response {
-  use req <- middleware.apply([auth, logger], req, ctx)
+  use req, ctx <- middleware.apply([auth, logger], req, ctx)
 
-  // Continue...
+  // Continue with controller logic using the modified
+  // req and ctx from your middleware stack
 }
 ```
+
+#### Modifying Context in Middleware
+
+Middleware can modify the context, and those changes are visible to downstream middleware and controllers:
+
+```gleam
+// middleware/auth.gleam
+pub fn handle(req, ctx, next) {
+  case authenticate(req) {
+    Ok(user) -> {
+      // Add authenticated user to context
+      let updated_ctx = Context(..ctx, user: Some(user))
+      next(req, updated_ctx)
+    }
+    Error(_) -> wisp.response(401)
+  }
+}
+```
+
+Then in your controller:
+
+```gleam
+pub fn dashboard(req: Request, ctx: Context) -> Response {
+  // Apply the middleware to this controller function
+  use _req, ctx <- middleware.apply([auth], req, ctx)
+
+  // Safe to assert because auth middleware guarantees this
+  let assert Some(user) = ctx.user
+
+  view.build()
+  |> view.html("dashboard.html")
+  |> view.data([#("username", user.username)])
+  |> view.render()
+}
+```
+
+#### Modifying Responses After Handler
+
+Middleware can also modify responses on the way back up the chain:
+
+```gleam
+// middleware/cors.gleam
+pub fn handle(req, ctx, next) {
+  // Call the next middleware/handler first
+  let response = next(req, ctx)
+
+  // Modify the response on the way back
+  response
+  |> wisp.set_header("Access-Control-Allow-Origin", "*")
+  |> wisp.set_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE")
+}
+```
+
+This allows middleware to:
+- Add headers to responses (CORS, security headers, etc.)
+- Log response times
+- Compress response bodies
+- Transform response data
 
 ### Route Groups
 
