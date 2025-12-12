@@ -1,6 +1,6 @@
 # Glimr ✨
 
-A type-safe web framework for Gleam that brings functional programming elegance and developer productivity to web development.
+A batteries-included web framework for Gleam that brings functional programming elegance and developer productivity to web development.
 
 If you'd like to stay updated on Glimr's development, Follow [@migueljarias](https://x.com/migueljarias) on X (that's me) for updates, behind-the-scenes stuff and overall nonsense.
 
@@ -12,7 +12,7 @@ Glimr is a Laravel-inspired web framework built for Gleam. It provides a delight
 
 ## Features
 
-- **Type Safe Routing** - Pattern matching routes with compile-time type safety and automatic 404/405 handling
+- **Type Safe Routing** - Pattern matching routes with compile-time type safety
 - **View Builder** - Fluent API for rendering HTML and Lustre components with layouts
 - **Template Engine** - Simple `{{ variable }}` syntax for dynamic content
 - **Redirect Builder** - Clean redirect API with flash message support
@@ -70,26 +70,27 @@ Visit `http://localhost:8000` in your browser.
 
 ```
 ├── src/
-│   ├── glimr_app.gleam           # Application entry point
+│   ├── glimr_app.gleam               # Application entry point
 │   ├── app/
 │   │   ├── http/
-│   │   │   ├── controllers/      # Request handlers
-│   │   │   ├── middleware/       # Custom middleware
-│   │   │   ├── context/          # Application context
-│   │   │   └── kernel.gleam      # HTTP middleware configuration
-│   │   └── providers/            # Service providers
-│   │       ├── ctx_provider.gleam   # Context registration
-│   │       └── route_provider.gleam # Route group registration
+│   │   │   ├── controllers/          # Request handlers
+│   │   │   ├── middleware/           # Custom middleware
+│   │   │   ├── requests/             # Typed request validation
+│   │   │   ├── context/              # Application context
+│   │   │   └── kernel.gleam          # HTTP middleware configuration
+│   │   └── providers/                # Service providers
+│   │       ├── ctx_provider.gleam    # Context registration
+│   │       └── route_provider.gleam  # Route group registration
 │   ├── bootstrap/
-│   │   └── app.gleam            # Application bootstrapping
-│   ├── config/                  # Configuration files
+│   │   └── app.gleam                 # Application bootstrapping
+│   ├── config/                       # Configuration files
 │   ├── routes/
-│   │   ├── web.gleam            # Web routes
-│   │   └── api.gleam            # API routes
-│   └── static/                  # Static assets
-├── test/                        # Test files
-├── .env                         # Environment variables
-└── gleam.toml                   # Project configuration
+│   │   ├── web.gleam                 # Web routes
+│   │   └── api.gleam                 # API routes
+│   └── static/                       # Static assets
+├── test/                             # Test files
+├── .env                              # Environment variables
+└── gleam.toml                        # Project configuration
 ```
 
 ## Quick Start
@@ -111,7 +112,7 @@ pub fn routes(path, method, req, ctx) {
     [] ->
       case method {
         Get -> home_controller.show(req, ctx)
-        _ -> wisp.response(405)
+        _ -> wisp.mthod_not_allowed([Get])
       }
 
     // equivalent to "/users"
@@ -119,14 +120,14 @@ pub fn routes(path, method, req, ctx) {
       case method {
         Get -> user_controller.index(req, ctx)
         Post -> user_controller.store(req, ctx)
-        _ -> wisp.response(405)
+        _ -> wisp.mthod_not_allowed([Get, Post])
       }
 
     // equivalent to "/users/:user_id"
     ["users", user_id] ->
       case method {
         Get -> user_controller.show(user_id, req, ctx)
-        _ -> wisp.response(405)
+        _ -> wisp.mthod_not_allowed([Get])
       }
 
     _ -> wisp.not_found()
@@ -137,7 +138,6 @@ pub fn routes(path, method, req, ctx) {
 **How it works:**
 - Pattern match on `path` (list of URL segments)
 - Pattern match on `method` to handle different HTTP methods
-- Returns **404** for unknown paths
 - Type-safe parameter extraction from the path
 
 #### Route Redirects
@@ -153,12 +153,12 @@ Define redirects directly in your routes:
 Controllers live in `src/app/http/controllers/`:
 
 ```gleam
-import app/http/context/ctx
+import app/http/context/ctx.{type Context}
 import glimr/response/view
 import glimr/response/redirect
-import wisp
+import wisp.{type Request, type Response}
 
-pub fn show(user_id: String, req: wisp.Request, ctx: ctx.Context) -> wisp.Response {
+pub fn show(user_id: String, req: Request, ctx: Context) -> Response {
   // user_id is passed directly from the route pattern match
 
   view.build()
@@ -167,7 +167,7 @@ pub fn show(user_id: String, req: wisp.Request, ctx: ctx.Context) -> wisp.Respon
   |> view.render()
 }
 
-pub fn store(req: wisp.Request, ctx: ctx.Context) -> wisp.Response {
+pub fn store(req: Request, ctx: Context) -> Response {
   // Handle POST request...
 
   redirect.build()
@@ -198,9 +198,9 @@ pub fn routes(path, method, req, ctx) {
 pub fn show(
   slug: String,
   comment_id: String,
-  req: wisp.Request,
-  ctx: ctx.Context
-) -> wisp.Response {
+  req: Request,
+  ctx: Context
+) -> Response {
   // Use slug and comment_id...
 }
 ```
@@ -214,19 +214,29 @@ Glimr provides a declarative, rule-based validation system for form data. Create
 Form request modules live in `src/app/http/requests/`:
 
 ```gleam
-// src/app/http/requests/contact_request.gleam
-import glimr/forms/validation.{Email, MaxLength, MinLength, Required}
-import wisp
+// src/app/http/requests/contact_store.gleam
+import glimr/forms/validator.{Email, MaxLength, MinLength, Required}
+import wisp.{type FormData}
 
-pub fn rules(form: wisp.FormData) {
-  validation.start([
-    form |> validation.for("name", [Required, MinLength(2)]),
-    form |> validation.for("email", [Required, Email, MaxLength(255)]),
+// Define the shape of the data returned after validation
+pub type Data {
+  Data(name: String, email: String)
+}
+
+// Define your form's validation rules
+pub fn rules(form: FormData) {
+  validator.start([
+    form |> validator.for("name", [Required, MinLength(2)]),
+    form |> validator.for("email", [Required, Email, MaxLength(255)]),
   ])
 }
 
-pub fn validate(req, on_valid) {
-  rules |> validation.handle(req, on_valid)
+// Set the form data returned after validation
+pub fn data(form: FormData) -> Data {
+  Data(
+    name: form.get(form, "name"),
+    email: form.get(form, "email"),
+  )
 }
 ```
 
@@ -235,13 +245,20 @@ pub fn validate(req, on_valid) {
 Use the `use` syntax for clean, readable validation handling:
 
 ```gleam
-import app/http/requests/contact_request
+import app/http/requests/contact_store
+import app/repositories/contact_repository
+import glimr/forms/validator
 
-pub fn store(req: wisp.Request, ctx: ctx.Context) -> wisp.Response {
+pub fn store(req: Request, ctx: Context) -> Response {
   // Form validation errors are handled automatically
-  use _form <- contact_request.validate(req)
+  use validated <- validator.run(req, contact_store.rules, contact_store.data)
 
-  // Form is valid, redirect back with a success message
+  // Do something with your validated data
+  // validated.name : String
+  // validated.email : String
+  contact_repository.create(validated)
+
+  // Redirect back with a success message
   redirect.build()
   |> redirect.back(req)
   |> redirect.flash([#("message", "Contact form submitted successfully!")])
@@ -278,23 +295,6 @@ If validation fails, a 422 response with validation errors is automatically retu
 - **FileMaxSize(Int)** - File must be at most n KB
 - **FileExtension(List(String))** - File must have one of the allowed extensions (e.g., `["jpg", "png"]`)
 
-#### Accessing Form Data
-
-Extract individual form field values:
-
-```gleam
-import glimr/forms/form
-
-pub fn store(req: wisp.Request, ctx: ctx.Context) -> wisp.Response {
-  use form <- store_contact.validate(req)
-
-  let name = form |> form.get("name")
-  let email = form |> form.get("email")
-
-  // Process the data...
-}
-```
-
 ### Views & Responses
 
 Glimr provides a fluent builder pattern for rendering views with layouts and template variables.
@@ -303,9 +303,8 @@ Glimr provides a fluent builder pattern for rendering views with layouts and tem
 
 ```gleam
 import glimr/response/view
-import config/config_app
 
-pub fn show(req: wisp.Request, ctx: ctx.Context) -> wisp.Response {
+pub fn show(req: Request, ctx: Context) -> Response {
   view.build()
   |> view.html("welcome.html")
   |> view.data([#("title", "Welcome")])
@@ -321,7 +320,7 @@ Glimr seamlessly integrates with [Lustre](https://hexdocs.pm/lustre/) for server
 import glimr/response/view
 import resources/views/contact/contact_form
 
-pub fn show(req: wisp.Request, ctx: ctx.Context) -> wisp.Response {
+pub fn show(req: Request, ctx: Context) -> Response {
   let model = contact_form.init(Nil)
 
   view.build()
@@ -331,14 +330,14 @@ pub fn show(req: wisp.Request, ctx: ctx.Context) -> wisp.Response {
 }
 ```
 
-#### Custom Layouts
+#### Set Layout
 
-Override the default layout for specific views:
+Set a layout for a specific view:
 
 ```gleam
 view.build()
 |> view.html("dashboard.html")
-// Layouts are found in src/resources/views/layouts/*
+// Layouts are set in src/resources/views/layouts/*
 |> view.layout("admin.html")
 |> view.data([#("title", "Admin Dashboard")])
 |> view.render()
@@ -346,17 +345,17 @@ view.build()
 
 #### Template Variables
 
-Views use `{{variable}}` syntax for template substitution. The special `{{_content_}}` variable is reserved for the main content:
+Views use `{{ variable }}` syntax for template substitution. The special `{{ _content_ }}` variable is reserved for the main content:
 
 ```html
 <!-- layouts/app.html -->
 <!DOCTYPE html>
 <html>
   <head>
-    <title>{{title}} - {{app_name}}</title>
+    <title>{{ title }} - {{ app_name }}</title>
   </head>
   <body>
-    {{_content_}}
+    {{ _content_ }}
   </body>
 </html>
 ```
@@ -370,7 +369,7 @@ Glimr's redirect builder provides a clean API for redirecting users with flash m
 ```gleam
 import glimr/response/redirect
 
-pub fn store(req: wisp.Request, ctx: ctx.Context) -> wisp.Response {
+pub fn store(req: Request, ctx: Context) -> wisp.Response {
   // Process form...
 
   redirect.build()
@@ -384,7 +383,7 @@ pub fn store(req: wisp.Request, ctx: ctx.Context) -> wisp.Response {
 Flash messages persist data across redirects (requires session support):
 
 ```gleam
-pub fn store(req: wisp.Request, ctx: ctx.Context) -> wisp.Response {
+pub fn store(req: Request, ctx: Context) -> Response {
   // Process form...
 
   redirect.build()
@@ -401,7 +400,7 @@ pub fn store(req: wisp.Request, ctx: ctx.Context) -> wisp.Response {
 Redirect users back to the previous page:
 
 ```gleam
-pub fn cancel(req: wisp.Request, ctx: ctx.Context) -> wisp.Response {
+pub fn cancel(req: Request, ctx: Context) -> Response {
   redirect.build()
   |> redirect.back(req)
   |> redirect.go()
@@ -416,37 +415,28 @@ Create custom middleware in `src/app/http/middleware/`:
 import wisp
 
 pub fn handle(
-  req: wisp.Request,
-  ctx: context,
-  next: fn(wisp.Request) -> wisp.Response,
-) -> wisp.Response {
-  // Before request
+  req: Request,
+  ctx: Context,
+  next: fn(Request) -> Response,
+) -> Response {
   io.println("Request received")
 
   next(req)
 }
 ```
 
-Apply middleware to specific routes using the helper:
+Apply middleware to specific controller functions using the helper:
 
 ```gleam
 import app/http/middleware/logger.{handle as logger}
 import app/http/middleware/auth.{handle as auth}
 import glimr/http/middleware
+...
 
-pub fn routes(path, method, req, ctx) {
-  case path {
-    ["dashboard"] ->
-      case method {
-        Get -> {
-          // Apply multiple middleware to this route
-          use req <- middleware.apply([auth, logger], req, ctx)
-          dashboard_controller.show(req, ctx)
-        }
-      }
+pub fn show(req: Request, ctx: Context) -> Response {
+  use req <- middleware.apply([auth, logger], req, ctx)
 
-    ...
-  }
+  // Continue...
 }
 ```
 
@@ -497,7 +487,7 @@ Access configuration values anywhere in your application:
 ```gleam
 import config/config_app
 
-pub fn show(req: wisp.Request, ctx: ctx.Context) -> wisp.Response {
+pub fn show(req: Request, ctx: Context) -> Response {
   let app_name = config_app.name()
   let app_url = config_app.url()
   let debug_mode = config_app.debug()
@@ -516,10 +506,10 @@ The context system provides type-safe dependency injection. Define your context 
 // src/app/http/context/ctx.gleam
 pub type Context {
   Context(
-    app: ctx_app.Context,
+    app: Context,
     // Add your own contexts here
-    // database: database.Context,
-    // cache: cache.Context,
+    // database: DatabaseContext,
+    // cache: CacheContext,
   )
 }
 ```
@@ -528,9 +518,9 @@ Register contexts in the provider:
 
 ```gleam
 // src/app/providers/ctx_provider.gleam
-pub fn register() -> ctx.Context {
+pub fn register() -> Context {
   ctx.Context(
-    app: ctx_app.load(),
+    app: ctx.load(),
     // Initialize your contexts here
   )
 }
@@ -539,7 +529,7 @@ pub fn register() -> ctx.Context {
 Access context in controllers:
 
 ```gleam
-pub fn show(req: wisp.Request, ctx: ctx.Context) -> wisp.Response {
+pub fn show(req: Request, ctx: Context) -> Response {
   let static_dir = ctx.app.static_directory
   // Use context...
 }
