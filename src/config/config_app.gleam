@@ -9,6 +9,7 @@
 import dot_env/env
 import gleam/int
 import gleam/result
+import wisp
 
 /// ------------------------------------------------------------
 /// Application Name (Default: Glimr)
@@ -61,12 +62,26 @@ pub fn url() -> String {
 /// Application Key
 /// ------------------------------------------------------------
 ///
-/// A secret string for encrypting sessions, signing tokens, and 
-/// security. Required value from APP_KEY. Application panics 
+/// A secret string for encrypting sessions, signing tokens, and
+/// security. Required value from APP_KEY. Application panics
 /// if this value is not configured. Critical for security.
 ///
 pub fn key() -> String {
   let assert Ok(key) = env.get_string("APP_KEY")
 
   key
+}
+
+/// ------------------------------------------------------------
+/// Static Directory
+/// ------------------------------------------------------------
+///
+/// The filesystem directory where static assets (CSS, 
+/// JavaScript, images, etc.) are stored. This is served by the 
+/// static file middleware.
+///
+pub fn static_directory() -> String {
+  let assert Ok(priv_dir) = wisp.priv_directory("glimr_app")
+
+  priv_dir <> "/static"
 }

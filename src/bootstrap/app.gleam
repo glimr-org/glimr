@@ -7,6 +7,7 @@ import wisp.{type Request, type Response}
 
 pub fn init() -> fn(Request) -> Response {
   wisp.configure_logger()
+
   load_env_variables()
   configure_request_handler()
 }

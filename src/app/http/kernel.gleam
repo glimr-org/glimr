@@ -1,4 +1,5 @@
 import app/http/context/ctx.{type Context}
+import config/config_app
 import glimr/http/error_handler
 import glimr/http/kernel.{type MiddlewareGroup}
 import wisp.{type Request, type Response}
@@ -20,13 +21,13 @@ pub fn handle(
 
 fn handle_web_middleware(
   req: Request,
-  ctx: Context,
+  _ctx: Context,
   router: fn(Request) -> Response,
 ) -> Response {
   use <- wisp.serve_static(
     req,
     under: "/static",
-    from: ctx.app.static_directory,
+    from: config_app.static_directory(),
   )
   use <- wisp.log_request(req)
   use <- error_handler.default_html_responses()
