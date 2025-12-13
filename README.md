@@ -76,6 +76,7 @@ Visit `http://localhost:8000` in your browser.
 │   │   │   ├── controllers/          # Request handlers
 │   │   │   ├── middleware/           # Custom middleware
 │   │   │   ├── requests/             # Typed request validation
+│   │   │   ├── rules/                # Custom validation rules
 │   │   │   ├── context/              # Application context
 │   │   │   └── kernel.gleam          # HTTP middleware configuration
 │   │   └── providers/                # Service providers
@@ -214,21 +215,22 @@ Glimr provides a declarative, rule-based validation system for form data. Create
 Form request modules live in `src/app/http/requests/`:
 
 ```gleam
-// src/app/http/requests/contact_store.gleam
-import glimr/forms/validator.{Email, MaxLength, MinLength, Required}
-import wisp.{type FormData}
+// src/app/http/requests/user_store.gleam
+import glimr/forms/validator.{Email, MaxLength, MinLength, Required, FileRequired}
+import wisp.{type FormData, type UploadedFile}
 
 // Define the shape of the data returned after validation
 pub type Data {
-  Data(name: String, email: String)
+  Data(name: String, email: String, avatar: UploadedFile)
 }
 
 // Define your form's validation rules
 pub fn rules(form: FormData) {
-  validator.start([
+  [
     form |> validator.for("name", [Required, MinLength(2)]),
     form |> validator.for("email", [Required, Email, MaxLength(255)]),
-  ])
+    form |> validator.for_file("avatar", [FileRequired, FileMaxSize(5000)]),
+  ]
 }
 
 // Set the form data returned after validation
@@ -236,6 +238,7 @@ pub fn data(form: FormData) -> Data {
   Data(
     name: form.get(form, "name"),
     email: form.get(form, "email"),
+    avatar: form.get_file(form, "avatar"),
   )
 }
 ```
@@ -245,23 +248,25 @@ pub fn data(form: FormData) -> Data {
 Use the `use` syntax for clean, readable validation handling:
 
 ```gleam
-import app/http/requests/contact_store
-import app/repositories/contact_repository
+import app/http/requests/user_store
+import app/repositories/user_repository
 import glimr/forms/validator
 
+// app/http/controllers/user_controller.gleam
 pub fn store(req: Request, ctx: Context) -> Response {
   // Form validation errors are handled automatically
-  use validated <- validator.run(req, contact_store.rules, contact_store.data)
+  use validated <- validator.run(req, user_store.rules, user_store.data)
 
   // Do something with your validated data
   // validated.name : String
   // validated.email : String
-  contact_repository.create(validated)
+  // validated.avatar : UploadedFile
+  user_repository.create(validated)
 
   // Redirect back with a success message
   redirect.build()
   |> redirect.back(req)
-  |> redirect.flash([#("message", "Contact form submitted successfully!")])
+  |> redirect.flash([#("message", "User created successfully!")])
   |> redirect.go()
 }
 ```
@@ -294,6 +299,78 @@ If validation fails, a 422 response with validation errors is automatically retu
 - **FileMinSize(Int)** - File must be at least n KB
 - **FileMaxSize(Int)** - File must be at most n KB
 - **FileExtension(List(String))** - File must have one of the allowed extensions (e.g., `["jpg", "png"]`)
+
+#### Custom Validation Rules
+
+Create your own validation rules for domain-specific logic using the `Custom` rule:
+
+```gleam
+// app/http/requests/login_request.gleam
+import glimr/forms/validator.{Custom, MinLength, Required}
+import app/http/rules/username_available.{run as username_available}
+
+pub fn rules(form: FormData) {
+  [
+    form |> validator.for("username", [
+      Required,
+      MinLength(3),
+      Custom(username_available), // <-----
+    ]),
+    form |> validator.for("password", [Required]),
+  ]
+}
+
+// app/http/rules/username_available.gleam
+pub fn run(username: String) -> Result(Nil, String) {
+  case db.username_exists(username) {
+    // Error is automatically prepended with "Username " so
+    // the full message would be: "Username is already taken"
+    True -> Error("is already taken") 
+    False -> Ok(Nil)
+  }
+}
+```
+
+**Custom validation function structure:**
+- Take a `String` value as input
+- Return `Ok(Nil)` if validation passes
+- Return `Error(message)` with an error message if validation fails
+
+#### Custom File Validation Rules
+
+Create custom validation rules for file uploads using the `FileCustom` rule:
+
+```gleam
+// app/http/requests/avatar_upload.gleam
+import glimr/forms/validator.{FileCustom, FileRequired, FileMaxSize}
+import app/http/rules/image_dimensions.{run as image_dimensions}
+
+pub fn rules(form: FormData) {
+  [
+    form |> validator.for_file("avatar", [
+      FileRequired,
+      FileMaxSize(2048),
+      FileCustom(image_dimensions), // <-----
+    ]),
+  ]
+}
+
+// app/http/rules/image_dimensions.gleam
+import wisp.{type UploadedFile}
+
+pub fn run(file: UploadedFile) -> Result(Nil, String) {
+  case get_image_dimensions(file.path) {
+    Ok(#(width, height)) if width >= 100 && height >= 100 -> Ok(Nil)
+    Ok(_) -> Error("must be at least 100x100 pixels")
+    Error(_) -> Error("could not read image dimensions")
+  }
+}
+```
+
+**Custom file validation function structure:**
+- Take an `UploadedFile` as input
+- Return `Ok(Nil)` if validation passes
+- Return `Error(message)` with an error message if validation fails
 
 ### Views & Responses
 

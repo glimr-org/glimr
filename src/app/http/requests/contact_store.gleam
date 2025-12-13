@@ -1,6 +1,7 @@
+import app/http/rules/no_gmail
 import glimr/forms/form
 import glimr/forms/validator.{
-  Email, FileExtension, FileMaxSize, FileRequired, MaxLength, MinLength,
+  Custom, Email, FileExtension, FileMaxSize, FileRequired, MaxLength, MinLength,
   Required,
 }
 import wisp.{type FormData, type UploadedFile}
@@ -10,7 +11,7 @@ pub type Data {
 }
 
 pub fn rules(form: FormData) {
-  validator.start([
+  [
     form |> validator.for("name", [Required, MinLength(2)]),
 
     form
@@ -19,6 +20,7 @@ pub fn rules(form: FormData) {
         Email,
         MinLength(2),
         MaxLength(255),
+        Custom(no_gmail.run),
       ]),
 
     form
@@ -27,7 +29,7 @@ pub fn rules(form: FormData) {
         FileExtension(["jpg", "png"]),
         FileMaxSize(5000),
       ]),
-  ])
+  ]
 }
 
 pub fn data(form: FormData) -> Data {
