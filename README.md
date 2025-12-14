@@ -151,7 +151,13 @@ Define redirects directly in your routes:
 
 ### Creating Controllers
 
-Controllers live in `src/app/http/controllers/`:
+Create controllers in `src/app/http/controllers/`. Use the following command:
+
+```bash
+./glimr make:controller user
+```
+
+This creates `user_controller.gleam`. In it you can add your custom logic.
 
 ```gleam
 import app/http/context/ctx.{type Context}
@@ -159,12 +165,9 @@ import glimr/response/view
 import glimr/response/redirect
 import wisp.{type Request, type Response}
 
-pub fn show(user_id: String, req: Request, ctx: Context) -> Response {
-  // user_id is passed directly from the route pattern match
-
+pub fn show(req: Request, ctx: Context) -> Response {
   view.build()
   |> view.html("users/show.html")
-  |> view.data([#("user_id", user_id)])
   |> view.render()
 }
 
@@ -176,6 +179,12 @@ pub fn store(req: Request, ctx: Context) -> Response {
   |> redirect.flash([#("message", "User created!")])
   |> redirect.go()
 }
+```
+
+You can also create resource controllers that come set up with index,show,edit,update,delete functions with this command:
+
+```bash 
+./glimr make:controller --resource
 ```
 
 ### Route Parameters
@@ -206,13 +215,122 @@ pub fn show(
 }
 ```
 
+### Middleware
+
+Middleware intercepts requests before they reach your controllers. Middleware can modify both the request and context, with changes flowing through to subsequent middleware and controllers.
+
+#### Creating Middleware
+
+Create custom middleware in `src/app/http/middleware/`. Use the following command:
+
+```bash
+./glimr make:middleware logger
+```
+
+This creates `logger.gleam`. In it you can add your custom logic.
+
+```gleam
+// app/http/middleware/logger.gleam
+import wisp
+import glimr/http/kernel.{type Next}
+
+pub fn handle(req: Request, ctx: Context, next: Next(Context)) -> Response {
+  io.println("Request received")
+
+  // Pass both request and context to next middleware/handler
+  next(req, ctx)
+}
+```
+
+#### Applying Middleware to Route Handlers
+
+Apply middleware to specific controller functions:
+
+```gleam
+import app/http/middleware/logger.{handle as logger}
+import app/http/middleware/auth.{handle as auth}
+import glimr/http/middleware
+...
+
+pub fn show(req: Request, ctx: Context) -> Response {
+  use req, ctx <- middleware.apply([auth, logger], req, ctx)
+
+  // Continue with controller logic using the modified
+  // req and ctx from your middleware stack
+}
+```
+
+#### Modifying Context in Middleware
+
+Middleware can modify the context, and those changes are visible to downstream middleware and controllers:
+
+```gleam
+// middleware/auth.gleam
+pub fn handle(req, ctx, next) {
+  case authenticate(req) {
+    Ok(user) -> {
+      // Add authenticated user to context
+      let updated_ctx = Context(..ctx, user: Some(user))
+      next(req, updated_ctx)
+    }
+    Error(_) -> wisp.response(401)
+  }
+}
+```
+
+Then in your controller:
+
+```gleam
+pub fn dashboard(req: Request, ctx: Context) -> Response {
+  // Apply the middleware to this controller function
+  use _req, ctx <- middleware.apply([auth], req, ctx)
+
+  // Safe to assert because auth middleware guarantees this
+  let assert Some(user) = ctx.user
+
+  view.build()
+  |> view.html("dashboard.html")
+  |> view.data([#("username", user.username)])
+  |> view.render()
+}
+```
+
+#### Modifying Responses After Handler
+
+Middleware can also modify responses on the way back up the chain:
+
+```gleam
+// middleware/cors.gleam
+pub fn handle(req, ctx, next) {
+  // Call the next middleware/handler first
+  let response = next(req, ctx)
+
+  // Modify the response on the way back
+  response
+  |> wisp.set_header("Access-Control-Allow-Origin", "*")
+  |> wisp.set_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE")
+}
+```
+
+This allows middleware to:
+- Add headers to responses (CORS, security headers, etc.)
+- Log response times
+- Compress response bodies
+- Transform response data
+
 ### Form Validation
 
 Glimr provides a declarative, rule-based validation system for form data. Create form request modules to define validation rules and handle requests.
 
 #### Creating Form Requests
 
-Form request modules live in `src/app/http/requests/`:
+Create form request modules in `src/app/http/requests/`. Use the following command:
+
+```bash
+./glimr make:request user_store
+```
+
+This creates `user_store.gleam`. In it you can add your custom logic.
 
 ```gleam
 // src/app/http/requests/user_store.gleam
@@ -302,7 +420,27 @@ If validation fails, a 422 response with validation errors is automatically retu
 
 #### Custom Validation Rules
 
-Create your own validation rules for domain-specific logic using the `Custom` rule:
+Create your own validation rules for domain-specific logic using the `Custom` rule in `app/http/rules`. Use the following command:
+
+```bash
+./glimr make:rule username_available
+```
+
+Add your rule's validation logic:
+
+```gleam
+// app/http/rules/username_available.gleam
+pub fn run(username: String) -> Result(Nil, String) {
+  case db.username_exists(username) {
+    // Error is automatically prepended with "Username " so
+    // the full message would be: "Username is already taken"
+    True -> Error("is already taken") 
+    False -> Ok(Nil)
+  }
+}
+```
+
+Use your custom rule in your request:
 
 ```gleam
 // app/http/requests/login_request.gleam
@@ -319,16 +457,6 @@ pub fn rules(form: FormData) {
     form |> validator.for("password", [Required]),
   ]
 }
-
-// app/http/rules/username_available.gleam
-pub fn run(username: String) -> Result(Nil, String) {
-  case db.username_exists(username) {
-    // Error is automatically prepended with "Username " so
-    // the full message would be: "Username is already taken"
-    True -> Error("is already taken") 
-    False -> Ok(Nil)
-  }
-}
 ```
 
 **Custom validation function structure:**
@@ -338,7 +466,28 @@ pub fn run(username: String) -> Result(Nil, String) {
 
 #### Custom File Validation Rules
 
-Create custom validation rules for file uploads using the `FileCustom` rule:
+Create your own validation rules for domain-specific logic using the `FileCustom` rule in `app/http/rules`. Use the following command:
+
+```bash
+./glimr make:rule image_dimensions --file
+```
+
+Add your rule's validation logic:
+
+```gleam
+// app/http/rules/image_dimensions.gleam
+import wisp.{type UploadedFile}
+
+pub fn run(file: UploadedFile) -> Result(Nil, String) {
+  case get_image_dimensions(file.path) {
+    Ok(#(width, height)) if width >= 100 && height >= 100 -> Ok(Nil)
+    Ok(_) -> Error("must be at least 100x100 pixels")
+    Error(_) -> Error("could not read image dimensions")
+  }
+}
+```
+
+Use your custom rule in your request:
 
 ```gleam
 // app/http/requests/avatar_upload.gleam
@@ -353,17 +502,6 @@ pub fn rules(form: FormData) {
       FileCustom(image_dimensions), // <-----
     ]),
   ]
-}
-
-// app/http/rules/image_dimensions.gleam
-import wisp.{type UploadedFile}
-
-pub fn run(file: UploadedFile) -> Result(Nil, String) {
-  case get_image_dimensions(file.path) {
-    Ok(#(width, height)) if width >= 100 && height >= 100 -> Ok(Nil)
-    Ok(_) -> Error("must be at least 100x100 pixels")
-    Error(_) -> Error("could not read image dimensions")
-  }
 }
 ```
 
@@ -483,102 +621,6 @@ pub fn cancel(req: Request, ctx: Context) -> Response {
   |> redirect.go()
 }
 ```
-
-### Middleware
-
-Middleware intercepts requests before they reach your controllers. Middleware can modify both the request and context, with changes flowing through to subsequent middleware and controllers.
-
-#### Creating Middleware
-
-Create custom middleware in `src/app/http/middleware/`:
-
-```gleam
-import wisp
-import glimr/http/kernel.{type Next}
-
-pub fn handle(req: Request, ctx: Context, next: Next(Context)) -> Response {
-  io.println("Request received")
-
-  // Pass both request and context to next middleware/handler
-  next(req, ctx)
-}
-```
-
-#### Applying Middleware to Route Handlers
-
-Apply middleware to specific controller functions:
-
-```gleam
-import app/http/middleware/logger.{handle as logger}
-import app/http/middleware/auth.{handle as auth}
-import glimr/http/middleware
-...
-
-pub fn show(req: Request, ctx: Context) -> Response {
-  use req, ctx <- middleware.apply([auth, logger], req, ctx)
-
-  // Continue with controller logic using the modified
-  // req and ctx from your middleware stack
-}
-```
-
-#### Modifying Context in Middleware
-
-Middleware can modify the context, and those changes are visible to downstream middleware and controllers:
-
-```gleam
-// middleware/auth.gleam
-pub fn handle(req, ctx, next) {
-  case authenticate(req) {
-    Ok(user) -> {
-      // Add authenticated user to context
-      let updated_ctx = Context(..ctx, user: Some(user))
-      next(req, updated_ctx)
-    }
-    Error(_) -> wisp.response(401)
-  }
-}
-```
-
-Then in your controller:
-
-```gleam
-pub fn dashboard(req: Request, ctx: Context) -> Response {
-  // Apply the middleware to this controller function
-  use _req, ctx <- middleware.apply([auth], req, ctx)
-
-  // Safe to assert because auth middleware guarantees this
-  let assert Some(user) = ctx.user
-
-  view.build()
-  |> view.html("dashboard.html")
-  |> view.data([#("username", user.username)])
-  |> view.render()
-}
-```
-
-#### Modifying Responses After Handler
-
-Middleware can also modify responses on the way back up the chain:
-
-```gleam
-// middleware/cors.gleam
-pub fn handle(req, ctx, next) {
-  // Call the next middleware/handler first
-  let response = next(req, ctx)
-
-  // Modify the response on the way back
-  response
-  |> wisp.set_header("Access-Control-Allow-Origin", "*")
-  |> wisp.set_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE")
-}
-```
-
-This allows middleware to:
-- Add headers to responses (CORS, security headers, etc.)
-- Log response times
-- Compress response bodies
-- Transform response data
 
 ### Route Groups
 
