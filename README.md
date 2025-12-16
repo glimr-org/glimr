@@ -113,7 +113,7 @@ pub fn routes(path, method, req, ctx) {
     [] ->
       case method {
         Get -> home_controller.show(req, ctx)
-        _ -> wisp.mthod_not_allowed([Get])
+        _ -> wisp.method_not_allowed([Get])
       }
 
     // equivalent to "/users"
@@ -121,14 +121,14 @@ pub fn routes(path, method, req, ctx) {
       case method {
         Get -> user_controller.index(req, ctx)
         Post -> user_controller.store(req, ctx)
-        _ -> wisp.mthod_not_allowed([Get, Post])
+        _ -> wisp.method_not_allowed([Get, Post])
       }
 
     // equivalent to "/users/:user_id"
     ["users", user_id] ->
       case method {
         Get -> user_controller.show(user_id, req, ctx)
-        _ -> wisp.mthod_not_allowed([Get])
+        _ -> wisp.method_not_allowed([Get])
       }
 
     _ -> wisp.not_found()

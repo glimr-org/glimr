@@ -1,29 +1,4 @@
 #!/usr/bin/env bash
 
-# Glimr CLI
-
-case "$1" in
-    make:controller)
-        if [ "$3" == "--resource" ]; then
-            gleam run -m glimr/make controller "$2" --resource
-        else
-            gleam run -m glimr/make controller "$2"
-        fi
-        ;;
-    make:middleware)
-        gleam run -m glimr/make middleware "$2"
-        ;;
-    make:request)
-        gleam run -m glimr/make request "$2"
-        ;;
-    make:rule)
-        if [ "$3" == "--file" ]; then
-            gleam run -m glimr/make rule "$2" --file
-        else
-            gleam run -m glimr/make rule "$2"
-        fi
-        ;;
-    *)
-        gleam run -m glimr/make
-        ;;
-esac
+# Glimr CLI - Passthrough to framework console
+gleam run --no-print-progress -m glimr/make -- "$@"
