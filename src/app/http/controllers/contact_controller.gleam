@@ -15,8 +15,13 @@ pub fn show(_req: Request, _ctx: Context) -> Response {
   |> view.render()
 }
 
-pub fn store(req: Request, _ctx: Context) -> Response {
-  use validated <- validator.run(req, contact_store.rules, contact_store.data)
+pub fn store(req: Request, ctx: Context) -> Response {
+  use validated <- validator.run(
+    req,
+    ctx,
+    contact_store.rules,
+    contact_store.data,
+  )
 
   echo validated.name
   echo validated.email

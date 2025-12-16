@@ -345,9 +345,9 @@ pub type Data {
 // Define your form's validation rules
 pub fn rules(form: FormData) {
   [
-    form |> validator.for("name", [Required, MinLength(2)]),
-    form |> validator.for("email", [Required, Email, MaxLength(255)]),
-    form |> validator.for_file("avatar", [FileRequired, FileMaxSize(5000)]),
+    validator.for(form, "name", [Required, MinLength(2)]),
+    validator.for(form, "email", [Required, Email, MaxLength(255)]),
+    validator.for_file(form, "avatar", [FileRequired, FileMaxSize(5000)]),
   ]
 }
 
@@ -373,7 +373,12 @@ import glimr/forms/validator
 // app/http/controllers/user_controller.gleam
 pub fn store(req: Request, ctx: Context) -> Response {
   // Form validation errors are handled automatically
-  use validated <- validator.run(req, user_store.rules, user_store.data)
+  use validated <- validator.run(
+    req, 
+    ctx, 
+    user_store.rules, 
+    user_store.data
+  )
 
   // Do something with your validated data
   // validated.name : String
@@ -449,12 +454,13 @@ import app/http/rules/username_available.{run as username_available}
 
 pub fn rules(form: FormData) {
   [
-    form |> validator.for("username", [
+    validator.for(form, "username", [
       Required,
       MinLength(3),
       Custom(username_available), // <-----
     ]),
-    form |> validator.for("password", [Required]),
+
+    validator.for(form, "password", [Required]),
   ]
 }
 ```
@@ -496,7 +502,7 @@ import app/http/rules/image_dimensions.{run as image_dimensions}
 
 pub fn rules(form: FormData) {
   [
-    form |> validator.for_file("avatar", [
+    validator.for_file(form, "avatar", [
       FileRequired,
       FileMaxSize(2048),
       FileCustom(image_dimensions), // <-----
