@@ -4,6 +4,29 @@ A batteries-included web framework for Gleam that brings functional programming 
 
 If you'd like to stay updated on Glimr's development, Follow [@migueljarias](https://x.com/migueljarias) on X (that's me) for updates, behind-the-scenes stuff and overall nonsense.
 
+## Table of Contents
+
+- [About Glimr](#about-glimr)
+- [Features](#features)
+- [Installation](#installation)
+- [Project Structure](#project-structure)
+- [Quick Start](#quick-start)
+  - [Defining Routes](#defining-routes)
+  - [Creating Controllers](#creating-controllers)
+  - [Route Parameters](#route-parameters)
+  - [Middleware](#middleware)
+  - [Form Validation](#form-validation)
+  - [Views & Responses](#views--responses)
+  - [Redirects](#redirects)
+  - [Route Groups](#route-groups)
+  - [API Routes](#api-routes)
+  - [Configuration](#configuration)
+  - [Context System](#context-system)
+- [Development](#development)
+- [Learn More](#learn-more)
+- [Contributing](#contributing)
+- [License](#license)
+
 ## About Glimr
 
 Glimr is a Laravel-inspired web framework built for Gleam. It provides a delightful developer experience with type-safe routing, middleware, singletons, and more - all leveraging Gleam's functional programming paradigm.
