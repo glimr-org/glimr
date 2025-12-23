@@ -1,9 +1,11 @@
 import app/http/context/ctx.{type Context}
 import app/http/context/ctx_app
+import app/http/context/ctx_db
 
 pub fn register() -> Context {
   ctx.Context(
     app: ctx_app.load(),
-    // load other contexts here...
+    db: ctx_db.load(),
+    // Add custom contexts here...
   )
 }

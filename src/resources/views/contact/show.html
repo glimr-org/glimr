@@ -1,0 +1,44 @@
+<body>
+  <h1 class="title">Contact Us</h1>
+
+  <form action="/contact" enctype="multipart/form-data" method="post">
+    <div class="field">
+      <label class="label">Name</label>
+      <div class="control">
+        <input class="input" name="name" placeholder="Your name" type="text" />
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="label">Email</label>
+      <div class="control">
+        <input
+          class="input"
+          name="email"
+          placeholder="your@email.com"
+          type="email"
+        />
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="label">Message</label>
+      <div class="control">
+        <textarea class="input" name="message" type="text"></textarea>
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="label">Avatar</label>
+      <div class="control">
+        <input accept=".jpg,.png" class="input" name="avatar" type="file" />
+      </div>
+    </div>
+
+    <div class="field">
+      <div class="control">
+        <button class="button is-primary" type="submit">Send Message</button>
+      </div>
+    </div>
+  </form>
+</body>

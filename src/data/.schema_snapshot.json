@@ -1,0 +1,47 @@
+{
+  "tables": {
+    "comments": {
+      "columns": [
+        {"name": "id", "type": "Id", "nullable": false, "has_default": false},
+        {"name": "user_id", "type": "Foreign(users)", "nullable": false, "has_default": false},
+        {"name": "post_id", "type": "Foreign(posts)", "nullable": false, "has_default": false},
+        {"name": "body", "type": "Text", "nullable": false, "has_default": false},
+        {"name": "is_approved", "type": "Boolean", "nullable": false, "has_default": false},
+        {"name": "created_at", "type": "UnixTimestamp", "nullable": false, "has_default": false},
+        {"name": "updated_at", "type": "UnixTimestamp", "nullable": false, "has_default": false}
+      ]
+    },
+    "posts": {
+      "columns": [
+        {"name": "id", "type": "Id", "nullable": false, "has_default": false},
+        {"name": "user_id", "type": "Foreign(users)", "nullable": false, "has_default": false},
+        {"name": "title", "type": "String", "nullable": false, "has_default": false},
+        {"name": "body", "type": "Text", "nullable": false, "has_default": false},
+        {"name": "status", "type": "String", "nullable": false, "has_default": false},
+        {"name": "created_at", "type": "UnixTimestamp", "nullable": false, "has_default": false},
+        {"name": "updated_at", "type": "UnixTimestamp", "nullable": false, "has_default": false}
+      ]
+    },
+    "submissions": {
+      "columns": [
+        {"name": "id", "type": "Id", "nullable": false, "has_default": false},
+        {"name": "name", "type": "String", "nullable": false, "has_default": false},
+        {"name": "email", "type": "String", "nullable": false, "has_default": false},
+        {"name": "avatar", "type": "String", "nullable": false, "has_default": false},
+        {"name": "message", "type": "Text", "nullable": true, "has_default": false},
+        {"name": "created_at", "type": "UnixTimestamp", "nullable": false, "has_default": false},
+        {"name": "updated_at", "type": "UnixTimestamp", "nullable": false, "has_default": false}
+      ]
+    },
+    "users": {
+      "columns": [
+        {"name": "id", "type": "Id", "nullable": false, "has_default": false},
+        {"name": "name", "type": "String", "nullable": false, "has_default": false},
+        {"name": "email", "type": "String", "nullable": false, "has_default": false},
+        {"name": "bio", "type": "Text", "nullable": false, "has_default": false},
+        {"name": "created_at", "type": "UnixTimestamp", "nullable": false, "has_default": false},
+        {"name": "updated_at", "type": "UnixTimestamp", "nullable": false, "has_default": false}
+      ]
+    }
+  }
+}

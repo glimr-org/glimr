@@ -14,7 +14,7 @@ pub fn handle(
 
   case middleware_group {
     kernel.Api -> handle_api_middleware(req, ctx, router)
-    // Custom middleware groups
+    // Add custom middleware groups here...
     _ -> handle_web_middleware(req, ctx, router)
   }
 }

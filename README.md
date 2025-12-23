@@ -2,7 +2,7 @@
 
 A batteries-included web framework for Gleam that brings functional programming elegance and developer productivity to web development.
 
-If you'd like to stay updated on Glimr's development, Follow [@migueljarias](https://x.com/migueljarias) on X (that's me) for updates, behind-the-scenes stuff and overall nonsense.
+If you'd like to stay updated on Glimr's development, Follow [@migueljarias](https://x.com/migueljarias) on X (that's me) for updates.
 
 ## Table of Contents
 
@@ -17,7 +17,10 @@ If you'd like to stay updated on Glimr's development, Follow [@migueljarias](htt
   - [Middleware](#middleware)
   - [Form Validation](#form-validation)
   - [Views & Responses](#views--responses)
-  - [Redirects](#redirects)
+  - [Database](#database)
+      - [Migrations](#migrations)
+      - [Queries](#queries)
+  - [Creating Actions](#creating-actions)
   - [Route Groups](#route-groups)
   - [API Routes](#api-routes)
   - [Configuration](#configuration)
@@ -29,7 +32,7 @@ If you'd like to stay updated on Glimr's development, Follow [@migueljarias](htt
 
 ## About Glimr
 
-Glimr is a Laravel-inspired web framework built for Gleam. It provides a delightful developer experience with type-safe routing, middleware, singletons, and more - all leveraging Gleam's functional programming paradigm.
+Glimr is a fully featured web framework built for Gleam. It provides a delightful developer experience with type-safe routing, middleware, singletons, and more - all leveraging Gleam's functional programming paradigm.
 
 > **Note:** This repository contains the Glimr application template. If you want to contribute to the core framework, visit the [framework repository](https://github.com/glimr-org/framework).
 
@@ -47,6 +50,10 @@ Glimr is a Laravel-inspired web framework built for Gleam. It provides a delight
 - **Controller Pattern** - Organized request handlers with clear separation of concerns
 - **Configuration Management** - Environment-based configuration with `.env` support
 - **Provider Pattern** - Service providers for bootstrapping application services
+- **Automatic Migrations** - Schema-based migration generation with snapshot diffing
+- **SQL Queries** - Write raw SQL files with full editor LSP support, compiled to typed Gleam functions
+- **Connection Pooling** - Efficient database connection management for PostgreSQL and SQLite
+- **Transaction Support** - Atomic operations with automatic retry on deadlock
 
 ## Installation
 
@@ -206,8 +213,80 @@ pub fn store(req: Request, ctx: Context) -> Response {
 
 You can also create resource controllers that come set up with index,show,edit,update,delete functions with this command:
 
-```bash 
+```bash
 ./glimr make:controller --resource
+```
+
+### Creating Actions
+
+Actions help keep controllers clean by extracting complex business logic into reusable modules. They can be chained together using the `use <-` syntax and always expect a callback that returns a `wisp.Response`.
+
+Create actions in `src/app/http/actions/`. Use the following command:
+
+```bash
+./glimr make:action store_submission
+```
+
+This creates `store_submission_action.gleam`. Actions follow a simple pattern - they perform some work and pass results to a callback:
+
+```gleam
+// src/app/http/actions/store_submission_action.gleam
+import app/http/context/ctx.{type Context}
+import app/http/requests/contact_store_request.{type Data}
+import data/models/submission/gen/submission_repository.{type CreateRow}
+import glimr/db/pool
+import wisp.{type Response}
+
+pub fn run(
+  ctx: Context,
+  data: Data,
+  next: fn(CreateRow) -> Response,
+) -> Response {
+  use conn <- pool.get_connection(ctx.db.pool)
+  use submission <- submission_repository.create(
+    conn: conn,
+    name: data.name,
+    email: data.email,
+    message: data.message,
+  )
+
+  next(submission)
+}
+```
+
+Use actions in controllers with the `use <-` syntax:
+
+```gleam
+// src/app/http/controllers/contact_controller.gleam
+import app/http/actions/store_submission_action
+import app/http/requests/contact_store_request
+
+pub fn store(req: Request, ctx: Context) -> Response {
+  use validated <- contact_store_request.validate(req, ctx)
+  use submission <- store_submission_action.run(ctx, validated)
+
+  redirect.build()
+  |> redirect.to("/contact/success")
+  |> redirect.flash([#("message", "Thanks " <> submission.name <> "!")])
+  |> redirect.go()
+}
+```
+
+**Chaining multiple actions:**
+
+Actions compose naturally, keeping your controllers focused on the response:
+
+```gleam
+pub fn store(req: Request, ctx: Context) -> Response {
+  use validated <- user_store_request.validate(req, ctx)
+  use user <- create_user_action.run(ctx, validated)
+  use _ <- send_welcome_email_action.run(ctx, user)
+  use _ <- notify_admin_action.run(ctx, user)
+
+  redirect.build()
+  |> redirect.to("/users/" <> int.to_string(user.id))
+  |> redirect.go()
+}
 ```
 
 ### Route Parameters
@@ -651,6 +730,516 @@ pub fn cancel(req: Request, ctx: Context) -> Response {
 }
 ```
 
+## Database
+
+Curently supports sqlite via the [lpil/sqlight](https://github.com/lpil/sqlight) package and postgres via the [lpil/pog](https://github.com/lpil/pog) package.
+
+### Migrations
+
+Glimr provides automatic migration generation by comparing your schema definitions against a stored snapshot. It detects changes and generates driver-specific SQL for PostgreSQL or SQLite.
+
+#### Setup
+
+Ensure your `.env` file has the database driver configured:
+
+```env
+DB_DRIVER=sqlite  # or "postgres"
+```
+
+#### Defining Schemas
+
+Start by creating a data model using the following command:
+
+```env
+./glimr make:model user
+```
+
+This creates a `user/` folder inside `src/data/models/`. The folder contains `user_schema.gleam` for defining your table schema, and a `queries/` folder with pre-generated CRUD queries that get compiled into fully typed gleam code. You can add custom queries to this folder as well (see [Queries](#queries) section).
+
+Define the user schema for your migrations:
+
+```gleam
+// src/data/models/user/user_schema.gleam
+import glimr/db/schema.{
+  table, id, string, text, boolean, uuid, foreign,
+  nullable, default_bool, default_string, auto_uuid, unix_timestamps,
+}
+
+pub const name = "users"
+
+pub fn define() {
+  table(name, [
+    id(),
+    foreign("organization_id", "organizations") |> nullable(),
+    string("email"),
+    string("name"),
+    text("bio") |> nullable(),
+    boolean("is_admin") |> default_bool(False),
+    string("role") |> default_string("user"),
+    unix_timestamps(),
+  ])
+}
+```
+
+#### Available Column Types
+
+| Function | PostgreSQL | SQLite | Gleam Type |
+|----------|------------|--------|------------|
+| `id()` | `SERIAL PRIMARY KEY` | `INTEGER PRIMARY KEY AUTOINCREMENT` | `Int` |
+| `uuid("name")` | `UUID` | `TEXT` | `String` |
+| `string("name")` | `VARCHAR(255)` | `TEXT` | `String` |
+| `string_sized("name", 100)` | `VARCHAR(100)` | `TEXT` | `String` |
+| `text("name")` | `TEXT` | `TEXT` | `String` |
+| `int("name")` | `INTEGER` | `INTEGER` | `Int` |
+| `bigint("name")` | `BIGINT` | `INTEGER` | `Int` |
+| `float("name")` | `DOUBLE PRECISION` | `REAL` | `Float` |
+| `boolean("name")` | `BOOLEAN` | `INTEGER` | `Bool` |
+| `timestamp("name")` | `TIMESTAMP` | `TEXT` | `String` |
+| `unix_timestamp("name")` | `BIGINT` | `INTEGER` | `Int` |
+| `date("name")` | `DATE` | `TEXT` | `String` |
+| `json("name")` | `JSONB` | `TEXT` | `String` |
+| `foreign("user_id", "users")` | `INTEGER REFERENCES users(id)` | `INTEGER` | `Int` |
+| `timestamps()` | Creates `created_at` and `updated_at` | | |
+| `unix_timestamps()` | Creates `created_at` and `updated_at` as integers | | |
+
+#### Column Modifiers
+
+```gleam
+// Make a column nullable (default is NOT NULL)
+string("bio") |> nullable()
+
+// Set default values
+boolean("active") |> default_bool(True)
+string("role") |> default_string("user")
+int("count") |> default_int(0)
+float("rate") |> default_float(0.0)
+timestamp("published_at") |> default_now()
+unix_timestamp("created_at") |> default_unix_now()
+uuid("external_id") |> auto_uuid()
+string("deleted_at") |> nullable() |> default_null()
+```
+
+#### Generating Migrations
+
+Run the migration generator:
+
+```bash
+./glimr gen:db
+```
+
+This will:
+1. Scan schema files in `src/data/models/`
+2. Compare against the stored snapshot (`.schema_snapshot.json`)
+3. Detect changes (new tables, dropped tables, column changes)
+4. Generate SQL in `src/data/_migrations/{timestamp}_migration.sql`
+5. Update the snapshot for the next run
+
+Example output:
+
+```
+Glimr Migration Generator
+=========================
+Driver: postgres
+Found 3 table(s)
+
+Detected 2 change(s):
+  - Create table: posts
+  - Add column: users.avatar
+
+Generated: src/data/_migrations/20241223150000_migration.sql
+Updated: src/data/.schema_snapshot.json
+
+Done!
+```
+You can also run the following command to generate migrations and also run them:
+
+```bash
+./glimr gen:db --migrate
+```
+
+#### Renaming Columns
+
+To rename a column without losing data, use the `rename_from` modifier:
+
+```gleam
+// Before: string("email")
+// After:
+string("email_address") |> rename_from("email")
+```
+
+This generates `ALTER TABLE ... RENAME COLUMN` instead of drop/add. The `rename_from` modifier is automatically removed from your schema file after the migration is generated.
+
+#### Generated Migration Example
+
+```sql
+-- Generated by glimr/db/gen/migrate (postgres)
+
+CREATE TABLE posts (
+  id SERIAL PRIMARY KEY NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  body TEXT NOT NULL,
+  user_id INTEGER REFERENCES users(id) NOT NULL,
+  created_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP NOT NULL
+);
+
+ALTER TABLE users ADD COLUMN avatar VARCHAR(255);
+```
+
+#### Running Migrations
+
+Generated migrations are plain SQL files. Run them with the following command:
+
+```bash
+./glimr db:migrate
+```
+
+#### Rolling Back Migrations
+
+Glimr takes a forward-only approach to migrations. Instead of rollbacks, simply generate a new migration to reverse any changes. This keeps your migration history explicit and auditable.
+
+#### Dropping Tables
+
+To drop a database table, simply delete the model from the `src/data/models/` folder. For example, if your model is called `user`, delete the `src/data/models/user/` folder. Finally, regenerate migrations and rerun them.
+
+### Queries
+
+Each model includes a `queries/` folder with pre-generated CRUD queries. These are plain SQL files, so you get full SQL language support, autocomplete, and linting from your editor's SQL LSP.
+
+#### Generated CRUD Queries
+
+When you create a model with the `./glimr make:model` command, the following query files are generated for you:
+
+```
+src/data/models/user/queries/
+├── create.sql
+├── delete.sql
+├── find.sql
+├── list_all.sql
+└── update.sql
+```
+
+You can modify these queries to fit your needs or delete any you don't need.
+
+#### Creating Custom Queries
+
+Add new `.sql` files to the `queries/` folder for custom queries:
+
+```sql
+-- src/data/models/user/queries/find_by_email.sql
+SELECT * FROM users WHERE email = $1;
+```
+
+```sql
+-- src/data/models/user/queries/list_active.sql
+SELECT * FROM users WHERE is_active = true ORDER BY created_at DESC;
+```
+
+#### Query Naming Convention
+
+The file name prefix determines whether the query returns a single row or multiple rows:
+
+| Prefix | Returns | Gleam Return Type |
+|--------|---------|-------------------|
+| `list_*` | Multiple rows | `List(User)` |
+| Anything else | Single row | `Result(User, Nil)` |
+
+**Examples:**
+- `find.sql` → returns `Result(User, Nil)`
+- `find_by_email.sql` → returns `Result(User, Nil)`
+- `list_all.sql` → returns `List(User)`
+- `list_active.sql` → returns `List(User)`
+- `list_by_role.sql` → returns `List(User)`
+
+#### Generating the Repository
+
+After adding or modifying queries, run:
+
+```bash
+./glimr db:gen
+```
+
+This generates a fully-typed repository file with Gleam functions for each query. Every query generates **two functions**:
+
+| Function | Error Handling | Return Type |
+|----------|----------------|-------------|
+| `find()` | Automatic (404/500 pages) | Expects a callback that returns a `Response` |
+| `find_or()` | Manual (you handle errors) | `Result(User, Nil)` |
+
+```gleam
+// src/data/models/user/user_repository.gleam (auto-generated)
+
+// Automatic error handling - returns 404 or 500 error pages
+pub fn find(db, id, callback) -> Response
+pub fn find_by_email(db, email, callback) -> Response
+
+// Manual error handling - returns Result for you to handle
+pub fn find_or(db, id) -> Result(User, Nil)
+pub fn find_by_email_or(db, email) -> Result(User, Nil)
+
+// List queries (no _or variant needed since empty list is valid)
+pub fn list_all(db) -> List(User)
+pub fn list_active(db) -> List(User)
+```
+
+#### Connection Pooling
+
+Before executing queries, you need to get a connection from the pool. Glimr manages a pool of database connections to efficiently handle concurrent requests. 
+
+You can specify the amount of connections you want initialized in your pool by setting the `DB_POOL_SIZE` env variable. It defaults to 5.
+
+The pool is typically initialized in your context and accessed via `ctx.db.pool`. There are several ways to get a connection:
+
+| Function | Error Handling | Safety | Return Type |
+|----------|----------------|--------|-------------|
+| `get_connection` | Automatic (500 page) | Safe | Expects a callback that returns a `Response` |
+| `get_connection_or` | Manual | Safe | `Result(a, DbError)` |
+| `checkout` / `release` | Manual | Unsafe | Must remember to release |
+
+**With automatic error handling (recommended):**
+
+`get_connection` automatically returns connections to the pool and returns a 500 error page if the pool is exhausted. Great for usage in controllers.
+
+```gleam
+import glimr/db/pool
+import gleam/int
+
+pub fn show(user_id: String, req: Request, ctx: Context) -> Response {
+  let assert Ok(user_id) = int.parse(user_id)
+
+  use conn <- pool.get_connection(ctx.db.pool)
+  use user <- user_repository.find(conn, user_id)
+
+  view.build()
+  |> view.html("users/show.html")
+  |> view.data([#("user", user.name)])
+  |> view.render()
+}
+```
+
+**Reusing connections for multiple queries:**
+
+Once you have a connection, you can reuse it across multiple queries. This is more efficient than getting a new connection for each query:
+
+```gleam
+import glimr/db/pool
+
+pub fn show(id: String, req: Request, ctx: Context) -> Response {
+  let assert Ok(user_id) = int.parse(id)
+
+  use conn <- pool.get_connection(ctx.db.pool)
+  use user <- user_repository.find(conn, user_id)
+
+  // Reuse the same connection for additional queries
+  let posts = post_repository.list_by_user(conn, user_id)
+  let comments = comment_repository.list_by_user(conn, user_id)
+
+  view.build()
+  |> view.html("users/show.html")
+  |> view.data([
+    #("user", user.name),
+    #("post_count", int.to_string(list.length(posts))),
+    #("comment_count", int.to_string(list.length(comments))),
+  ])
+  |> view.render()
+}
+```
+
+**With manual error handling:**
+
+`get_connection_or` returns a `Result`, letting you handle pool errors yourself:
+
+```gleam
+import glimr/db/pool
+
+pub fn show(req: Request, ctx: Context) -> Response {
+  case pool.get_connection_or(ctx.db.pool, fn(conn) {
+    user_repository.find_or(conn, 1)
+  }) {
+    Ok(user) -> {
+      view.build()
+      |> view.html("users/show.html")
+      |> view.data([#("user", user.name)])
+      |> view.render()
+    }
+    Error(_) -> {
+      // Handle connection or query error
+      wisp.internal_server_error()
+    }
+  }
+}
+```
+
+**Manual checkout/release (unsafe):**
+
+For advanced use cases, you can manually manage connections with `checkout` and `release`. This is **unsafe** because you must remember to release the connection, or it will leak from the pool:
+
+```gleam
+import glimr/db/pool
+
+pub fn batch_operation(ctx: Context) -> Response {
+  case pool.checkout(ctx.db.pool) {
+    Ok(conn) -> {
+      // Perform multiple operations...
+      let result1 = user_repository.find_or(conn, 1)
+      let result2 = post_repository.list_by_user_or(conn, 1)
+
+      // IMPORTANT: Always release the connection when done
+      pool.release(ctx.db.pool, conn)
+
+      // Return response...
+      wisp.ok()
+    }
+    Error(_) -> wisp.internal_server_error()
+  }
+}
+```
+
+> **Warning:** Prefer `get_connection` or `get_connection_or` over manual `checkout`/`release`. Forgetting to release connections will exhaust the pool and cause your application to hang.
+
+#### Using Queries in Controllers
+
+**With automatic error handling (recommended):**
+
+The non-`_or` repository functions can leverage the `use <-` syntax and automatically return a 404 page if the record isn't found, or a 500 error page for database errors, while still looking very clean. Your callback receives the found record and must return a `wisp.Response`.
+
+```gleam
+import data/models/user/user_repository
+import glimr/db/pool
+
+pub fn show(id: String, req: Request, ctx: Context) -> Response {
+  let assert Ok(user_id) = int.parse(id)
+
+  use conn <- pool.get_connection(ctx.db.pool)
+  use user <- user_repository.find(conn, user_id)
+
+  // This only runs if the user was found
+  // If not found, a 404 page is automatically returned
+  // If a different database error occurs, a 500 page
+  // is automatically returned.
+  view.build()
+  |> view.html("users/show.html")
+  |> view.data([#("user", user.name)])
+  |> view.render()
+}
+```
+
+**With manual error handling:**
+
+The `_or` repository functions return a `Result`, giving you full control over error handling:
+
+```gleam
+import data/models/user/user_repository
+import glimr/db/connection.{NotFound}
+import glimr/db/pool
+
+
+pub fn show(id: String, req: Request, ctx: Context) -> Response {
+  let assert Ok(user_id) = int.parse(id)
+
+  use conn <- pool.get_connection(ctx.db.pool)
+
+  case user_repository.find_or(conn, user_id) {
+    Ok(user) -> {
+      view.build()
+      |> view.html("users/show.html")
+      |> view.data([#("user", user.name)])
+      |> view.render()
+    }
+    Error(NotFound) -> {
+      // Custom error handling for not found
+      redirect.build()
+      |> redirect.to("/users")
+      |> redirect.flash([#("error", "User not found")])
+      |> redirect.go()
+    }
+    Error(_) -> wisp.internal_server_error()
+  }
+}
+```
+
+**List queries:**
+
+```gleam
+import data/models/user/user_repository
+import glimr/db/pool
+
+pub fn index(req: Request, ctx: Context) -> Response {
+  use conn <- pool.get_connection(ctx.db.pool)
+  use users <- user_repository.list_all(conn)
+
+  view.build()
+  |> view.html("users/index.html")
+  |> view.data([#("users", users)])
+  |> view.render()
+}
+```
+
+#### Database Transactions
+
+For operations that must succeed or fail together, use `db.transaction`. It automatically:
+- Checks out a connection from the pool
+- Begins a transaction
+- Commits on success or rolls back on error
+- Returns the connection to the pool
+- Retries on deadlock (with configurable retry count)
+
+```gleam
+import glimr/db/db
+import glimr/db/connection.{type DbError}
+
+pub fn transfer(
+  ctx: Context,
+  from_id: Int,
+  to_id: Int,
+  amount: Int,
+) -> Result(Nil, DbError) {
+  use conn <- db.transaction(ctx.db.pool, 3)
+
+  // Both operations use the same connection within the transaction
+  use _ <- result.try(account_repository.debit_or(conn, from_id, amount))
+  use _ <- result.try(account_repository.credit_or(conn, to_id, amount))
+  Ok(Nil)
+}
+```
+
+The second parameter is the retry count for deadlocks:
+- `0` = no retries (try once, fail immediately on error)
+- `3` = retry up to 3 times on deadlock (4 total attempts)
+
+Retries use exponential backoff to reduce contention.
+
+**Using transactions in controllers:**
+
+```gleam
+import glimr/db/db
+
+pub fn store(req: Request, ctx: Context) -> Response {
+  use validated <- transfer_request.validate(req, ctx)
+
+  case {
+    use conn <- db.transaction(ctx.db.pool, 3)
+    use _ <- result.try(account_repository.debit_or(conn, validated.from_id, validated.amount))
+    use _ <- result.try(account_repository.credit_or(conn, validated.to_id, validated.amount))
+    Ok(Nil)
+  } {
+    Ok(_) -> {
+      redirect.build()
+      |> redirect.to("/transfers/success")
+      |> redirect.go()
+    }
+    Error(_) -> {
+      redirect.build()
+      |> redirect.to("/transfers")
+      |> redirect.flash([#("error", "Transfer failed")])
+      |> redirect.go()
+    }
+  }
+}
+```
+
+> **Note:** Use the `_or` variants of repository functions inside transactions since they return `Result` types that can be composed with `result.try`.
+
 ### Route Groups
 
 Route groups are defined in `src/app/providers/route_provider.gleam`. Each group has a prefix and middleware stack:
@@ -774,6 +1363,7 @@ Glimr is built on top of these excellent Gleam libraries:
 - [**gleam_http**](https://hexdocs.pm/gleam_http/) - HTTP types and utilities
 - [**gleam_json**](https://hexdocs.pm/gleam_json/) - JSON encoding and decoding
 - [**gleam_stdlib**](https://hexdocs.pm/gleam_stdlib/) - Gleam's standard library
+- [**gleam_time**](https://github.com/gleam-lang/time) - Work with time in Gleam!
 
 Special thanks to the Gleam community for building such an awesome ecosystem!
 

@@ -14,7 +14,7 @@ pub fn register() -> List(RouteGroup(Context)) {
     ),
     // 
     // Add your custom route groups here, before the
-    // default web group that has no prefix. The default\
+    // default web group that has no prefix. The default
     // web group below must always be last.
     //
     router.RouteGroup(
