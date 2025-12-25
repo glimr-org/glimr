@@ -5,8 +5,8 @@
 import gleam/dynamic/decode
 import gleam/option.{type Option}
 import glimr/db/connection.{type Connection, type DbError, NotFound}
+import glimr/db/pool.{type Pool}
 import glimr/db/query
-import wisp.{type Response}
 
 pub type Submission {
   Submission(
@@ -71,33 +71,34 @@ fn create_row_decoder() -> decode.Decoder(CreateRow) {
 }
 
 pub fn create(
-  conn conn: Connection,
+  pool pool: Pool,
   name name: String,
   email email: String,
   avatar avatar: String,
   message message: String,
   created_at created_at: Int,
   updated_at updated_at: Int,
-  handler handler: fn(CreateRow) -> Response,
-) -> Response {
-  case
-    create_or(
-      conn: conn,
-      name: name,
-      email: email,
-      avatar: avatar,
-      message: message,
-      created_at: created_at,
-      updated_at: updated_at,
-    )
-  {
-    Ok(row) -> handler(row)
-    Error(NotFound) -> wisp.not_found()
-    Error(_) -> wisp.internal_server_error()
+) -> Result(CreateRow, DbError) {
+  case pool.checkout(pool) {
+    Ok(conn) -> {
+      let result =
+        create_wc(
+          conn: conn,
+          name: name,
+          email: email,
+          avatar: avatar,
+          message: message,
+          created_at: created_at,
+          updated_at: updated_at,
+        )
+      pool.release(pool, conn)
+      result
+    }
+    Error(e) -> Error(e)
   }
 }
 
-pub fn create_or(
+pub fn create_wc(
   conn conn: Connection,
   name name: String,
   email email: String,
@@ -128,18 +129,18 @@ pub fn create_or(
   }
 }
 
-pub fn delete(
-  conn conn: Connection,
-  id id: Int,
-  handler handler: fn(Int) -> Response,
-) -> Response {
-  case delete_or(conn: conn, id: id) {
-    Ok(count) -> handler(count)
-    Error(_) -> wisp.internal_server_error()
+pub fn delete(pool pool: Pool, id id: Int) -> Result(Int, DbError) {
+  case pool.checkout(pool) {
+    Ok(conn) -> {
+      let result = delete_wc(conn: conn, id: id)
+      pool.release(pool, conn)
+      result
+    }
+    Error(e) -> Error(e)
   }
 }
 
-pub fn delete_or(conn conn: Connection, id id: Int) -> Result(Int, DbError) {
+pub fn delete_wc(conn conn: Connection, id id: Int) -> Result(Int, DbError) {
   query.execute(conn, "DELETE FROM submissions WHERE id = $1", [
     connection.int(id),
   ])
@@ -176,19 +177,18 @@ fn find_row_decoder() -> decode.Decoder(FindRow) {
   ))
 }
 
-pub fn find(
-  conn conn: Connection,
-  id id: Int,
-  handler handler: fn(FindRow) -> Response,
-) -> Response {
-  case find_or(conn: conn, id: id) {
-    Ok(row) -> handler(row)
-    Error(NotFound) -> wisp.not_found()
-    Error(_) -> wisp.internal_server_error()
+pub fn find(pool pool: Pool, id id: Int) -> Result(FindRow, DbError) {
+  case pool.checkout(pool) {
+    Ok(conn) -> {
+      let result = find_wc(conn: conn, id: id)
+      pool.release(pool, conn)
+      result
+    }
+    Error(e) -> Error(e)
   }
 }
 
-pub fn find_or(conn conn: Connection, id id: Int) -> Result(FindRow, DbError) {
+pub fn find_wc(conn conn: Connection, id id: Int) -> Result(FindRow, DbError) {
   case
     query.select_all(
       conn,
@@ -235,17 +235,18 @@ fn list_all_row_decoder() -> decode.Decoder(ListAllRow) {
   ))
 }
 
-pub fn list_all(
-  conn conn: Connection,
-  handler handler: fn(List(ListAllRow)) -> Response,
-) -> Response {
-  case list_all_or(conn: conn) {
-    Ok(rows) -> handler(rows)
-    Error(_) -> wisp.internal_server_error()
+pub fn list_all(pool pool: Pool) -> Result(List(ListAllRow), DbError) {
+  case pool.checkout(pool) {
+    Ok(conn) -> {
+      let result = list_all_wc(conn: conn)
+      pool.release(pool, conn)
+      result
+    }
+    Error(e) -> Error(e)
   }
 }
 
-pub fn list_all_or(conn conn: Connection) -> Result(List(ListAllRow), DbError) {
+pub fn list_all_wc(conn conn: Connection) -> Result(List(ListAllRow), DbError) {
   query.select_all(
     conn,
     "SELECT * FROM submissions ORDER BY created_at DESC",
@@ -286,52 +287,53 @@ fn update_row_decoder() -> decode.Decoder(UpdateRow) {
 }
 
 pub fn update(
-  conn conn: Connection,
+  pool pool: Pool,
+  id id: Int,
   name name: String,
   email email: String,
   avatar avatar: String,
   message message: String,
   updated_at updated_at: Int,
-  id id: Int,
-  handler handler: fn(UpdateRow) -> Response,
-) -> Response {
-  case
-    update_or(
-      conn: conn,
-      name: name,
-      email: email,
-      avatar: avatar,
-      message: message,
-      updated_at: updated_at,
-      id: id,
-    )
-  {
-    Ok(row) -> handler(row)
-    Error(NotFound) -> wisp.not_found()
-    Error(_) -> wisp.internal_server_error()
+) -> Result(UpdateRow, DbError) {
+  case pool.checkout(pool) {
+    Ok(conn) -> {
+      let result =
+        update_wc(
+          conn: conn,
+          id: id,
+          name: name,
+          email: email,
+          avatar: avatar,
+          message: message,
+          updated_at: updated_at,
+        )
+      pool.release(pool, conn)
+      result
+    }
+    Error(e) -> Error(e)
   }
 }
 
-pub fn update_or(
+pub fn update_wc(
   conn conn: Connection,
+  id id: Int,
   name name: String,
   email email: String,
   avatar avatar: String,
   message message: String,
   updated_at updated_at: Int,
-  id id: Int,
 ) -> Result(UpdateRow, DbError) {
   case
     query.select_all(
       conn,
-      "UPDATE submissions SET name = $1, email = $2, avatar = $3, message = $4, updated_at = $5 WHERE id = $6 RETURNING *",
+      "UPDATE submissions SET name = $2, email = $3, avatar = $4, message = $5, updated_at = $6 WHERE id = $1 RETURNING *",
       [
+        connection.int(id),
         connection.string(name),
         connection.string(email),
         connection.string(avatar),
         connection.string(message),
         connection.int(updated_at),
-        connection.int(id),
       ],
       update_row_decoder(),
     )

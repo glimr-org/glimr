@@ -4,8 +4,8 @@
 
 import gleam/dynamic/decode
 import glimr/db/connection.{type Connection, type DbError, NotFound}
+import glimr/db/pool.{type Pool}
 import glimr/db/query
-import wisp.{type Response}
 
 pub type User {
   User(
@@ -28,19 +28,139 @@ pub fn decoder() -> decode.Decoder(User) {
   decode.success(User(id, name, email, bio, created_at, updated_at))
 }
 
-pub fn delete(
-  conn conn: Connection,
-  id id: Int,
-  handler handler: fn(Int) -> Response,
-) -> Response {
-  case delete_or(conn: conn, id: id) {
-    Ok(count) -> handler(count)
-    Error(_) -> wisp.internal_server_error()
+pub type CreateRow {
+  CreateRow(
+    id: Int,
+    name: String,
+    email: String,
+    bio: String,
+    created_at: Int,
+    updated_at: Int,
+  )
+}
+
+fn create_row_decoder() -> decode.Decoder(CreateRow) {
+  use id <- decode.field(0, decode.int)
+  use name <- decode.field(1, decode.string)
+  use email <- decode.field(2, decode.string)
+  use bio <- decode.field(3, decode.string)
+  use created_at <- decode.field(4, decode.int)
+  use updated_at <- decode.field(5, decode.int)
+  decode.success(CreateRow(id, name, email, bio, created_at, updated_at))
+}
+
+pub fn create(
+  pool pool: Pool,
+  name name: String,
+  email email: String,
+  bio bio: String,
+  created_at created_at: Int,
+  updated_at updated_at: Int,
+) -> Result(CreateRow, DbError) {
+  case pool.checkout(pool) {
+    Ok(conn) -> {
+      let result =
+        create_wc(
+          conn: conn,
+          name: name,
+          email: email,
+          bio: bio,
+          created_at: created_at,
+          updated_at: updated_at,
+        )
+      pool.release(pool, conn)
+      result
+    }
+    Error(e) -> Error(e)
   }
 }
 
-pub fn delete_or(conn conn: Connection, id id: Int) -> Result(Int, DbError) {
+pub fn create_wc(
+  conn conn: Connection,
+  name name: String,
+  email email: String,
+  bio bio: String,
+  created_at created_at: Int,
+  updated_at updated_at: Int,
+) -> Result(CreateRow, DbError) {
+  case
+    query.select_all(
+      conn,
+      "INSERT INTO users (name, email, bio, created_at, updated_at) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+      [
+        connection.string(name),
+        connection.string(email),
+        connection.string(bio),
+        connection.int(created_at),
+        connection.int(updated_at),
+      ],
+      create_row_decoder(),
+    )
+  {
+    Ok([row]) -> Ok(row)
+    Ok([]) -> Error(NotFound)
+    Ok(_) -> Error(connection.QueryError("Expected single row"))
+    Error(e) -> Error(e)
+  }
+}
+
+pub fn delete(pool pool: Pool, id id: Int) -> Result(Int, DbError) {
+  case pool.checkout(pool) {
+    Ok(conn) -> {
+      let result = delete_wc(conn: conn, id: id)
+      pool.release(pool, conn)
+      result
+    }
+    Error(e) -> Error(e)
+  }
+}
+
+pub fn delete_wc(conn conn: Connection, id id: Int) -> Result(Int, DbError) {
   query.execute(conn, "DELETE FROM users WHERE id = $1", [connection.int(id)])
+}
+
+pub type DeleteInactiveRow {
+  DeleteInactiveRow(id: Int, name: String, email: String)
+}
+
+fn delete_inactive_row_decoder() -> decode.Decoder(DeleteInactiveRow) {
+  use id <- decode.field(0, decode.int)
+  use name <- decode.field(1, decode.string)
+  use email <- decode.field(2, decode.string)
+  decode.success(DeleteInactiveRow(id, name, email))
+}
+
+pub fn delete_inactive(
+  pool pool: Pool,
+  updated_at updated_at: Int,
+) -> Result(DeleteInactiveRow, DbError) {
+  case pool.checkout(pool) {
+    Ok(conn) -> {
+      let result = delete_inactive_wc(conn: conn, updated_at: updated_at)
+      pool.release(pool, conn)
+      result
+    }
+    Error(e) -> Error(e)
+  }
+}
+
+pub fn delete_inactive_wc(
+  conn conn: Connection,
+  updated_at updated_at: Int,
+) -> Result(DeleteInactiveRow, DbError) {
+  case
+    query.select_all(
+      conn,
+      "DELETE FROM users WHERE updated_at < $1 RETURNING id, name, email",
+      [connection.int(updated_at)],
+      delete_inactive_row_decoder(),
+    )
+  {
+    Ok([row]) -> Ok(row)
+    Ok([]) -> Error(NotFound)
+    Ok(_) -> Error(connection.QueryError("Expected single row"))
+    Error(e) -> Error(e)
+  }
 }
 
 pub type FindRow {
@@ -64,19 +184,18 @@ fn find_row_decoder() -> decode.Decoder(FindRow) {
   decode.success(FindRow(id, name, email, bio, created_at, updated_at))
 }
 
-pub fn find(
-  conn conn: Connection,
-  id id: Int,
-  handler handler: fn(FindRow) -> Response,
-) -> Response {
-  case find_or(conn: conn, id: id) {
-    Ok(row) -> handler(row)
-    Error(NotFound) -> wisp.not_found()
-    Error(_) -> wisp.internal_server_error()
+pub fn find(pool pool: Pool, id id: Int) -> Result(FindRow, DbError) {
+  case pool.checkout(pool) {
+    Ok(conn) -> {
+      let result = find_wc(conn: conn, id: id)
+      pool.release(pool, conn)
+      result
+    }
+    Error(e) -> Error(e)
   }
 }
 
-pub fn find_or(conn conn: Connection, id id: Int) -> Result(FindRow, DbError) {
+pub fn find_wc(conn conn: Connection, id id: Int) -> Result(FindRow, DbError) {
   case
     query.select_all(
       conn,
@@ -114,18 +233,20 @@ fn find_by_email_row_decoder() -> decode.Decoder(FindByEmailRow) {
 }
 
 pub fn find_by_email(
-  conn conn: Connection,
+  pool pool: Pool,
   email email: String,
-  handler handler: fn(FindByEmailRow) -> Response,
-) -> Response {
-  case find_by_email_or(conn: conn, email: email) {
-    Ok(row) -> handler(row)
-    Error(NotFound) -> wisp.not_found()
-    Error(_) -> wisp.internal_server_error()
+) -> Result(FindByEmailRow, DbError) {
+  case pool.checkout(pool) {
+    Ok(conn) -> {
+      let result = find_by_email_wc(conn: conn, email: email)
+      pool.release(pool, conn)
+      result
+    }
+    Error(e) -> Error(e)
   }
 }
 
-pub fn find_by_email_or(
+pub fn find_by_email_wc(
   conn conn: Connection,
   email email: String,
 ) -> Result(FindByEmailRow, DbError) {
@@ -176,18 +297,20 @@ fn find_with_post_count_row_decoder() -> decode.Decoder(FindWithPostCountRow) {
 }
 
 pub fn find_with_post_count(
-  conn conn: Connection,
+  pool pool: Pool,
   id id: Int,
-  handler handler: fn(FindWithPostCountRow) -> Response,
-) -> Response {
-  case find_with_post_count_or(conn: conn, id: id) {
-    Ok(row) -> handler(row)
-    Error(NotFound) -> wisp.not_found()
-    Error(_) -> wisp.internal_server_error()
+) -> Result(FindWithPostCountRow, DbError) {
+  case pool.checkout(pool) {
+    Ok(conn) -> {
+      let result = find_with_post_count_wc(conn: conn, id: id)
+      pool.release(pool, conn)
+      result
+    }
+    Error(e) -> Error(e)
   }
 }
 
-pub fn find_with_post_count_or(
+pub fn find_with_post_count_wc(
   conn conn: Connection,
   id id: Int,
 ) -> Result(FindWithPostCountRow, DbError) {
@@ -227,17 +350,18 @@ fn list_all_row_decoder() -> decode.Decoder(ListAllRow) {
   decode.success(ListAllRow(id, name, email, bio, created_at, updated_at))
 }
 
-pub fn list_all(
-  conn conn: Connection,
-  handler handler: fn(List(ListAllRow)) -> Response,
-) -> Response {
-  case list_all_or(conn: conn) {
-    Ok(rows) -> handler(rows)
-    Error(_) -> wisp.internal_server_error()
+pub fn list_all(pool pool: Pool) -> Result(List(ListAllRow), DbError) {
+  case pool.checkout(pool) {
+    Ok(conn) -> {
+      let result = list_all_wc(conn: conn)
+      pool.release(pool, conn)
+      result
+    }
+    Error(e) -> Error(e)
   }
 }
 
-pub fn list_all_or(conn conn: Connection) -> Result(List(ListAllRow), DbError) {
+pub fn list_all_wc(conn conn: Connection) -> Result(List(ListAllRow), DbError) {
   query.select_all(
     conn,
     "SELECT id, name, email, bio, created_at, updated_at FROM users ORDER BY created_at DESC",
@@ -246,8 +370,8 @@ pub fn list_all_or(conn conn: Connection) -> Result(List(ListAllRow), DbError) {
   )
 }
 
-pub type CreateRow {
-  CreateRow(
+pub type UpsertRow {
+  UpsertRow(
     id: Int,
     name: String,
     email: String,
@@ -257,53 +381,54 @@ pub type CreateRow {
   )
 }
 
-fn create_row_decoder() -> decode.Decoder(CreateRow) {
+fn upsert_row_decoder() -> decode.Decoder(UpsertRow) {
   use id <- decode.field(0, decode.int)
   use name <- decode.field(1, decode.string)
   use email <- decode.field(2, decode.string)
   use bio <- decode.field(3, decode.string)
   use created_at <- decode.field(4, decode.int)
   use updated_at <- decode.field(5, decode.int)
-  decode.success(CreateRow(id, name, email, bio, created_at, updated_at))
+  decode.success(UpsertRow(id, name, email, bio, created_at, updated_at))
 }
 
-pub fn create(
-  conn conn: Connection,
+pub fn upsert(
+  pool pool: Pool,
   name name: String,
   email email: String,
   bio bio: String,
   created_at created_at: Int,
   updated_at updated_at: Int,
-  handler handler: fn(CreateRow) -> Response,
-) -> Response {
-  case
-    create_or(
-      conn: conn,
-      name: name,
-      email: email,
-      bio: bio,
-      created_at: created_at,
-      updated_at: updated_at,
-    )
-  {
-    Ok(row) -> handler(row)
-    Error(NotFound) -> wisp.not_found()
-    Error(_) -> wisp.internal_server_error()
+) -> Result(UpsertRow, DbError) {
+  case pool.checkout(pool) {
+    Ok(conn) -> {
+      let result =
+        upsert_wc(
+          conn: conn,
+          name: name,
+          email: email,
+          bio: bio,
+          created_at: created_at,
+          updated_at: updated_at,
+        )
+      pool.release(pool, conn)
+      result
+    }
+    Error(e) -> Error(e)
   }
 }
 
-pub fn create_or(
+pub fn upsert_wc(
   conn conn: Connection,
   name name: String,
   email email: String,
   bio bio: String,
   created_at created_at: Int,
   updated_at updated_at: Int,
-) -> Result(CreateRow, DbError) {
+) -> Result(UpsertRow, DbError) {
   case
     query.select_all(
       conn,
-      "INSERT INTO users (name, email, bio, created_at, updated_at) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+      "INSERT INTO users (name, email, bio, created_at, updated_at) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (email) DO UPDATE SET name = $1, bio = $3, updated_at = $5 RETURNING *",
       [
         connection.string(name),
         connection.string(email),
@@ -311,7 +436,7 @@ pub fn create_or(
         connection.int(created_at),
         connection.int(updated_at),
       ],
-      create_row_decoder(),
+      upsert_row_decoder(),
     )
   {
     Ok([row]) -> Ok(row)
@@ -343,167 +468,51 @@ fn update_row_decoder() -> decode.Decoder(UpdateRow) {
 }
 
 pub fn update(
-  conn conn: Connection,
+  pool pool: Pool,
+  id id: Int,
   name name: String,
   email email: String,
   bio bio: String,
   updated_at updated_at: Int,
-  id id: Int,
-  handler handler: fn(UpdateRow) -> Response,
-) -> Response {
-  case
-    update_or(
-      conn: conn,
-      name: name,
-      email: email,
-      bio: bio,
-      updated_at: updated_at,
-      id: id,
-    )
-  {
-    Ok(row) -> handler(row)
-    Error(NotFound) -> wisp.not_found()
-    Error(_) -> wisp.internal_server_error()
+) -> Result(UpdateRow, DbError) {
+  case pool.checkout(pool) {
+    Ok(conn) -> {
+      let result =
+        update_wc(
+          conn: conn,
+          id: id,
+          name: name,
+          email: email,
+          bio: bio,
+          updated_at: updated_at,
+        )
+      pool.release(pool, conn)
+      result
+    }
+    Error(e) -> Error(e)
   }
 }
 
-pub fn update_or(
+pub fn update_wc(
   conn conn: Connection,
+  id id: Int,
   name name: String,
   email email: String,
   bio bio: String,
   updated_at updated_at: Int,
-  id id: Int,
 ) -> Result(UpdateRow, DbError) {
   case
     query.select_all(
       conn,
-      "UPDATE users SET name = $1, email = $2, bio = $3, updated_at = $4 WHERE id = $5 RETURNING *",
+      "UPDATE users SET name = $2, email = $3, bio = $4, updated_at = $5 WHERE id = $1 RETURNING *",
       [
+        connection.int(id),
         connection.string(name),
         connection.string(email),
         connection.string(bio),
         connection.int(updated_at),
-        connection.int(id),
       ],
       update_row_decoder(),
-    )
-  {
-    Ok([row]) -> Ok(row)
-    Ok([]) -> Error(NotFound)
-    Ok(_) -> Error(connection.QueryError("Expected single row"))
-    Error(e) -> Error(e)
-  }
-}
-
-pub type UpsertRow {
-  UpsertRow(
-    id: Int,
-    name: String,
-    email: String,
-    bio: String,
-    created_at: Int,
-    updated_at: Int,
-  )
-}
-
-fn upsert_row_decoder() -> decode.Decoder(UpsertRow) {
-  use id <- decode.field(0, decode.int)
-  use name <- decode.field(1, decode.string)
-  use email <- decode.field(2, decode.string)
-  use bio <- decode.field(3, decode.string)
-  use created_at <- decode.field(4, decode.int)
-  use updated_at <- decode.field(5, decode.int)
-  decode.success(UpsertRow(id, name, email, bio, created_at, updated_at))
-}
-
-pub fn upsert(
-  conn conn: Connection,
-  name name: String,
-  email email: String,
-  bio bio: String,
-  created_at created_at: Int,
-  updated_at updated_at: Int,
-  handler handler: fn(UpsertRow) -> Response,
-) -> Response {
-  case
-    upsert_or(
-      conn: conn,
-      name: name,
-      email: email,
-      bio: bio,
-      created_at: created_at,
-      updated_at: updated_at,
-    )
-  {
-    Ok(row) -> handler(row)
-    Error(NotFound) -> wisp.not_found()
-    Error(_) -> wisp.internal_server_error()
-  }
-}
-
-pub fn upsert_or(
-  conn conn: Connection,
-  name name: String,
-  email email: String,
-  bio bio: String,
-  created_at created_at: Int,
-  updated_at updated_at: Int,
-) -> Result(UpsertRow, DbError) {
-  case
-    query.select_all(
-      conn,
-      "INSERT INTO users (name, email, bio, created_at, updated_at) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (email) DO UPDATE SET name = $1, bio = $3, updated_at = $5 RETURNING *",
-      [
-        connection.string(name),
-        connection.string(email),
-        connection.string(bio),
-        connection.int(created_at),
-        connection.int(updated_at),
-      ],
-      upsert_row_decoder(),
-    )
-  {
-    Ok([row]) -> Ok(row)
-    Ok([]) -> Error(NotFound)
-    Ok(_) -> Error(connection.QueryError("Expected single row"))
-    Error(e) -> Error(e)
-  }
-}
-
-pub type DeleteInactiveRow {
-  DeleteInactiveRow(id: Int, name: String, email: String)
-}
-
-fn delete_inactive_row_decoder() -> decode.Decoder(DeleteInactiveRow) {
-  use id <- decode.field(0, decode.int)
-  use name <- decode.field(1, decode.string)
-  use email <- decode.field(2, decode.string)
-  decode.success(DeleteInactiveRow(id, name, email))
-}
-
-pub fn delete_inactive(
-  conn conn: Connection,
-  updated_at updated_at: Int,
-  handler handler: fn(DeleteInactiveRow) -> Response,
-) -> Response {
-  case delete_inactive_or(conn: conn, updated_at: updated_at) {
-    Ok(row) -> handler(row)
-    Error(NotFound) -> wisp.not_found()
-    Error(_) -> wisp.internal_server_error()
-  }
-}
-
-pub fn delete_inactive_or(
-  conn conn: Connection,
-  updated_at updated_at: Int,
-) -> Result(DeleteInactiveRow, DbError) {
-  case
-    query.select_all(
-      conn,
-      "DELETE FROM users WHERE updated_at < $1 RETURNING id, name, email",
-      [connection.int(updated_at)],
-      delete_inactive_row_decoder(),
     )
   {
     Ok([row]) -> Ok(row)

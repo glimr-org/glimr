@@ -1,27 +1,19 @@
 import app/http/context/ctx.{type Context}
 import app/http/requests/contact_store_request.{type Data}
 import data/models/submission/gen/submission_repository.{type CreateRow}
-import glimr/db/pool
+import glimr/db/connection.{type DbError}
 import glimr/utils/unix_timestamp
-import wisp.{type Response}
 
-pub fn run(
-  ctx: Context,
-  data: Data,
-  next: fn(CreateRow) -> Response,
-) -> Response {
+pub fn run(ctx: Context, data: Data) -> Result(CreateRow, DbError) {
   let now = unix_timestamp.now()
 
-  use conn <- pool.get_connection(ctx.db.pool)
-  use submitter <- submission_repository.create(
-    conn: conn,
+  submission_repository.create(
+    pool: ctx.db.pool,
     name: data.name,
     email: data.email,
     avatar: data.avatar.path,
+    message: data.message,
     created_at: now,
     updated_at: now,
-    message: data.message,
   )
-
-  next(submitter)
 }

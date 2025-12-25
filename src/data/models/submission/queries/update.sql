@@ -1,4 +1,4 @@
 UPDATE submissions
-SET name = $1, email = $2, avatar = $3, message = $4, updated_at = $5
-WHERE id = $6
+SET name = $2, email = $3, avatar = $4, message = $5, updated_at = $6
+WHERE id = $1
 RETURNING *

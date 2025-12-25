@@ -1,5 +1,5 @@
 -- Update a user
 UPDATE users
-SET name = $1, email = $2, bio = $3, updated_at = $4
-WHERE id = $5
+SET name = $2, email = $3, bio = $4, updated_at = $5
+WHERE id = $1
 RETURNING *

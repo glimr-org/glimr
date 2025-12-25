@@ -1,4 +1,4 @@
-import app/http/actions/store_submission_action
+import app/actions/create_submission
 import app/http/context/ctx.{type Context}
 import app/http/requests/contact_store_request
 import config/config_app
@@ -16,10 +16,10 @@ pub fn show(_req: Request, _ctx: Context) -> Response {
 
 pub fn store(req: Request, ctx: Context) -> Response {
   use validated <- contact_store_request.validate(req, ctx)
-  use submitter <- store_submission_action.run(ctx, validated)
+  let assert Ok(submission) = create_submission.run(ctx, validated)
 
   redirect.build()
   |> redirect.to("/contact/success")
-  |> redirect.flash([#("message", "Thanks " <> submitter.name <> "!")])
+  |> redirect.flash([#("message", "Thanks " <> submission.name <> "!")])
   |> redirect.go()
 }

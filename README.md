@@ -13,6 +13,7 @@ If you'd like to stay updated on Glimr's development, Follow [@migueljarias](htt
 - [Quick Start](#quick-start)
   - [Defining Routes](#defining-routes)
   - [Creating Controllers](#creating-controllers)
+  - [Creating Actions](#creating-actions)
   - [Route Parameters](#route-parameters)
   - [Middleware](#middleware)
   - [Form Validation](#form-validation)
@@ -20,7 +21,6 @@ If you'd like to stay updated on Glimr's development, Follow [@migueljarias](htt
   - [Database](#database)
       - [Migrations](#migrations)
       - [Queries](#queries)
-  - [Creating Actions](#creating-actions)
   - [Route Groups](#route-groups)
   - [API Routes](#api-routes)
   - [Configuration](#configuration)
@@ -102,6 +102,7 @@ Visit `http://localhost:8000` in your browser.
 ├── src/
 │   ├── glimr_app.gleam               # Application entry point
 │   ├── app/
+│   │   ├── actions/                  # Modules for reusable business logic
 │   │   ├── http/
 │   │   │   ├── controllers/          # Request handlers
 │   │   │   ├── middleware/           # Custom middleware
@@ -219,73 +220,87 @@ You can also create resource controllers that come set up with index,show,edit,u
 
 ### Creating Actions
 
-Actions help keep controllers clean by extracting complex business logic into reusable modules. They can be chained together using the `use <-` syntax and always expect a callback that returns a `wisp.Response`.
+Actions help keep controllers clean by extracting complex business logic into reusable modules. They encapsulate database operations and can return `Result` types for clean error handling on the controller's side.
 
-Create actions in `src/app/http/actions/`. Use the following command:
+Create actions in `src/app/actions/`. Use the following command:
 
 ```bash
-./glimr make:action store_submission
+./glimr make:action update_submission
 ```
 
-This creates `store_submission_action.gleam`. Actions follow a simple pattern - they perform some work and pass results to a callback:
+This creates `update_submission.gleam`. Actions follow a simple pattern - they perform work and return a Result:
 
 ```gleam
-// src/app/http/actions/store_submission_action.gleam
+// src/app/actions/update_submission.gleam
 import app/http/context/ctx.{type Context}
 import app/http/requests/contact_store_request.{type Data}
 import data/models/submission/gen/submission_repository.{type CreateRow}
-import glimr/db/pool
-import wisp.{type Response}
+import glimr/db/connection.{type DbError}
+import glimr/utils/unix_timestamp
 
-pub fn run(
-  ctx: Context,
-  data: Data,
-  next: fn(CreateRow) -> Response,
-) -> Response {
-  use conn <- pool.get_connection(ctx.db.pool)
-  use submission <- submission_repository.create(
-    conn: conn,
+pub fn run(ctx: Context, id: Int, data: Data) -> Result(CreateRow, DbError) {
+  let now = unix_timestamp.now()
+
+  submission_repository.update(
+    pool: ctx.db.pool,
+    id: id,
     name: data.name,
     email: data.email,
     message: data.message,
+    created_at: now,
+    updated_at: now,
   )
-
-  next(submission)
 }
 ```
 
-Use actions in controllers with the `use <-` syntax:
+Use actions in controllers with `case` for error handling:
 
 ```gleam
 // src/app/http/controllers/contact_controller.gleam
-import app/http/actions/store_submission_action
+import app/http/actions/create_submission
 import app/http/requests/contact_store_request
+import glimr/db/connection.{NotFound}
 
-pub fn store(req: Request, ctx: Context) -> Response {
+pub fn update(req: Request, ctx: Context, submission_id: String) -> Response {
   use validated <- contact_store_request.validate(req, ctx)
-  use submission <- store_submission_action.run(ctx, validated)
+  let assert Ok(submission_id) = int.parse(submission_id)
 
-  redirect.build()
-  |> redirect.to("/contact/success")
-  |> redirect.flash([#("message", "Thanks " <> submission.name <> "!")])
-  |> redirect.go()
+  case update_submission.run(ctx, submission_id, validated) {
+    Ok(submission) -> {
+      redirect.build()
+      |> redirect.to("/contact/updated")
+      |> redirect.flash([#("message", "Thanks " <> submission.name <> "!")])
+      |> redirect.go()
+    }
+    Error(NotFound) -> wisp.not_found()
+    Error(_) -> wisp.internal_server_error()
+  }
 }
 ```
 
 **Chaining multiple actions:**
 
-Actions compose naturally, keeping your controllers focused on the response:
+Actions can be composed using `result.try` for sequential operations:
 
 ```gleam
+import gleam/result
+
 pub fn store(req: Request, ctx: Context) -> Response {
   use validated <- user_store_request.validate(req, ctx)
-  use user <- create_user_action.run(ctx, validated)
-  use _ <- send_welcome_email_action.run(ctx, user)
-  use _ <- notify_admin_action.run(ctx, user)
 
-  redirect.build()
-  |> redirect.to("/users/" <> int.to_string(user.id))
-  |> redirect.go()
+  case {
+    use user <- result.try(create_user.run(ctx, validated))
+    use _ <- result.try(send_welcome_email.run(ctx, user))
+    use _ <- result.try(notify_admin.run(ctx, user))
+    Ok(user)
+  } {
+    Ok(user) -> {
+      redirect.build()
+      |> redirect.to("/users/" <> int.to_string(user.id))
+      |> redirect.go()
+    }
+    Error(_) -> wisp.internal_server_error()
+  }
 }
 ```
 
@@ -299,7 +314,8 @@ pub fn routes(path, method, req, ctx) {
   case path {
     ["posts", slug, "comments", comment_id] ->
       case method {
-        Get -> comment_controller.show(slug, comment_id, req, ctx)
+        Get -> comment_controller.show(req, ctx, slug, comment_id)
+        ...
       }
 
     ...
@@ -307,12 +323,7 @@ pub fn routes(path, method, req, ctx) {
 }
 
 // Controller receives parameters directly
-pub fn show(
-  slug: String,
-  comment_id: String,
-  req: Request,
-  ctx: Context
-) -> Response {
+pub fn show(req: Request, ctx: Context, slug: String, comment_id: String) -> Response {
   // Use slug and comment_id...
 }
 ```
@@ -461,6 +472,15 @@ pub fn data(form: FormData) -> Data {
     avatar: form.get_file(form, "avatar"),
   )
 }
+
+// Add "before" or "after" validation logic if necessary, here
+pub fn validate(req: Request, ctx: Context, next: fn(Data) -> Response) {
+  // Add before validation logic here...
+  use validated <- validator.run(req, ctx, rules, data)
+  // Add after validation logic here...
+
+  next(validated)
+}
 ```
 
 #### Using Validation in Controllers
@@ -468,27 +488,24 @@ pub fn data(form: FormData) -> Data {
 Use the `use` syntax for clean, readable validation handling:
 
 ```gleam
-import app/http/requests/user_store
+import app/http/requests/user_store_request
 import app/repositories/user_repository
 import glimr/forms/validator
 
 // app/http/controllers/user_controller.gleam
 pub fn store(req: Request, ctx: Context) -> Response {
   // Form validation errors are handled automatically
-  use validated <- validator.run(
-    req, 
-    ctx, 
-    user_store.rules, 
-    user_store.data
-  )
+  use validated <- user_store_request.validate(req, ctx)
 
   // Do something with your validated data
-  // validated.name : String
-  // validated.email : String
-  // validated.avatar : UploadedFile
-  user_repository.create(validated)
+  let assert Ok(user) = user_repository.create(
+    pool: ctx.db.pool,
+    name: validated.name,
+    email: validated.email,
+    avatar: validated.avatar.path,
+  )
 
-  // Redirect back with a success message
+  // Redirect back with success message
   redirect.build()
   |> redirect.back(req)
   |> redirect.flash([#("message", "User created successfully!")])
@@ -530,19 +547,20 @@ If validation fails, a 422 response with validation errors is automatically retu
 Create your own validation rules for domain-specific logic using the `Custom` rule in `app/http/rules`. Use the following command:
 
 ```bash
-./glimr make:rule username_available
+./glimr make:rule no_gmail
 ```
 
 Add your rule's validation logic:
 
 ```gleam
-// app/http/rules/username_available.gleam
-pub fn run(username: String) -> Result(Nil, String) {
-  case db.username_exists(username) {
-    // Error is automatically prepended with "Username " so
-    // the full message would be: "Username is already taken"
-    True -> Error("is already taken") 
+// app/http/rules/no_gmail.gleam
+import app/http/context/ctx.{type Context}
+import gleam/string
+
+pub fn run(value: String, _ctx: Context) -> Result(Nil, String) {
+  case string.contains(value, "gmail") {
     False -> Ok(Nil)
+    True -> Error("cannot be a Gmail address")
   }
 }
 ```
@@ -551,20 +569,22 @@ Use your custom rule in your request:
 
 ```gleam
 // app/http/requests/login_request.gleam
-import glimr/forms/validator.{Custom, MinLength, Required}
-import app/http/rules/username_available.{run as username_available}
+import glimr/forms/validator.{Custom, MinLength, MaxLength, Required}
+import app/http/rules/no_gmail.{run as username_available}
 
 pub fn rules(form: FormData) {
   [
-    validator.for(form, "username", [
+    validator.for(form, "email", [
       Required,
       MinLength(3),
-      Custom(username_available), // <-----
+      MaxLength(255),
+      Custom(no_gmail), // <----- custom rule!
     ]),
 
     validator.for(form, "password", [Required]),
   ]
 }
+
 ```
 
 **Custom validation function structure:**
@@ -857,17 +877,21 @@ You can also run the following command to generate migrations and also run them:
 ./glimr gen:db --migrate
 ```
 
-#### Renaming Columns
+Additionally, you can generate migrations/queries for a specific model or multiple models by passing the `--model` flag: 
 
-To rename a column without losing data, use the `rename_from` modifier:
-
-```gleam
-// Before: string("email")
-// After:
-string("email_address") |> rename_from("email")
+```bash
+./glimr gen:db --model=user,post --migrate
 ```
 
-This generates `ALTER TABLE ... RENAME COLUMN` instead of drop/add. The `rename_from` modifier is automatically removed from your schema file after the migration is generated.
+#### Renaming Columns
+
+To rename a column without losing data, use the `schema.rename_from` modifier:
+
+```gleam
+string("email_address") |> schema.rename_from("email")
+```
+
+This generates `ALTER TABLE ... RENAME COLUMN` instead of drop/add. The `schema.rename_from` modifier is automatically removed from your schema file after the migration is generated.
 
 #### Generated Migration Example
 
@@ -961,198 +985,62 @@ After adding or modifying queries, run:
 
 This generates a fully-typed repository file with Gleam functions for each query. Every query generates **two functions**:
 
-| Function | Error Handling | Return Type |
-|----------|----------------|-------------|
-| `find()` | Automatic (404/500 pages) | Expects a callback that returns a `Response` |
-| `find_or()` | Manual (you handle errors) | `Result(User, Nil)` |
+| Function | Accepts | Use Case |
+|----------|---------|----------|
+| `find(pool, id)` | Pool | Normal queries - auto-manages connection |
+| `find_wc(conn, id)` | Connection | Transactions - uses existing connection |
 
 ```gleam
 // src/data/models/user/user_repository.gleam (auto-generated)
 
-// Automatic error handling - returns 404 or 500 error pages
-pub fn find(db, id, callback) -> Response
-pub fn find_by_email(db, email, callback) -> Response
+// Main functions - accept Pool, auto checkout/release connection
+pub fn find(pool, id) -> Result(User, DbError)
+pub fn find_by_email(pool, email) -> Result(User, DbError)
+pub fn list_all(pool) -> Result(List(User), DbError)
+pub fn list_active(pool) -> Result(List(User), DbError)
 
-// Manual error handling - returns Result for you to handle
-pub fn find_or(db, id) -> Result(User, Nil)
-pub fn find_by_email_or(db, email) -> Result(User, Nil)
-
-// List queries (no _or variant needed since empty list is valid)
-pub fn list_all(db) -> List(User)
-pub fn list_active(db) -> List(User)
+// With-connection variants - for use inside transactions
+pub fn find_wc(conn, id) -> Result(User, DbError)
+pub fn find_by_email_wc(conn, email) -> Result(User, DbError)
+pub fn list_all_wc(conn) -> Result(List(User), DbError)
+pub fn list_active_wc(conn) -> Result(List(User), DbError)
 ```
 
 #### Connection Pooling
 
-Before executing queries, you need to get a connection from the pool. Glimr manages a pool of database connections to efficiently handle concurrent requests. 
+Glimr manages a pool of database connections to efficiently handle concurrent requests. The pool is initialized in your context and accessed via `ctx.db.pool`.
 
-You can specify the amount of connections you want initialized in your pool by setting the `DB_POOL_SIZE` env variable. It defaults to 5.
+You can specify the pool size by setting the `DB_POOL_SIZE` env variable. It defaults to 15.
 
-The pool is typically initialized in your context and accessed via `ctx.db.pool`. There are several ways to get a connection:
+**How it works:**
 
-| Function | Error Handling | Safety | Return Type |
-|----------|----------------|--------|-------------|
-| `get_connection` | Automatic (500 page) | Safe | Expects a callback that returns a `Response` |
-| `get_connection_or` | Manual | Safe | `Result(a, DbError)` |
-| `checkout` / `release` | Manual | Unsafe | Must remember to release |
+When you call a query function like `user_repository.find(ctx.db.pool, id)`, it automatically:
+1. Checks out a connection from the pool
+2. Executes the query
+3. Returns the connection to the pool
+4. Returns the result
 
-**With automatic error handling (recommended):**
-
-`get_connection` automatically returns connections to the pool and returns a 500 error page if the pool is exhausted. Great for usage in controllers.
-
-```gleam
-import glimr/db/pool
-import gleam/int
-
-pub fn show(user_id: String, req: Request, ctx: Context) -> Response {
-  let assert Ok(user_id) = int.parse(user_id)
-
-  use conn <- pool.get_connection(ctx.db.pool)
-  use user <- user_repository.find(conn, user_id)
-
-  view.build()
-  |> view.html("users/show.html")
-  |> view.data([#("user", user.name)])
-  |> view.render()
-}
-```
-
-**Reusing connections for multiple queries:**
-
-Once you have a connection, you can reuse it across multiple queries. This is more efficient than getting a new connection for each query:
-
-```gleam
-import glimr/db/pool
-
-pub fn show(id: String, req: Request, ctx: Context) -> Response {
-  let assert Ok(user_id) = int.parse(id)
-
-  use conn <- pool.get_connection(ctx.db.pool)
-  use user <- user_repository.find(conn, user_id)
-
-  // Reuse the same connection for additional queries
-  let posts = post_repository.list_by_user(conn, user_id)
-  let comments = comment_repository.list_by_user(conn, user_id)
-
-  view.build()
-  |> view.html("users/show.html")
-  |> view.data([
-    #("user", user.name),
-    #("post_count", int.to_string(list.length(posts))),
-    #("comment_count", int.to_string(list.length(comments))),
-  ])
-  |> view.render()
-}
-```
-
-**With manual error handling:**
-
-`get_connection_or` returns a `Result`, letting you handle pool errors yourself:
-
-```gleam
-import glimr/db/pool
-
-pub fn show(req: Request, ctx: Context) -> Response {
-  case pool.get_connection_or(ctx.db.pool, fn(conn) {
-    user_repository.find_or(conn, 1)
-  }) {
-    Ok(user) -> {
-      view.build()
-      |> view.html("users/show.html")
-      |> view.data([#("user", user.name)])
-      |> view.render()
-    }
-    Error(_) -> {
-      // Handle connection or query error
-      wisp.internal_server_error()
-    }
-  }
-}
-```
-
-**Manual checkout/release (unsafe):**
-
-For advanced use cases, you can manually manage connections with `checkout` and `release`. This is **unsafe** because you must remember to release the connection, or it will leak from the pool:
-
-```gleam
-import glimr/db/pool
-
-pub fn batch_operation(ctx: Context) -> Response {
-  case pool.checkout(ctx.db.pool) {
-    Ok(conn) -> {
-      // Perform multiple operations...
-      let result1 = user_repository.find_or(conn, 1)
-      let result2 = post_repository.list_by_user_or(conn, 1)
-
-      // IMPORTANT: Always release the connection when done
-      pool.release(ctx.db.pool, conn)
-
-      // Return response...
-      wisp.ok()
-    }
-    Error(_) -> wisp.internal_server_error()
-  }
-}
-```
-
-> **Warning:** Prefer `get_connection` or `get_connection_or` over manual `checkout`/`release`. Forgetting to release connections will exhaust the pool and cause your application to hang.
+This means each query holds a connection only for the duration of the query itself, maximizing pool efficiency.
 
 #### Using Queries in Controllers
 
-**With automatic error handling (recommended):**
-
-The non-`_or` repository functions can leverage the `use <-` syntax and automatically return a 404 page if the record isn't found, or a 500 error page for database errors, while still looking very clean. Your callback receives the found record and must return a `wisp.Response`.
-
-```gleam
-import data/models/user/user_repository
-import glimr/db/pool
-
-pub fn show(id: String, req: Request, ctx: Context) -> Response {
-  let assert Ok(user_id) = int.parse(id)
-
-  use conn <- pool.get_connection(ctx.db.pool)
-  use user <- user_repository.find(conn, user_id)
-
-  // This only runs if the user was found
-  // If not found, a 404 page is automatically returned
-  // If a different database error occurs, a 500 page
-  // is automatically returned.
-  view.build()
-  |> view.html("users/show.html")
-  |> view.data([#("user", user.name)])
-  |> view.render()
-}
-```
-
-**With manual error handling:**
-
-The `_or` repository functions return a `Result`, giving you full control over error handling:
+Query functions return `Result` types, giving you full control over error handling:
 
 ```gleam
 import data/models/user/user_repository
 import glimr/db/connection.{NotFound}
-import glimr/db/pool
-
 
 pub fn show(id: String, req: Request, ctx: Context) -> Response {
   let assert Ok(user_id) = int.parse(id)
 
-  use conn <- pool.get_connection(ctx.db.pool)
-
-  case user_repository.find_or(conn, user_id) {
+  case user_repository.find(ctx.db.pool, user_id) {
     Ok(user) -> {
       view.build()
       |> view.html("users/show.html")
       |> view.data([#("user", user.name)])
       |> view.render()
     }
-    Error(NotFound) -> {
-      // Custom error handling for not found
-      redirect.build()
-      |> redirect.to("/users")
-      |> redirect.flash([#("error", "User not found")])
-      |> redirect.go()
-    }
+    Error(NotFound) -> wisp.not_found()
     Error(_) -> wisp.internal_server_error()
   }
 }
@@ -1162,15 +1050,31 @@ pub fn show(id: String, req: Request, ctx: Context) -> Response {
 
 ```gleam
 import data/models/user/user_repository
-import glimr/db/pool
 
 pub fn index(req: Request, ctx: Context) -> Response {
-  use conn <- pool.get_connection(ctx.db.pool)
-  use users <- user_repository.list_all(conn)
+  case user_repository.list_all(ctx.db.pool) {
+    Ok(users) -> {
+      view.build()
+      |> view.html("users/index.html")
+      |> view.data([#("count", int.to_string(list.length(users)))])
+      |> view.render()
+    }
+    Error(_) -> wisp.internal_server_error()
+  }
+}
+```
+
+In situations where you'd rather not handle error handling yourself, you can just `let assert Ok()`. This will display a 500 error page if an error occurs. Note, 404 errors won't be properly handled this way. Only do this if a 404 error isn't possible, like in a `create`, or `list_all` for example.
+
+```gleam
+import data/models/user/user_repository
+
+pub fn index(req: Request, ctx: Context) -> Response {
+  let assert Ok(user) = user_repository.list_all(ctx.db.pool)
 
   view.build()
   |> view.html("users/index.html")
-  |> view.data([#("users", users)])
+  |> view.data([#("count", int.to_string(list.length(users)))])
   |> view.render()
 }
 ```
@@ -1197,8 +1101,8 @@ pub fn transfer(
   use conn <- db.transaction(ctx.db.pool, 3)
 
   // Both operations use the same connection within the transaction
-  use _ <- result.try(account_repository.debit_or(conn, from_id, amount))
-  use _ <- result.try(account_repository.credit_or(conn, to_id, amount))
+  use _ <- result.try(account_repository.debit_wc(conn, from_id, amount))
+  use _ <- result.try(account_repository.credit_wc(conn, to_id, amount))
   Ok(Nil)
 }
 ```
@@ -1219,8 +1123,8 @@ pub fn store(req: Request, ctx: Context) -> Response {
 
   case {
     use conn <- db.transaction(ctx.db.pool, 3)
-    use _ <- result.try(account_repository.debit_or(conn, validated.from_id, validated.amount))
-    use _ <- result.try(account_repository.credit_or(conn, validated.to_id, validated.amount))
+    use _ <- result.try(account_repository.debit_wc(conn, validated.from_id, validated.amount))
+    use _ <- result.try(account_repository.credit_wc(conn, validated.to_id, validated.amount))
     Ok(Nil)
   } {
     Ok(_) -> {
@@ -1238,7 +1142,7 @@ pub fn store(req: Request, ctx: Context) -> Response {
 }
 ```
 
-> **Note:** Use the `_or` variants of repository functions inside transactions since they return `Result` types that can be composed with `result.try`.
+> **Note:** Use the `_wc` (with connection) variants of repository functions inside transactions. These accept a `Connection` instead of a `Pool`, allowing all operations to share the same transactional connection.
 
 ### Route Groups
 

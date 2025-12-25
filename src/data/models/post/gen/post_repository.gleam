@@ -4,8 +4,8 @@
 
 import gleam/dynamic/decode
 import glimr/db/connection.{type Connection, type DbError, NotFound}
+import glimr/db/pool.{type Pool}
 import glimr/db/query
-import wisp.{type Response}
 
 pub type Post {
   Post(
@@ -28,130 +28,6 @@ pub fn decoder() -> decode.Decoder(Post) {
   use created_at <- decode.field(5, decode.int)
   use updated_at <- decode.field(6, decode.int)
   decode.success(Post(id, user_id, title, body, status, created_at, updated_at))
-}
-
-pub fn delete(
-  conn conn: Connection,
-  id id: Int,
-  handler handler: fn(Int) -> Response,
-) -> Response {
-  case delete_or(conn: conn, id: id) {
-    Ok(count) -> handler(count)
-    Error(_) -> wisp.internal_server_error()
-  }
-}
-
-pub fn delete_or(conn conn: Connection, id id: Int) -> Result(Int, DbError) {
-  query.execute(conn, "DELETE FROM posts WHERE id = $1", [connection.int(id)])
-}
-
-pub type FindRow {
-  FindRow(
-    id: Int,
-    user_id: Int,
-    title: String,
-    body: String,
-    status: String,
-    created_at: Int,
-    updated_at: Int,
-  )
-}
-
-fn find_row_decoder() -> decode.Decoder(FindRow) {
-  use id <- decode.field(0, decode.int)
-  use user_id <- decode.field(1, decode.int)
-  use title <- decode.field(2, decode.string)
-  use body <- decode.field(3, decode.string)
-  use status <- decode.field(4, decode.string)
-  use created_at <- decode.field(5, decode.int)
-  use updated_at <- decode.field(6, decode.int)
-  decode.success(FindRow(
-    id,
-    user_id,
-    title,
-    body,
-    status,
-    created_at,
-    updated_at,
-  ))
-}
-
-pub fn find(
-  conn conn: Connection,
-  id id: Int,
-  handler handler: fn(FindRow) -> Response,
-) -> Response {
-  case find_or(conn: conn, id: id) {
-    Ok(row) -> handler(row)
-    Error(NotFound) -> wisp.not_found()
-    Error(_) -> wisp.internal_server_error()
-  }
-}
-
-pub fn find_or(conn conn: Connection, id id: Int) -> Result(FindRow, DbError) {
-  case
-    query.select_all(
-      conn,
-      "SELECT id, user_id, title, body, status, created_at, updated_at FROM posts WHERE id = $1",
-      [connection.int(id)],
-      find_row_decoder(),
-    )
-  {
-    Ok([row]) -> Ok(row)
-    Ok([]) -> Error(NotFound)
-    Ok(_) -> Error(connection.QueryError("Expected single row"))
-    Error(e) -> Error(e)
-  }
-}
-
-pub type ListAllRow {
-  ListAllRow(
-    id: Int,
-    user_id: Int,
-    title: String,
-    body: String,
-    status: String,
-    created_at: Int,
-    updated_at: Int,
-  )
-}
-
-fn list_all_row_decoder() -> decode.Decoder(ListAllRow) {
-  use id <- decode.field(0, decode.int)
-  use user_id <- decode.field(1, decode.int)
-  use title <- decode.field(2, decode.string)
-  use body <- decode.field(3, decode.string)
-  use status <- decode.field(4, decode.string)
-  use created_at <- decode.field(5, decode.int)
-  use updated_at <- decode.field(6, decode.int)
-  decode.success(ListAllRow(
-    id,
-    user_id,
-    title,
-    body,
-    status,
-    created_at,
-    updated_at,
-  ))
-}
-
-pub fn list_all(
-  conn conn: Connection,
-  handler handler: fn(List(ListAllRow)) -> Response,
-) -> Response {
-  case list_all_or(conn: conn) {
-    Ok(rows) -> handler(rows)
-    Error(_) -> wisp.internal_server_error()
-  }
-}
-
-pub fn list_all_or(conn conn: Connection) -> Result(List(ListAllRow), DbError) {
-  query.select_all(
-    conn,
-    "SELECT id, user_id, title, body, status, created_at, updated_at FROM posts ORDER BY created_at DESC",
-    [],
-    list_all_row_decoder(),
-  )
 }
 
 pub type CreateRow {
@@ -186,33 +62,34 @@ fn create_row_decoder() -> decode.Decoder(CreateRow) {
 }
 
 pub fn create(
-  conn conn: Connection,
+  pool pool: Pool,
   user_id user_id: Int,
   title title: String,
   body body: String,
   status status: String,
   created_at created_at: Int,
   updated_at updated_at: Int,
-  handler handler: fn(CreateRow) -> Response,
-) -> Response {
-  case
-    create_or(
-      conn: conn,
-      user_id: user_id,
-      title: title,
-      body: body,
-      status: status,
-      created_at: created_at,
-      updated_at: updated_at,
-    )
-  {
-    Ok(row) -> handler(row)
-    Error(NotFound) -> wisp.not_found()
-    Error(_) -> wisp.internal_server_error()
+) -> Result(CreateRow, DbError) {
+  case pool.checkout(pool) {
+    Ok(conn) -> {
+      let result =
+        create_wc(
+          conn: conn,
+          user_id: user_id,
+          title: title,
+          body: body,
+          status: status,
+          created_at: created_at,
+          updated_at: updated_at,
+        )
+      pool.release(pool, conn)
+      result
+    }
+    Error(e) -> Error(e)
   }
 }
 
-pub fn create_or(
+pub fn create_wc(
   conn conn: Connection,
   user_id user_id: Int,
   title title: String,
@@ -243,8 +120,66 @@ pub fn create_or(
   }
 }
 
-pub type UpdateRow {
-  UpdateRow(
+pub fn delete(pool pool: Pool, id id: Int) -> Result(Int, DbError) {
+  case pool.checkout(pool) {
+    Ok(conn) -> {
+      let result = delete_wc(conn: conn, id: id)
+      pool.release(pool, conn)
+      result
+    }
+    Error(e) -> Error(e)
+  }
+}
+
+pub fn delete_wc(conn conn: Connection, id id: Int) -> Result(Int, DbError) {
+  query.execute(conn, "DELETE FROM posts WHERE id = $1", [connection.int(id)])
+}
+
+pub type DeleteByUserRow {
+  DeleteByUserRow(id: Int, title: String)
+}
+
+fn delete_by_user_row_decoder() -> decode.Decoder(DeleteByUserRow) {
+  use id <- decode.field(0, decode.int)
+  use title <- decode.field(1, decode.string)
+  decode.success(DeleteByUserRow(id, title))
+}
+
+pub fn delete_by_user(
+  pool pool: Pool,
+  user_id user_id: Int,
+) -> Result(DeleteByUserRow, DbError) {
+  case pool.checkout(pool) {
+    Ok(conn) -> {
+      let result = delete_by_user_wc(conn: conn, user_id: user_id)
+      pool.release(pool, conn)
+      result
+    }
+    Error(e) -> Error(e)
+  }
+}
+
+pub fn delete_by_user_wc(
+  conn conn: Connection,
+  user_id user_id: Int,
+) -> Result(DeleteByUserRow, DbError) {
+  case
+    query.select_all(
+      conn,
+      "DELETE FROM posts WHERE user_id = $1 RETURNING id, title",
+      [connection.int(user_id)],
+      delete_by_user_row_decoder(),
+    )
+  {
+    Ok([row]) -> Ok(row)
+    Ok([]) -> Error(NotFound)
+    Ok(_) -> Error(connection.QueryError("Expected single row"))
+    Error(e) -> Error(e)
+  }
+}
+
+pub type FindRow {
+  FindRow(
     id: Int,
     user_id: Int,
     title: String,
@@ -255,7 +190,7 @@ pub type UpdateRow {
   )
 }
 
-fn update_row_decoder() -> decode.Decoder(UpdateRow) {
+fn find_row_decoder() -> decode.Decoder(FindRow) {
   use id <- decode.field(0, decode.int)
   use user_id <- decode.field(1, decode.int)
   use title <- decode.field(2, decode.string)
@@ -263,7 +198,7 @@ fn update_row_decoder() -> decode.Decoder(UpdateRow) {
   use status <- decode.field(4, decode.string)
   use created_at <- decode.field(5, decode.int)
   use updated_at <- decode.field(6, decode.int)
-  decode.success(UpdateRow(
+  decode.success(FindRow(
     id,
     user_id,
     title,
@@ -274,51 +209,24 @@ fn update_row_decoder() -> decode.Decoder(UpdateRow) {
   ))
 }
 
-pub fn update(
-  conn conn: Connection,
-  title title: String,
-  body body: String,
-  status status: String,
-  updated_at updated_at: Int,
-  id id: Int,
-  handler handler: fn(UpdateRow) -> Response,
-) -> Response {
-  case
-    update_or(
-      conn: conn,
-      title: title,
-      body: body,
-      status: status,
-      updated_at: updated_at,
-      id: id,
-    )
-  {
-    Ok(row) -> handler(row)
-    Error(NotFound) -> wisp.not_found()
-    Error(_) -> wisp.internal_server_error()
+pub fn find(pool pool: Pool, id id: Int) -> Result(FindRow, DbError) {
+  case pool.checkout(pool) {
+    Ok(conn) -> {
+      let result = find_wc(conn: conn, id: id)
+      pool.release(pool, conn)
+      result
+    }
+    Error(e) -> Error(e)
   }
 }
 
-pub fn update_or(
-  conn conn: Connection,
-  title title: String,
-  body body: String,
-  status status: String,
-  updated_at updated_at: Int,
-  id id: Int,
-) -> Result(UpdateRow, DbError) {
+pub fn find_wc(conn conn: Connection, id id: Int) -> Result(FindRow, DbError) {
   case
     query.select_all(
       conn,
-      "UPDATE posts SET title = $1, body = $2, status = $3, updated_at = $4 WHERE id = $5 RETURNING *",
-      [
-        connection.string(title),
-        connection.string(body),
-        connection.string(status),
-        connection.int(updated_at),
-        connection.int(id),
-      ],
-      update_row_decoder(),
+      "SELECT id, user_id, title, body, status, created_at, updated_at FROM posts WHERE id = $1",
+      [connection.int(id)],
+      find_row_decoder(),
     )
   {
     Ok([row]) -> Ok(row)
@@ -366,18 +274,20 @@ fn find_with_author_row_decoder() -> decode.Decoder(FindWithAuthorRow) {
 }
 
 pub fn find_with_author(
-  conn conn: Connection,
+  pool pool: Pool,
   id id: Int,
-  handler handler: fn(FindWithAuthorRow) -> Response,
-) -> Response {
-  case find_with_author_or(conn: conn, id: id) {
-    Ok(row) -> handler(row)
-    Error(NotFound) -> wisp.not_found()
-    Error(_) -> wisp.internal_server_error()
+) -> Result(FindWithAuthorRow, DbError) {
+  case pool.checkout(pool) {
+    Ok(conn) -> {
+      let result = find_with_author_wc(conn: conn, id: id)
+      pool.release(pool, conn)
+      result
+    }
+    Error(e) -> Error(e)
   }
 }
 
-pub fn find_with_author_or(
+pub fn find_with_author_wc(
   conn conn: Connection,
   id id: Int,
 ) -> Result(FindWithAuthorRow, DbError) {
@@ -394,6 +304,187 @@ pub fn find_with_author_or(
     Ok(_) -> Error(connection.QueryError("Expected single row"))
     Error(e) -> Error(e)
   }
+}
+
+pub type FindWithStatsRow {
+  FindWithStatsRow(
+    id: Int,
+    title: String,
+    body: String,
+    status: String,
+    created_at: Int,
+    updated_at: Int,
+    author_id: Int,
+    author_name: String,
+    comment_count: Int,
+    approved_comment_count: Int,
+  )
+}
+
+fn find_with_stats_row_decoder() -> decode.Decoder(FindWithStatsRow) {
+  use id <- decode.field(0, decode.int)
+  use title <- decode.field(1, decode.string)
+  use body <- decode.field(2, decode.string)
+  use status <- decode.field(3, decode.string)
+  use created_at <- decode.field(4, decode.int)
+  use updated_at <- decode.field(5, decode.int)
+  use author_id <- decode.field(6, decode.int)
+  use author_name <- decode.field(7, decode.string)
+  use comment_count <- decode.field(8, decode.int)
+  use approved_comment_count <- decode.field(9, decode.int)
+  decode.success(FindWithStatsRow(
+    id,
+    title,
+    body,
+    status,
+    created_at,
+    updated_at,
+    author_id,
+    author_name,
+    comment_count,
+    approved_comment_count,
+  ))
+}
+
+pub fn find_with_stats(
+  pool pool: Pool,
+  id id: Int,
+) -> Result(FindWithStatsRow, DbError) {
+  case pool.checkout(pool) {
+    Ok(conn) -> {
+      let result = find_with_stats_wc(conn: conn, id: id)
+      pool.release(pool, conn)
+      result
+    }
+    Error(e) -> Error(e)
+  }
+}
+
+pub fn find_with_stats_wc(
+  conn conn: Connection,
+  id id: Int,
+) -> Result(FindWithStatsRow, DbError) {
+  case
+    query.select_all(
+      conn,
+      "SELECT p.id, p.title, p.body, p.status, p.created_at, p.updated_at, u.id AS author_id, u.name AS author_name, COUNT(c.id) AS comment_count, COUNT(CASE WHEN c.is_approved = true THEN 1 END) AS approved_comment_count FROM posts p INNER JOIN users u ON u.id = p.user_id LEFT JOIN comments c ON c.post_id = p.id WHERE p.id = $1 GROUP BY p.id, p.title, p.body, p.status, p.created_at, p.updated_at, u.id, u.name",
+      [connection.int(id)],
+      find_with_stats_row_decoder(),
+    )
+  {
+    Ok([row]) -> Ok(row)
+    Ok([]) -> Error(NotFound)
+    Ok(_) -> Error(connection.QueryError("Expected single row"))
+    Error(e) -> Error(e)
+  }
+}
+
+pub type ListAllRow {
+  ListAllRow(
+    id: Int,
+    user_id: Int,
+    title: String,
+    body: String,
+    status: String,
+    created_at: Int,
+    updated_at: Int,
+  )
+}
+
+fn list_all_row_decoder() -> decode.Decoder(ListAllRow) {
+  use id <- decode.field(0, decode.int)
+  use user_id <- decode.field(1, decode.int)
+  use title <- decode.field(2, decode.string)
+  use body <- decode.field(3, decode.string)
+  use status <- decode.field(4, decode.string)
+  use created_at <- decode.field(5, decode.int)
+  use updated_at <- decode.field(6, decode.int)
+  decode.success(ListAllRow(
+    id,
+    user_id,
+    title,
+    body,
+    status,
+    created_at,
+    updated_at,
+  ))
+}
+
+pub fn list_all(pool pool: Pool) -> Result(List(ListAllRow), DbError) {
+  case pool.checkout(pool) {
+    Ok(conn) -> {
+      let result = list_all_wc(conn: conn)
+      pool.release(pool, conn)
+      result
+    }
+    Error(e) -> Error(e)
+  }
+}
+
+pub fn list_all_wc(conn conn: Connection) -> Result(List(ListAllRow), DbError) {
+  query.select_all(
+    conn,
+    "SELECT id, user_id, title, body, status, created_at, updated_at FROM posts ORDER BY created_at DESC",
+    [],
+    list_all_row_decoder(),
+  )
+}
+
+pub type ListByStatusRow {
+  ListByStatusRow(
+    id: Int,
+    title: String,
+    body: String,
+    status: String,
+    created_at: Int,
+    updated_at: Int,
+    author_name: String,
+  )
+}
+
+fn list_by_status_row_decoder() -> decode.Decoder(ListByStatusRow) {
+  use id <- decode.field(0, decode.int)
+  use title <- decode.field(1, decode.string)
+  use body <- decode.field(2, decode.string)
+  use status <- decode.field(3, decode.string)
+  use created_at <- decode.field(4, decode.int)
+  use updated_at <- decode.field(5, decode.int)
+  use author_name <- decode.field(6, decode.string)
+  decode.success(ListByStatusRow(
+    id,
+    title,
+    body,
+    status,
+    created_at,
+    updated_at,
+    author_name,
+  ))
+}
+
+pub fn list_by_status(
+  pool pool: Pool,
+  status status: String,
+) -> Result(List(ListByStatusRow), DbError) {
+  case pool.checkout(pool) {
+    Ok(conn) -> {
+      let result = list_by_status_wc(conn: conn, status: status)
+      pool.release(pool, conn)
+      result
+    }
+    Error(e) -> Error(e)
+  }
+}
+
+pub fn list_by_status_wc(
+  conn conn: Connection,
+  status status: String,
+) -> Result(List(ListByStatusRow), DbError) {
+  query.select_all(
+    conn,
+    "SELECT p.id, p.title, p.body, p.status, p.created_at, p.updated_at, u.name AS author_name FROM posts p INNER JOIN users u ON u.id = p.user_id WHERE p.status = $1 ORDER BY p.created_at DESC",
+    [connection.string(status)],
+    list_by_status_row_decoder(),
+  )
 }
 
 pub type ListByUserRow {
@@ -428,17 +519,20 @@ fn list_by_user_row_decoder() -> decode.Decoder(ListByUserRow) {
 }
 
 pub fn list_by_user(
-  conn conn: Connection,
+  pool pool: Pool,
   user_id user_id: Int,
-  handler handler: fn(List(ListByUserRow)) -> Response,
-) -> Response {
-  case list_by_user_or(conn: conn, user_id: user_id) {
-    Ok(rows) -> handler(rows)
-    Error(_) -> wisp.internal_server_error()
+) -> Result(List(ListByUserRow), DbError) {
+  case pool.checkout(pool) {
+    Ok(conn) -> {
+      let result = list_by_user_wc(conn: conn, user_id: user_id)
+      pool.release(pool, conn)
+      result
+    }
+    Error(e) -> Error(e)
   }
 }
 
-pub fn list_by_user_or(
+pub fn list_by_user_wc(
   conn conn: Connection,
   user_id user_id: Int,
 ) -> Result(List(ListByUserRow), DbError) {
@@ -488,16 +582,19 @@ fn list_with_authors_row_decoder() -> decode.Decoder(ListWithAuthorsRow) {
 }
 
 pub fn list_with_authors(
-  conn conn: Connection,
-  handler handler: fn(List(ListWithAuthorsRow)) -> Response,
-) -> Response {
-  case list_with_authors_or(conn: conn) {
-    Ok(rows) -> handler(rows)
-    Error(_) -> wisp.internal_server_error()
+  pool pool: Pool,
+) -> Result(List(ListWithAuthorsRow), DbError) {
+  case pool.checkout(pool) {
+    Ok(conn) -> {
+      let result = list_with_authors_wc(conn: conn)
+      pool.release(pool, conn)
+      result
+    }
+    Error(e) -> Error(e)
   }
 }
 
-pub fn list_with_authors_or(
+pub fn list_with_authors_wc(
   conn conn: Connection,
 ) -> Result(List(ListWithAuthorsRow), DbError) {
   query.select_all(
@@ -545,16 +642,19 @@ fn list_with_comment_count_row_decoder() -> decode.Decoder(
 }
 
 pub fn list_with_comment_count(
-  conn conn: Connection,
-  handler handler: fn(List(ListWithCommentCountRow)) -> Response,
-) -> Response {
-  case list_with_comment_count_or(conn: conn) {
-    Ok(rows) -> handler(rows)
-    Error(_) -> wisp.internal_server_error()
+  pool pool: Pool,
+) -> Result(List(ListWithCommentCountRow), DbError) {
+  case pool.checkout(pool) {
+    Ok(conn) -> {
+      let result = list_with_comment_count_wc(conn: conn)
+      pool.release(pool, conn)
+      result
+    }
+    Error(e) -> Error(e)
   }
 }
 
-pub fn list_with_comment_count_or(
+pub fn list_with_comment_count_wc(
   conn conn: Connection,
 ) -> Result(List(ListWithCommentCountRow), DbError) {
   query.select_all(
@@ -565,163 +665,83 @@ pub fn list_with_comment_count_or(
   )
 }
 
-pub type FindWithStatsRow {
-  FindWithStatsRow(
+pub type UpdateRow {
+  UpdateRow(
     id: Int,
+    user_id: Int,
     title: String,
     body: String,
     status: String,
     created_at: Int,
     updated_at: Int,
-    author_id: Int,
-    author_name: String,
-    comment_count: Int,
-    approved_comment_count: Int,
   )
 }
 
-fn find_with_stats_row_decoder() -> decode.Decoder(FindWithStatsRow) {
+fn update_row_decoder() -> decode.Decoder(UpdateRow) {
   use id <- decode.field(0, decode.int)
-  use title <- decode.field(1, decode.string)
-  use body <- decode.field(2, decode.string)
-  use status <- decode.field(3, decode.string)
-  use created_at <- decode.field(4, decode.int)
-  use updated_at <- decode.field(5, decode.int)
-  use author_id <- decode.field(6, decode.int)
-  use author_name <- decode.field(7, decode.string)
-  use comment_count <- decode.field(8, decode.int)
-  use approved_comment_count <- decode.field(9, decode.int)
-  decode.success(FindWithStatsRow(
+  use user_id <- decode.field(1, decode.int)
+  use title <- decode.field(2, decode.string)
+  use body <- decode.field(3, decode.string)
+  use status <- decode.field(4, decode.string)
+  use created_at <- decode.field(5, decode.int)
+  use updated_at <- decode.field(6, decode.int)
+  decode.success(UpdateRow(
     id,
+    user_id,
     title,
     body,
     status,
     created_at,
     updated_at,
-    author_id,
-    author_name,
-    comment_count,
-    approved_comment_count,
   ))
 }
 
-pub fn find_with_stats(
-  conn conn: Connection,
+pub fn update(
+  pool pool: Pool,
+  title title: String,
+  body body: String,
+  status status: String,
+  updated_at updated_at: Int,
   id id: Int,
-  handler handler: fn(FindWithStatsRow) -> Response,
-) -> Response {
-  case find_with_stats_or(conn: conn, id: id) {
-    Ok(row) -> handler(row)
-    Error(NotFound) -> wisp.not_found()
-    Error(_) -> wisp.internal_server_error()
-  }
-}
-
-pub fn find_with_stats_or(
-  conn conn: Connection,
-  id id: Int,
-) -> Result(FindWithStatsRow, DbError) {
-  case
-    query.select_all(
-      conn,
-      "SELECT p.id, p.title, p.body, p.status, p.created_at, p.updated_at, u.id AS author_id, u.name AS author_name, COUNT(c.id) AS comment_count, COUNT(CASE WHEN c.is_approved = true THEN 1 END) AS approved_comment_count FROM posts p INNER JOIN users u ON u.id = p.user_id LEFT JOIN comments c ON c.post_id = p.id WHERE p.id = $1 GROUP BY p.id, p.title, p.body, p.status, p.created_at, p.updated_at, u.id, u.name",
-      [connection.int(id)],
-      find_with_stats_row_decoder(),
-    )
-  {
-    Ok([row]) -> Ok(row)
-    Ok([]) -> Error(NotFound)
-    Ok(_) -> Error(connection.QueryError("Expected single row"))
+) -> Result(UpdateRow, DbError) {
+  case pool.checkout(pool) {
+    Ok(conn) -> {
+      let result =
+        update_wc(
+          conn: conn,
+          title: title,
+          body: body,
+          status: status,
+          updated_at: updated_at,
+          id: id,
+        )
+      pool.release(pool, conn)
+      result
+    }
     Error(e) -> Error(e)
   }
 }
 
-pub type ListByStatusRow {
-  ListByStatusRow(
-    id: Int,
-    title: String,
-    body: String,
-    status: String,
-    created_at: Int,
-    updated_at: Int,
-    author_name: String,
-  )
-}
-
-fn list_by_status_row_decoder() -> decode.Decoder(ListByStatusRow) {
-  use id <- decode.field(0, decode.int)
-  use title <- decode.field(1, decode.string)
-  use body <- decode.field(2, decode.string)
-  use status <- decode.field(3, decode.string)
-  use created_at <- decode.field(4, decode.int)
-  use updated_at <- decode.field(5, decode.int)
-  use author_name <- decode.field(6, decode.string)
-  decode.success(ListByStatusRow(
-    id,
-    title,
-    body,
-    status,
-    created_at,
-    updated_at,
-    author_name,
-  ))
-}
-
-pub fn list_by_status(
+pub fn update_wc(
   conn conn: Connection,
+  title title: String,
+  body body: String,
   status status: String,
-  handler handler: fn(List(ListByStatusRow)) -> Response,
-) -> Response {
-  case list_by_status_or(conn: conn, status: status) {
-    Ok(rows) -> handler(rows)
-    Error(_) -> wisp.internal_server_error()
-  }
-}
-
-pub fn list_by_status_or(
-  conn conn: Connection,
-  status status: String,
-) -> Result(List(ListByStatusRow), DbError) {
-  query.select_all(
-    conn,
-    "SELECT p.id, p.title, p.body, p.status, p.created_at, p.updated_at, u.name AS author_name FROM posts p INNER JOIN users u ON u.id = p.user_id WHERE p.status = $1 ORDER BY p.created_at DESC",
-    [connection.string(status)],
-    list_by_status_row_decoder(),
-  )
-}
-
-pub type DeleteByUserRow {
-  DeleteByUserRow(id: Int, title: String)
-}
-
-fn delete_by_user_row_decoder() -> decode.Decoder(DeleteByUserRow) {
-  use id <- decode.field(0, decode.int)
-  use title <- decode.field(1, decode.string)
-  decode.success(DeleteByUserRow(id, title))
-}
-
-pub fn delete_by_user(
-  conn conn: Connection,
-  user_id user_id: Int,
-  handler handler: fn(DeleteByUserRow) -> Response,
-) -> Response {
-  case delete_by_user_or(conn: conn, user_id: user_id) {
-    Ok(row) -> handler(row)
-    Error(NotFound) -> wisp.not_found()
-    Error(_) -> wisp.internal_server_error()
-  }
-}
-
-pub fn delete_by_user_or(
-  conn conn: Connection,
-  user_id user_id: Int,
-) -> Result(DeleteByUserRow, DbError) {
+  updated_at updated_at: Int,
+  id id: Int,
+) -> Result(UpdateRow, DbError) {
   case
     query.select_all(
       conn,
-      "DELETE FROM posts WHERE user_id = $1 RETURNING id, title",
-      [connection.int(user_id)],
-      delete_by_user_row_decoder(),
+      "UPDATE posts SET title = $1, body = $2, status = $3, updated_at = $4 WHERE id = $5 RETURNING *",
+      [
+        connection.string(title),
+        connection.string(body),
+        connection.string(status),
+        connection.int(updated_at),
+        connection.int(id),
+      ],
+      update_row_decoder(),
     )
   {
     Ok([row]) -> Ok(row)
@@ -763,33 +783,34 @@ fn upsert_by_title_row_decoder() -> decode.Decoder(UpsertByTitleRow) {
 }
 
 pub fn upsert_by_title(
-  conn conn: Connection,
+  pool pool: Pool,
   user_id user_id: Int,
   title title: String,
   body body: String,
   status status: String,
   created_at created_at: Int,
   updated_at updated_at: Int,
-  handler handler: fn(UpsertByTitleRow) -> Response,
-) -> Response {
-  case
-    upsert_by_title_or(
-      conn: conn,
-      user_id: user_id,
-      title: title,
-      body: body,
-      status: status,
-      created_at: created_at,
-      updated_at: updated_at,
-    )
-  {
-    Ok(row) -> handler(row)
-    Error(NotFound) -> wisp.not_found()
-    Error(_) -> wisp.internal_server_error()
+) -> Result(UpsertByTitleRow, DbError) {
+  case pool.checkout(pool) {
+    Ok(conn) -> {
+      let result =
+        upsert_by_title_wc(
+          conn: conn,
+          user_id: user_id,
+          title: title,
+          body: body,
+          status: status,
+          created_at: created_at,
+          updated_at: updated_at,
+        )
+      pool.release(pool, conn)
+      result
+    }
+    Error(e) -> Error(e)
   }
 }
 
-pub fn upsert_by_title_or(
+pub fn upsert_by_title_wc(
   conn conn: Connection,
   user_id user_id: Int,
   title title: String,
