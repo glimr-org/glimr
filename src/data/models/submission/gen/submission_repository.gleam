@@ -91,7 +91,7 @@ pub fn create(
           created_at: created_at,
           updated_at: updated_at,
         )
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -133,7 +133,7 @@ pub fn delete(pool pool: Pool, id id: Int) -> Result(Int, DbError) {
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = delete_wc(conn: conn, id: id)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -181,7 +181,7 @@ pub fn find(pool pool: Pool, id id: Int) -> Result(FindRow, DbError) {
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = find_wc(conn: conn, id: id)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -239,7 +239,7 @@ pub fn list_all(pool pool: Pool) -> Result(List(ListAllRow), DbError) {
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = list_all_wc(conn: conn)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -307,7 +307,7 @@ pub fn update(
           message: message,
           updated_at: updated_at,
         )
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)

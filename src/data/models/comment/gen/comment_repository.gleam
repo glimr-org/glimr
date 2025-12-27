@@ -91,7 +91,7 @@ pub fn create(
           created_at: created_at,
           updated_at: updated_at,
         )
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -133,7 +133,7 @@ pub fn delete(pool pool: Pool, id id: Int) -> Result(Int, DbError) {
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = delete_wc(conn: conn, id: id)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -179,7 +179,7 @@ pub fn find(pool pool: Pool, id id: Int) -> Result(FindRow, DbError) {
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = find_wc(conn: conn, id: id)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -252,7 +252,7 @@ pub fn find_with_details(
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = find_with_details_wc(conn: conn, id: id)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -297,7 +297,7 @@ pub fn find_with_exists(
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = find_with_exists_wc(conn: conn, id: id)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -358,7 +358,7 @@ pub fn list_all(pool pool: Pool) -> Result(List(ListAllRow), DbError) {
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = list_all_wc(conn: conn)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -399,7 +399,7 @@ pub fn list_between_dates(
           start_created_at: start_created_at,
           end_created_at: end_created_at,
         )
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -457,7 +457,7 @@ pub fn list_by_post(
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = list_by_post_wc(conn: conn, post_id: post_id)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -514,7 +514,7 @@ pub fn list_by_user(
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = list_by_user_wc(conn: conn, user_id: user_id)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -564,7 +564,7 @@ pub fn list_count_by_post(
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = list_count_by_post_wc(conn: conn)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -625,7 +625,7 @@ pub fn list_pending_approval(
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = list_pending_approval_wc(conn: conn)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -662,7 +662,7 @@ pub fn list_same_post(
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = list_same_post_wc(conn: conn, id: id)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -716,7 +716,7 @@ pub fn list_search(
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = list_search_wc(conn: conn, body: body)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -761,7 +761,7 @@ pub fn list_union_example(
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = list_union_example_wc(conn: conn, user_id: user_id)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -815,7 +815,7 @@ pub fn list_with_case(
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = list_with_case_wc(conn: conn, post_id: post_id)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -858,7 +858,7 @@ pub fn list_with_coalesce(
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = list_with_coalesce_wc(conn: conn, post_id: post_id)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -900,7 +900,7 @@ pub fn list_with_cte(pool pool: Pool) -> Result(List(ListWithCteRow), DbError) {
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = list_with_cte_wc(conn: conn)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -972,7 +972,7 @@ pub fn list_with_full_context(
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = list_with_full_context_wc(conn: conn)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -1009,7 +1009,7 @@ pub fn list_with_subquery(
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = list_with_subquery_wc(conn: conn, p1: p1)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -1054,7 +1054,7 @@ pub fn list_with_window(
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = list_with_window_wc(conn: conn, user_id: user_id)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -1121,7 +1121,7 @@ pub fn update(
           updated_at: updated_at,
           id: id,
         )
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -1209,7 +1209,7 @@ pub fn upsert(
           created_at: created_at,
           updated_at: updated_at,
         )
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)

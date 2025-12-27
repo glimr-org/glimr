@@ -82,7 +82,7 @@ pub fn create(
           created_at: created_at,
           updated_at: updated_at,
         )
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -124,7 +124,7 @@ pub fn delete(pool pool: Pool, id id: Int) -> Result(Int, DbError) {
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = delete_wc(conn: conn, id: id)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -152,7 +152,7 @@ pub fn delete_by_user(
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = delete_by_user_wc(conn: conn, user_id: user_id)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -213,7 +213,7 @@ pub fn find(pool pool: Pool, id id: Int) -> Result(FindRow, DbError) {
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = find_wc(conn: conn, id: id)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -280,7 +280,7 @@ pub fn find_with_author(
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = find_with_author_wc(conn: conn, id: id)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -353,7 +353,7 @@ pub fn find_with_stats(
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = find_with_stats_wc(conn: conn, id: id)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -414,7 +414,7 @@ pub fn list_all(pool pool: Pool) -> Result(List(ListAllRow), DbError) {
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = list_all_wc(conn: conn)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -468,7 +468,7 @@ pub fn list_by_status(
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = list_by_status_wc(conn: conn, status: status)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -525,7 +525,7 @@ pub fn list_by_user(
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = list_by_user_wc(conn: conn, user_id: user_id)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -587,7 +587,7 @@ pub fn list_with_authors(
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = list_with_authors_wc(conn: conn)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -647,7 +647,7 @@ pub fn list_with_comment_count(
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = list_with_comment_count_wc(conn: conn)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -715,7 +715,7 @@ pub fn update(
           updated_at: updated_at,
           id: id,
         )
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -803,7 +803,7 @@ pub fn upsert_by_title(
           created_at: created_at,
           updated_at: updated_at,
         )
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)

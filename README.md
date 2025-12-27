@@ -19,6 +19,9 @@ If you'd like to stay updated on Glimr's development, Follow [@migueljarias](htt
   - [Form Validation](#form-validation)
   - [Views & Responses](#views--responses)
   - [Database](#database)
+      - [Setup](#setup)
+          - [SQLite](#sqlite)
+          - [PostgreSQL](#postgresql)
       - [Migrations](#migrations)
       - [Queries](#queries)
   - [Route Groups](#route-groups)
@@ -754,17 +757,43 @@ pub fn cancel(req: Request, ctx: Context) -> Response {
 
 Curently supports sqlite via the [lpil/sqlight](https://github.com/lpil/sqlight) package and postgres via the [lpil/pog](https://github.com/lpil/pog) package.
 
+### Setup
+
+#### SQLite
+
+Run the following command to create an SQLite database file and automatically configure the necessary .env variables.
+
+```bash
+./glimr setup:sqlite
+```
+
+This creates the `src/data/sqlite/data.db` file in your project and sets your database driver to SQLite. This database file is gitignored.
+
+##### SQLite with :memory:
+
+For development or testing, you can use an in-memory SQLite database. Update your `.env` file:
+
+```env
+DB_DRIVER=sqlite
+DB_PATH=":memory:"
+DB_POOL_SIZE=1
+```
+
+**Important:** When using `:memory:`, set `DB_POOL_SIZE=1` because each SQLite connection to `:memory:` creates a separate in-memory database. With multiple connections, queries would hit different databases and not see each other's data.
+
+For multiple connections to the same in-memory database, use a shared cache URI:
+
+```env
+DB_PATH="file::memory:?cache=shared"
+```
+
+#### PostgreSQL
+
+To set up PostgreSQL, you'll need to manually set the `DB_DRIVER` to postgres, and set your `DB_URL` variable. Our current postgres implementation only works with url's, but that will be changing soon to support local instances. A helper command to set up postgres is also coming soon.
+
 ### Migrations
 
 Glimr provides automatic migration generation by comparing your schema definitions against a stored snapshot. It detects changes and generates driver-specific SQL for PostgreSQL or SQLite.
-
-#### Setup
-
-Ensure your `.env` file has the database driver configured:
-
-```env
-DB_DRIVER=sqlite  # or "postgres"
-```
 
 #### Defining Schemas
 
@@ -993,7 +1022,7 @@ This generates a fully-typed repository file with Gleam functions for each query
 ```gleam
 // src/data/models/user/user_repository.gleam (auto-generated)
 
-// Main functions - accept Pool, auto checkout/release connection
+// Main functions - accept Pool, auto checkout/checkin connection
 pub fn find(pool, id) -> Result(User, DbError)
 pub fn find_by_email(pool, email) -> Result(User, DbError)
 pub fn list_all(pool) -> Result(List(User), DbError)

@@ -68,7 +68,7 @@ pub fn create(
           created_at: created_at,
           updated_at: updated_at,
         )
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -108,7 +108,7 @@ pub fn delete(pool pool: Pool, id id: Int) -> Result(Int, DbError) {
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = delete_wc(conn: conn, id: id)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -137,7 +137,7 @@ pub fn delete_inactive(
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = delete_inactive_wc(conn: conn, updated_at: updated_at)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -188,7 +188,7 @@ pub fn find(pool pool: Pool, id id: Int) -> Result(FindRow, DbError) {
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = find_wc(conn: conn, id: id)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -239,7 +239,7 @@ pub fn find_by_email(
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = find_by_email_wc(conn: conn, email: email)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -303,7 +303,7 @@ pub fn find_with_post_count(
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = find_with_post_count_wc(conn: conn, id: id)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -354,7 +354,7 @@ pub fn list_all(pool pool: Pool) -> Result(List(ListAllRow), DbError) {
   case pool.checkout(pool) {
     Ok(conn) -> {
       let result = list_all_wc(conn: conn)
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -410,7 +410,7 @@ pub fn upsert(
           created_at: created_at,
           updated_at: updated_at,
         )
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
@@ -486,7 +486,7 @@ pub fn update(
           bio: bio,
           updated_at: updated_at,
         )
-      pool.release(pool, conn)
+      pool.checkin(pool, conn)
       result
     }
     Error(e) -> Error(e)
