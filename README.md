@@ -775,7 +775,7 @@ For development or testing, you can use an in-memory SQLite database. Update you
 
 ```env
 DB_DRIVER=sqlite
-DB_PATH=":memory:"
+DB_DATABASE=":memory:"
 DB_POOL_SIZE=1
 ```
 
@@ -789,7 +789,25 @@ DB_PATH="file::memory:?cache=shared"
 
 #### PostgreSQL
 
-To set up PostgreSQL, you'll need to manually set the `DB_DRIVER` to postgres, and set your `DB_URL` variable. Our current postgres implementation only works with url's, but that will be changing soon to support local instances. A helper command to set up postgres is also coming soon.
+To set up PostgreSQL, you'll need to manually set the `DB_DRIVER` to postgres, and set your `DB_URL` variable like so:
+
+```env
+DB_DRIVER=postgres
+DB_URL=postgres://user@host:port/db_name
+DB_POOL_SIZE=15
+```
+
+If you'd rather set the different config values for postgres rather than use a `DB_URL`, you can do it like this:
+
+```env
+DB_DRIVER=postgres
+DB_HOST=[your_host]
+DB_PORT=5432
+DB_DATABASE=[your_database]
+DB_USERNAME=[db_user]
+DB_PASSWORD=[db_password]
+DB_POOL_SIZE=15
+```
 
 ### Migrations
 

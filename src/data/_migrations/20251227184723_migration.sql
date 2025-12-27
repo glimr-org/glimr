@@ -9,6 +9,16 @@ CREATE TABLE users (
   updated_at INTEGER NOT NULL
 );
 
+CREATE TABLE submissions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+  name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  avatar TEXT NOT NULL,
+  message TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
 CREATE TABLE posts (
   id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
   user_id INTEGER NOT NULL,
@@ -25,16 +35,6 @@ CREATE TABLE comments (
   post_id INTEGER NOT NULL,
   body TEXT NOT NULL,
   is_approved INTEGER NOT NULL,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
-);
-
-CREATE TABLE submissions (
-  id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-  name TEXT NOT NULL,
-  email TEXT NOT NULL,
-  avatar TEXT NOT NULL,
-  message TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
