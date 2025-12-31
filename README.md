@@ -1304,7 +1304,7 @@ gleam build
 
 - [Framework Repository](https://github.com/glimr-org/framework) - Core framework code
 - [Gleam Documentation](https://gleam.run/documentation/) - Learn Gleam
-- [Wisp Documentation](https://hexdocs.pm/wisp/) - Web server library
+- [Wisp Documentation](https://hexdocs.pm/wisp/) - Web framework library
 
 ### Built With
 
