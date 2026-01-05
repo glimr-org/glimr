@@ -1,7 +1,7 @@
-pub type Context {
-  Context
+pub type AppContext {
+  AppContext
 }
 
-pub fn load() -> Context {
-  Context
+pub fn load() -> AppContext {
+  AppContext
 }

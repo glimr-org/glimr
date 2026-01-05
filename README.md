@@ -10,24 +10,26 @@ If you'd like to stay updated on Glimr's development, Follow [@migueljarias](htt
 - [Features](#features)
 - [Installation](#installation)
 - [Project Structure](#project-structure)
-- [Quick Start](#quick-start)
-  - [Defining Routes](#defining-routes)
-  - [Creating Controllers](#creating-controllers)
-  - [Creating Actions](#creating-actions)
-  - [Route Parameters](#route-parameters)
-  - [Middleware](#middleware)
-  - [Form Validation](#form-validation)
-  - [Views & Responses](#views--responses)
-  - [Database](#database)
-      - [Setup](#setup)
-          - [SQLite](#sqlite)
-          - [PostgreSQL](#postgresql)
-      - [Migrations](#migrations)
-      - [Queries](#queries)
-  - [Route Groups](#route-groups)
-  - [API Routes](#api-routes)
-  - [Configuration](#configuration)
-  - [Context System](#context-system)
+- [Routes](#defining-routes)
+    - [Route Groups](#route-groups)
+    - [API Routes](#api-routes)
+- [Controllers](#creating-controllers)
+- [Actions](#creating-actions)
+- [Middleware](#middleware)
+- [Form Validation](#form-validation)
+- [Views & Responses](#views--responses)
+- [Database](#database)
+  - [Setup](#setup)
+      - [SQLite](#sqlite)
+      - [PostgreSQL](#postgresql)
+  - [Migrations](#migrations)
+  - [Queries](#queries)
+- [Console Commands](#console-commands)
+  - [Creating Commands](#creating-commands)
+  - [Commands with Database Access](#commands-with-database-access)
+  - [Third-Party Commands](#third-party-commands)
+- [Configuration](#configuration)
+- [Context System](#context-system)
 - [Development](#development)
 - [Learn More](#learn-more)
 - [Contributing](#contributing)
@@ -57,6 +59,7 @@ Glimr is a fully featured web framework built for Gleam. It provides a delightfu
 - **SQL Queries** - Write raw SQL files with full editor LSP support, compiled to typed Gleam functions
 - **Connection Pooling** - Efficient database connection management for PostgreSQL and SQLite
 - **Transaction Support** - Atomic operations with automatic retry on deadlock
+- **Console Commands** - CLI task runner with database access support and argument parsing
 
 ## Installation
 
@@ -128,9 +131,7 @@ Visit `http://localhost:8000` in your browser.
 └── gleam.toml                        # Project configuration
 ```
 
-## Quick Start
-
-### Defining Routes
+## Routes
 
 Routes are defined using pattern matching in `src/routes/web.gleam`, `src/routes/api.gleam`, or any other route file you register:
 
@@ -175,7 +176,7 @@ pub fn routes(path, method, req, ctx) {
 - Pattern match on `method` to handle different HTTP methods
 - Type-safe parameter extraction from the path
 
-#### Route Redirects
+### Route Redirects
 
 Define redirects directly in your routes:
 
@@ -183,7 +184,71 @@ Define redirects directly in your routes:
 ["old-contact"] -> wisp.redirect("/contact")
 ```
 
-### Creating Controllers
+### Route Parameters
+
+Parameters are extracted directly via pattern matching:
+
+```gleam
+// Route definition with type-safe parameter extraction
+pub fn routes(path, method, req, ctx) {
+  case path {
+    ["posts", slug, "comments", comment_id] ->
+      case method {
+        Get -> comment_controller.show(req, ctx, slug, comment_id)
+        ...
+      }
+
+    ...
+  }
+}
+
+// Controller receives parameters directly
+pub fn show(req: Request, ctx: Context, slug: String, comment_id: String) -> Response {
+  // Use slug and comment_id...
+}
+```
+
+### Route Groups
+
+Route groups are defined in `src/app/providers/route_provider.gleam`. Each group has a prefix and middleware stack:
+
+```gleam
+import glimr/routing/router.{type RouteGroup}
+import glimr/http/kernel
+
+pub fn register() -> List(RouteGroup(Context)) {
+  [
+    // API routes - prefixed with "/api"
+    router.RouteGroup(
+      prefix: "/api",
+      middleware_group: kernel.Api,  // JSON error responses
+      routes: api.routes,
+    ),
+
+    // Admin routes - prefixed with "/admin"
+    router.RouteGroup(
+      prefix: "/admin",
+      middleware_group: kernel.Custom("admin"),  // Custom middleware stack
+      routes: admin.routes,
+    ),
+
+    // Default web routes - no prefix (must be last)
+    router.RouteGroup(
+      prefix: "",
+      middleware_group: kernel.Web,  // HTML error responses
+      routes: web.routes,
+    ),
+  ]
+}
+```
+
+### API Routes
+
+API routes are automatically:
+- Prefixed with `/api` (configured in `route_provider.gleam`)
+- Return JSON error responses (404, 405, 500, etc.) instead of HTML
+
+## Controllers
 
 Create controllers in `src/app/http/controllers/`. Use the following command:
 
@@ -221,9 +286,9 @@ You can also create resource controllers that come set up with index,show,edit,u
 ./glimr make:controller --resource
 ```
 
-### Creating Actions
+## Actions
 
-Actions help keep controllers clean by extracting complex business logic into reusable modules. They encapsulate database operations and can return `Result` types for clean error handling on the controller's side.
+Actions help keep controllers clean by extracting complex business logic into reusable modules that can be used in controllers, and console commands. They encapsulate database operations and can return `Result` types for clean error handling on the controller's or command's side.
 
 Create actions in `src/app/actions/`. Use the following command:
 
@@ -231,21 +296,21 @@ Create actions in `src/app/actions/`. Use the following command:
 ./glimr make:action update_submission
 ```
 
-This creates `update_submission.gleam`. Actions follow a simple pattern - they perform work and return a Result:
+This creates `update_submission.gleam`. Actions follow a simple pattern - they perform work and return a Result. If you're going to perform database work within your action, it's preferable to accept a `Pool` rather than an entire `Context`, so that this action may be usable from console commands as well:
 
 ```gleam
 // src/app/actions/update_submission.gleam
-import app/http/context/ctx.{type Context}
 import app/http/requests/contact_store_request.{type Data}
 import data/models/submission/gen/submission_repository.{type CreateRow}
 import glimr/db/connection.{type DbError}
 import glimr/utils/unix_timestamp
+import glimr/db/pool.{type Pool}
 
-pub fn run(ctx: Context, id: Int, data: Data) -> Result(CreateRow, DbError) {
+pub fn run(pool: Pool, id: Int, data: Data) -> Result(CreateRow, DbError) {
   let now = unix_timestamp.now()
 
   submission_repository.update(
-    pool: ctx.db.pool,
+    pool: pool,
     id: id,
     name: data.name,
     email: data.email,
@@ -268,7 +333,7 @@ pub fn update(req: Request, ctx: Context, submission_id: String) -> Response {
   use validated <- contact_store_request.validate(req, ctx)
   let assert Ok(submission_id) = int.parse(submission_id)
 
-  case update_submission.run(ctx, submission_id, validated) {
+  case update_submission.run(ctx.db.pool, submission_id, validated) {
     Ok(submission) -> {
       redirect.build()
       |> redirect.to("/contact/updated")
@@ -281,7 +346,7 @@ pub fn update(req: Request, ctx: Context, submission_id: String) -> Response {
 }
 ```
 
-**Chaining multiple actions:**
+### Chaining Multiple Actions
 
 Actions can be composed using `result.try` for sequential operations:
 
@@ -292,9 +357,9 @@ pub fn store(req: Request, ctx: Context) -> Response {
   use validated <- user_store_request.validate(req, ctx)
 
   case {
-    use user <- result.try(create_user.run(ctx, validated))
-    use _ <- result.try(send_welcome_email.run(ctx, user))
-    use _ <- result.try(notify_admin.run(ctx, user))
+    use user <- result.try(create_user.run(ctx.db.pool, validated))
+    use _ <- result.try(send_welcome_email.run(ctx.notif, user))
+    use _ <- result.try(notify_admin.run(ctx.notif, user))
     Ok(user)
   } {
     Ok(user) -> {
@@ -307,35 +372,11 @@ pub fn store(req: Request, ctx: Context) -> Response {
 }
 ```
 
-### Route Parameters
-
-Parameters are extracted directly via pattern matching:
-
-```gleam
-// Route definition with type-safe parameter extraction
-pub fn routes(path, method, req, ctx) {
-  case path {
-    ["posts", slug, "comments", comment_id] ->
-      case method {
-        Get -> comment_controller.show(req, ctx, slug, comment_id)
-        ...
-      }
-
-    ...
-  }
-}
-
-// Controller receives parameters directly
-pub fn show(req: Request, ctx: Context, slug: String, comment_id: String) -> Response {
-  // Use slug and comment_id...
-}
-```
-
-### Middleware
+## Middleware
 
 Middleware intercepts requests before they reach your controllers. Middleware can modify both the request and context, with changes flowing through to subsequent middleware and controllers.
 
-#### Creating Middleware
+### Creating Middleware
 
 Create custom middleware in `src/app/http/middleware/`. Use the following command:
 
@@ -358,7 +399,7 @@ pub fn handle(req: Request, ctx: Context, next: Next(Context)) -> Response {
 }
 ```
 
-#### Applying Middleware to Route Handlers
+### Applying Middleware to Route Handlers
 
 Apply middleware to specific controller functions:
 
@@ -376,7 +417,7 @@ pub fn show(req: Request, ctx: Context) -> Response {
 }
 ```
 
-#### Modifying Context in Middleware
+### Modifying Context in Middleware
 
 Middleware can modify the context, and those changes are visible to downstream middleware and controllers:
 
@@ -411,7 +452,7 @@ pub fn dashboard(req: Request, ctx: Context) -> Response {
 }
 ```
 
-#### Modifying Responses After Handler
+### Modifying Responses After Handler
 
 Middleware can also modify responses on the way back up the chain:
 
@@ -434,11 +475,11 @@ This allows middleware to:
 - Compress response bodies
 - Transform response data
 
-### Form Validation
+## Form Validation
 
 Glimr provides a declarative, rule-based validation system for form data. Create form request modules to define validation rules and handle requests.
 
-#### Creating Form Requests
+### Creating Form Requests
 
 Create form request modules in `src/app/http/requests/`. Use the following command:
 
@@ -486,7 +527,7 @@ pub fn validate(req: Request, ctx: Context, next: fn(Data) -> Response) {
 }
 ```
 
-#### Using Validation in Controllers
+### Using Validation in Controllers
 
 Use the `use` syntax for clean, readable validation handling:
 
@@ -522,7 +563,7 @@ If validation fails, a 422 response with validation errors is automatically retu
 
 > **Note:** Currently, validation errors just show up in a basic view. Eventually, web routes will redirect back with the errors, and API routes will return a 422 JSON response.
 
-#### Available Validation Rules
+### Available Validation Rules
 
 **Text & String Rules:**
 - **Required** - Field must have a value
@@ -545,7 +586,7 @@ If validation fails, a 422 response with validation errors is automatically retu
 - **FileMaxSize(Int)** - File must be at most n KB
 - **FileExtension(List(String))** - File must have one of the allowed extensions (e.g., `["jpg", "png"]`)
 
-#### Custom Validation Rules
+### Custom Validation Rules
 
 Create your own validation rules for domain-specific logic using the `Custom` rule in `app/http/rules`. Use the following command:
 
@@ -595,7 +636,7 @@ pub fn rules(form: FormData) {
 - Return `Ok(Nil)` if validation passes
 - Return `Error(message)` with an error message if validation fails
 
-#### Custom File Validation Rules
+### Custom File Validation Rules
 
 Create your own validation rules for domain-specific logic using the `FileCustom` rule in `app/http/rules`. Use the following command:
 
@@ -641,11 +682,11 @@ pub fn rules(form: FormData) {
 - Return `Ok(Nil)` if validation passes
 - Return `Error(message)` with an error message if validation fails
 
-### Views & Responses
+## Views & Responses
 
 Glimr provides a fluent builder pattern for rendering views with layouts and template variables.
 
-#### Rendering Views
+### Rendering Views
 
 ```gleam
 import glimr/response/view
@@ -658,7 +699,7 @@ pub fn show(req: Request, ctx: Context) -> Response {
 }
 ```
 
-#### Rendering Lustre Components
+### Rendering Lustre Components
 
 Glimr seamlessly integrates with [Lustre](https://hexdocs.pm/lustre/) for server-side rendering:
 
@@ -676,7 +717,7 @@ pub fn show(req: Request, ctx: Context) -> Response {
 }
 ```
 
-#### Set Layout
+### Set Layout
 
 Set a layout for a specific view:
 
@@ -689,7 +730,7 @@ view.build()
 |> view.render()
 ```
 
-#### Template Variables
+### Template Variables
 
 Views use `{{ variable }}` syntax for template substitution. The special `{{ _content_ }}` variable is reserved for the main content:
 
@@ -706,11 +747,11 @@ Views use `{{ variable }}` syntax for template substitution. The special `{{ _co
 </html>
 ```
 
-### Redirects
+## Redirects
 
 Glimr's redirect builder provides a clean API for redirecting users with flash messages.
 
-#### Basic Redirects
+### Basic Redirects
 
 ```gleam
 import glimr/response/redirect
@@ -724,7 +765,7 @@ pub fn store(req: Request, ctx: Context) -> wisp.Response {
 }
 ```
 
-#### Redirects with Flash Messages
+### Redirects with Flash Messages
 
 Flash messages persist data across redirects (requires session support):
 
@@ -741,7 +782,7 @@ pub fn store(req: Request, ctx: Context) -> Response {
 
 > **Note:** Flash messaging isn't supported yet, as session support hasn't been implemented.
 
-#### Redirect Back
+### Redirect Back
 
 Redirect users back to the previous page:
 
@@ -1191,47 +1232,194 @@ pub fn store(req: Request, ctx: Context) -> Response {
 
 > **Note:** Use the `_wc` (with connection) variants of repository functions inside transactions. These accept a `Connection` instead of a `Pool`, allowing all operations to share the same transactional connection.
 
-### Route Groups
+## Console Commands
 
-Route groups are defined in `src/app/providers/route_provider.gleam`. Each group has a prefix and middleware stack:
+Glimr provides a console command system (Similar to Laravel's artisan) for running tasks from the command line. Commands are defined using a fluent API and can optionally receive database access.
+
+### Creating Commands
+
+Create a new command using the following command:
+
+```bash
+./glimr make:command send_emails
+```
+
+This creates `src/app/console/commands/send_emails.gleam`:
 
 ```gleam
-import glimr/routing/router.{type RouteGroup}
-import glimr/http/kernel
+import glimr/console/command.{type Command, type ParsedArgs}
 
-pub fn register() -> List(RouteGroup(Context)) {
+const name = "app:send-emails"
+
+const description = "Command description"
+
+pub fn command() -> Command {
+  command.new()
+  |> command.name(name)
+  |> command.description(description)
+  |> command.handler(run)
+}
+
+fn run(args: ParsedArgs) -> Nil {
+  // Your command logic here
+  todo
+}
+```
+
+### Adding Arguments, Flags, and Options
+
+Commands can accept three types of inputs:
+
+- **Arguments** - Required positional values
+- **Flags** - Optional boolean switches (e.g., `--verbose` or `-v`)
+- **Options** - Optional values (e.g., `--format=json` or `-f=json`)
+
+```gleam
+import gleam/result
+import glimr/console/command.{type Command, type ParsedArgs, Argument, Flag, Option}
+
+pub fn command() -> Command {
+  command.new()
+  |> command.name("app:send-emails")
+  |> command.description("Send emails to users")
+  |> command.args([
+    Argument(name: "recipient", description: "The email recipient"),
+    Flag(name: "dry-run", short: "d", description: "Preview without sending"),
+    Option(name: "format", description: "Output format", default: "text"),
+  ])
+  |> command.handler(run)
+}
+
+fn run(args: ParsedArgs) -> Nil {
+  let recipient = command.get_arg(args, "recipient")
+  let dry_run = command.has_flag(args, "dry-run")
+  let format = command.get_option(args, "format")
+
+  // Use recipient, dry_run, and format...
+}
+```
+
+### Register Your Command
+
+You can register your commands in `src/app/console/kernel.gleam`:
+
+```gleam
+import glimr/console/command.{type Command}
+import app/console/commands/send_emails
+
+pub fn commands() -> List(Command) {
   [
-    // API routes - prefixed with "/api"
-    router.RouteGroup(
-      prefix: "/api",
-      middleware_group: kernel.Api,  // JSON error responses
-      routes: api.routes,
-    ),
-
-    // Admin routes - prefixed with "/admin"
-    router.RouteGroup(
-      prefix: "/admin",
-      middleware_group: kernel.Custom("admin"),  // Custom middleware stack
-      routes: admin.routes,
-    ),
-
-    // Default web routes - no prefix (must be last)
-    router.RouteGroup(
-      prefix: "",
-      middleware_group: kernel.Web,  // HTML error responses
-      routes: web.routes,
-    ),
+    send_emails.command(),
+    // Add more commands here...
   ]
 }
 ```
 
-### API Routes
+### Run Your Command
 
-API routes are automatically:
-- Prefixed with `/api` (configured in `route_provider.gleam`)
-- Return JSON error responses (404, 405, 500, etc.) instead of HTML
+You can now run your newly created command the same way you run Glimr commands:
 
-### Configuration
+```bash
+./glimr app:send-emails
+```
+
+Your command will also appear in the command list when running:
+
+```bash
+./glimr
+```
+
+Just like with Glimr commands, you'll automatically be able to get help output for your custom commands by running:
+
+```bash
+./glimr app:send-emails --help
+```
+
+Run with arguments:
+
+```bash
+./glimr app:send-emails user@example.com --dry-run --format=json
+```
+
+### Commands with Database Access
+
+For commands that need database access, use the `--with-db` flag:
+
+```bash
+./glimr make:command seed_database --with-db
+```
+
+This creates a command with a `Pool` parameter:
+
+```gleam
+import glimr/db/pool.{type Pool}
+import glimr/console/command.{type Command, type ParsedArgs}
+
+const name = "app:seed-database"
+
+const description = "Seed the database with initial data"
+
+pub fn command() -> Command {
+  command.new()
+  |> command.name(name)
+  |> command.description(description)
+  |> command.handler_with_db(run) // <--- uses handler_with_db() rather than handler()
+}
+
+fn run(args: ParsedArgs, pool: Pool) -> Nil { // <--- run() now needs a Pool parameter
+  // Use the pool for database operations
+  let assert Ok(_) = user_repository.create(
+    pool: pool,
+    name: "Admin",
+    email: "admin@example.com",
+  )
+}
+```
+
+The framework automatically:
+1. Starts a database pool with 1 connection before your command runs
+2. Passes the pool to your handler
+3. Stops the pool when your command completes
+
+### Multiple Database Connections
+
+
+If you have multiple database connections configured in `config/config_db.gleam`, you can specify which one to use with the `--database` flag. All commands that use the `handler_with_db` handler, automatically accept a `--database` flag  where you can specify which database connection you want. If a database connection isn't specified, it will to default to the connection named "default".
+
+```bash
+# Uses the "default" connection (default behavior)
+./glimr app:seed-database
+
+# Uses a specific connection
+./glimr app:seed-database --database=analytics
+```
+
+If `--database` is not provided, it defaults to `"default"`. The `--database` name's existence is automatically verified before attempting to create a connection.
+
+### Third-Party Commands
+
+Register third-party package commands in `src/app/providers/command_provider.gleam`:
+
+```gleam
+import app/console/kernel
+import gleam/list
+import glimr/console/command.{type Command}
+import glimr/console/kernel as glimr_kernel
+// Import third-party commands
+import some_package/commands as package_commands
+
+pub fn register() -> List(Command) {
+  list.flatten([
+    kernel.commands(),
+    glimr_kernel.commands(),
+    package_commands.commands(),  // Third-party commands
+  ])
+}
+```
+
+This allows third party packages to provide commands for your app in the same way Glimr does, providing a seamless and unified experience.
+
+## Configuration
 
 Access configuration values anywhere in your application:
 
@@ -1249,7 +1437,7 @@ pub fn show(req: Request, ctx: Context) -> Response {
 
 Add your own configuration files in `src/config/`.
 
-### Context System
+## Context System
 
 The context system provides type-safe dependency injection. Define your context in `src/app/http/context/`:
 

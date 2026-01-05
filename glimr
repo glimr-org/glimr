@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 
-# Glimr CLI - Passthrough to framework console
-gleam run --no-print-progress -m glimr/make -- "$@"
+# Glimr CLI ✨
+gleam run --no-print-progress -m glimr_console -- "$@"

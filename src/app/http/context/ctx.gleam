@@ -1,6 +1,12 @@
-import app/http/context/ctx_app.{type Context as AppContext}
-import app/http/context/ctx_db.{type Context as DbContext}
+// TODO: module docs
+
+import app/http/context/ctx_app.{type AppContext}
+import glimr/http/context/ctx_db.{type DbContext}
 
 pub type Context {
-  Context(app: AppContext, db: DbContext)
+  Context(
+    app: AppContext,
+    db: DbContext,
+    // Add third-party contexts here...
+  )
 }
