@@ -9,10 +9,10 @@ import bootstrap/bootstrap
 import config/config_db
 import glimr/console/kernel as glimr_kernel
 
-/// Initializes and runs the console application. Loads 
-/// environment variables first to ensure database configuration 
-/// can read from .env, then starts the console kernel with 
-/// registered commands.
+/// Initializes and runs the console application. Loads
+/// environment variables first to ensure database configuration
+/// can read from .env, registers database drivers, then starts
+/// the console kernel with registered commands.
 ///
 pub fn init() -> Nil {
   bootstrap.load_env_variables()

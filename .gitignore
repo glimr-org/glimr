@@ -3,6 +3,4 @@
 /build
 erl_crash.dump
 .env
-todo.md
 Makefile
-src/data/sqlite/

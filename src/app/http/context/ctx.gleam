@@ -1,12 +1,10 @@
-// TODO: module docs
-
 import app/http/context/ctx_app.{type AppContext}
-import glimr/http/context/ctx_db.{type DbContext}
+import glimr_sqlite/http/context/ctx.{type SqliteContext}
 
 pub type Context {
   Context(
     app: AppContext,
-    db: DbContext,
-    // Add third-party contexts here...
+    db: SqliteContext,
+    // Add other third-party contexts here...
   )
 }

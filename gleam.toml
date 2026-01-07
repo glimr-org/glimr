@@ -14,7 +14,8 @@ version = "1.0.0"
 
 [dependencies]
 gleam_stdlib = ">= 0.44.0 and < 2.0.0"
-glimr = { path = "../framework" }
+glimr = ">= 0.5.0 and < 0.6.0"
+glimr_sqlite = ">= 0.1.0 and < 0.2.0"
 wisp = ">= 2.1.0 and < 3.0.0"
 lustre = ">= 5.4.0 and < 6.0.0"
 mist = ">= 5.0.3 and < 6.0.0"
@@ -24,6 +25,7 @@ dot_env = ">= 1.2.0 and < 2.0.0"
 gleam_json = ">= 3.1.0 and < 4.0.0"
 shellout = ">= 1.6.0 and < 2.0.0"
 gleam_time = ">= 1.6.0 and < 2.0.0"
+sqlight = ">= 1.0.3 and < 2.0.0"
 
 [dev-dependencies]
 gleeunit = ">= 1.0.0 and < 2.0.0"

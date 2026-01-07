@@ -6,9 +6,9 @@
 
 import dot_env
 
-/// Loads environment variables from the .env file into the 
-/// process environment. This must be called before any 
-/// configuration that depends on environment variables like 
+/// Loads environment variables from the .env file into the
+/// process environment. This must be called before any
+/// configuration that depends on environment variables like
 /// the database configuration can be accessed.
 ///
 pub fn load_env_variables() -> Nil {

@@ -12,10 +12,10 @@ import bootstrap/bootstrap
 import glimr/routing/router
 import wisp.{type Request, type Response}
 
-/// Initializes the HTTP application and returns the request 
-/// handler. Configures the Wisp logger, loads environment 
-/// variables, and sets up the router with your context, routes, 
-/// and middleware kernel.
+/// Initializes the HTTP application and returns the request
+/// handler. Configures the Wisp logger, loads environment
+/// variables, registers database drivers, and sets up the router
+/// with your context, routes, and middleware kernel.
 ///
 pub fn init() -> fn(Request) -> Response {
   wisp.configure_logger()
