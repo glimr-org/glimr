@@ -17,9 +17,9 @@ packages = [
   { name = "gleam_time", version = "1.6.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "gleam_time", source = "hex", outer_checksum = "0DF3834D20193F0A38D0EB21F0A78D48F2EC276C285969131B86DF8D4EF9E762" },
   { name = "gleam_yielder", version = "1.1.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "gleam_yielder", source = "hex", outer_checksum = "8E4E4ECFA7982859F430C57F549200C7749823C106759F4A19A78AEA6687717A" },
   { name = "gleeunit", version = "1.9.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "gleeunit", source = "hex", outer_checksum = "DA9553CE58B67924B3C631F96FE3370C49EB6D6DC6B384EC4862CC4AAA718F3C" },
-  { name = "glimr", version = "0.5.4", build_tools = ["gleam"], requirements = ["dot_env", "gleam_erlang", "gleam_http", "gleam_json", "gleam_otp", "gleam_stdlib", "gleam_time", "lustre", "shellout", "simplifile", "wisp"], otp_app = "glimr", source = "hex", outer_checksum = "F9BBAAE5EE25C0F1AB7A7BE4FB0E3323F0BB85153C034480C882A45CDB453CB7" },
-  { name = "glimr_sqlite", version = "0.2.0", build_tools = ["gleam"], requirements = ["gleam_erlang", "gleam_otp", "gleam_stdlib", "glimr", "simplifile", "sqlight"], otp_app = "glimr_sqlite", source = "hex", outer_checksum = "3F17A8CEB0435D60F3B0987EA17487D30E44BABF537CD5B50741CAC84A16C9FC" },
-  { name = "glisten", version = "8.0.1", build_tools = ["gleam"], requirements = ["gleam_erlang", "gleam_otp", "gleam_stdlib", "logging", "telemetry"], otp_app = "glisten", source = "hex", outer_checksum = "534BB27C71FB9E506345A767C0D76B17A9E9199934340C975DC003C710E3692D" },
+  { name = "glimr", version = "0.6.1", build_tools = ["gleam"], requirements = ["dot_env", "gleam_erlang", "gleam_http", "gleam_json", "gleam_otp", "gleam_stdlib", "gleam_time", "lustre", "shellout", "simplifile", "wisp"], otp_app = "glimr", source = "hex", outer_checksum = "7EE755D3CB99F119F4089F4FF483E741DAFF4AAC50E91000CDAC59EF768C25CA" },
+  { name = "glimr_sqlite", version = "0.2.1", build_tools = ["gleam"], requirements = ["gleam_erlang", "gleam_otp", "gleam_stdlib", "glimr", "simplifile", "sqlight"], otp_app = "glimr_sqlite", source = "hex", outer_checksum = "01FC2AF0F4B74CFD13A6C11DFBB306111C7FEE9AE7D2ACCF4097A599D88B16AD" },
+  { name = "glisten", version = "8.0.2", build_tools = ["gleam"], requirements = ["gleam_erlang", "gleam_otp", "gleam_stdlib", "logging", "telemetry"], otp_app = "glisten", source = "hex", outer_checksum = "CCFA4201B6D2077A68DA6E44200F1DDF9DFBC8EF5444A9E2A35B21C7BF801C1F" },
   { name = "gramps", version = "6.0.0", build_tools = ["gleam"], requirements = ["gleam_crypto", "gleam_erlang", "gleam_http", "gleam_stdlib"], otp_app = "gramps", source = "hex", outer_checksum = "8B7195978FBFD30B43DF791A8A272041B81E45D245314D7A41FC57237AA882A0" },
   { name = "houdini", version = "1.2.0", build_tools = ["gleam"], requirements = [], otp_app = "houdini", source = "hex", outer_checksum = "5DB1053F1AF828049C2B206D4403C18970ABEF5C18671CA3C2D2ED0DD64F6385" },
   { name = "hpack_erl", version = "0.3.0", build_tools = ["rebar3"], requirements = [], otp_app = "hpack", source = "hex", outer_checksum = "D6137D7079169D8C485C6962DFE261AF5B9EF60FBC557344511C1E65E3D95FB0" },
@@ -43,7 +43,7 @@ gleam_json = { version = ">= 3.1.0 and < 4.0.0" }
 gleam_stdlib = { version = ">= 0.44.0 and < 0.67.1" }
 gleam_time = { version = ">= 1.6.0 and < 2.0.0" }
 gleeunit = { version = ">= 1.0.0 and < 2.0.0" }
-glimr = { version = ">= 0.5.0 and < 0.6.0" }
+glimr = { version = ">= 0.6.0 and < 0.7.0" }
 glimr_sqlite = { version = ">= 0.2.0 and < 0.3.0" }
 lustre = { version = ">= 5.4.0 and < 6.0.0" }
 mist = { version = ">= 5.0.3 and < 6.0.0" }

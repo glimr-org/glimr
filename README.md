@@ -818,7 +818,6 @@ pub fn connections() -> List(Connection) {
   [
     driver.SqliteConnection(
       name: "main",
-      is_default: True,
       database: env.get_string("DB_DATABASE"),
       pool_size: env.get_int("DB_POOL_SIZE"),
     ),
@@ -933,7 +932,6 @@ pub fn connections() -> List(Connection) {
   [
     driver.PostgresConnection(
       name: "main",
-      is_default: True,
       host: env.get_string("DB_HOST"),
       port: env.get_int("DB_PORT"),
       database: env.get_string("DB_DATABASE"),
@@ -967,7 +965,6 @@ pub fn connections() -> List(Connection) {
   [
     driver.PostgresUriConnection(
       name: "main",
-      is_default: True,
       url: env.get_string("DB_URL"),
       pool_size: env.get_int("DB_POOL_SIZE"),
     )
@@ -1057,13 +1054,11 @@ pub fn connections() -> List(Connection) {
   [
     driver.PostgresUriConnection(
       name: "main",
-      is_default: True,
       url: env.get_string("DB_URL"),
       pool_size: env.get_int("DB_POOL_SIZE"),
     ),
     driver.SqliteConnection(
       name: "analytics",
-      is_default: True,
       database: env.get_string("DB_ANALYTICS_DATABASE"),
       pool_size: env.get_int("DB_ANALYTICS_POOL_SIZE"),
     )
@@ -1110,25 +1105,6 @@ ctx.db.main
 ctx.db.analytics 
 ```
 
-You might have noticed the `is_default` property on the driver connections above. You can only have **1 default connection per driver** (sqlite/postgres). This sets a default fallback when using console commands that require a database connection, allowing you to do this:
-
-```bash
-# Uses the is_default connection for sqlite
-./glimr sqlite:gen 
-
-# Uses the "analytics" connection for sqlite
-./glimr sqlite:gen --database=analytics 
-
-# Uses the is_default connection for postgres
-./glimr postgres:gen 
-
-# Uses the "cache" connection for postgres
-./glimr postgres:gen --database=cache 
-
-```
-
-To learn more about console commands with database access, (see [Console Commands](#commands-with-database-access) section).
-
 ### Migrations
 
 Glimr provides automatic migration generation by comparing your schema definitions against a stored snapshot. It detects changes and generates driver-specific SQL for PostgreSQL or SQLite.
@@ -1142,6 +1118,8 @@ Start by creating a data model using the following command:
 ```
 
 This creates a `user/` folder inside your default database directory `src/data/main/models/`. The folder contains `user_schema.gleam` for defining your table schema, and a `queries/` folder with pre-generated CRUD queries that get compiled into fully typed gleam code. You can add custom queries to this folder as well (see [Queries](#queries) section).
+
+The `make:model` command defines your default connection as the very first one in your `connections()` list in `config_db.gleam`. All other commands that accept the `--database` flag define it as the first of it's driver type instead.
 
 If you need to specify the connection folder you can always pass a `--database` flag:
 
@@ -1231,6 +1209,8 @@ Run the migration generator for the specific driver:
 # for a named postgres connection
 ./glimr postgres:gen --database=analytics
 ```
+
+> **Note:** The default connection for a specific driver is the very first one of its kind defined in your `connections()` list in `config_db.gleam`.
 
 This will:
 1. Scan schema files in `src/data/{connection_name}/models/`
@@ -1373,6 +1353,8 @@ After adding or modifying queries, run:
 # for a named postgres connection
 ./glimr postgres:gen --database=analytics
 ```
+
+
 
 This generates a fully-typed repository file with Gleam functions for each query. Every query generates **two functions**:
 
@@ -1695,7 +1677,7 @@ The framework automatically:
 
 ### Multiple Database Connections
 
-All commands that need a database connection automatically accept a `--database` option for you to pass the name of the database connection you need access to specified in your `config_db.gleam`. If a database connection isn't specified, it will to default to the connection that has `is_default` set to `True` in your `config_db.gleam`.
+All commands that need a database connection automatically accept a `--database` option for you to pass the name of the database connection you need access to specified in your `config_db.gleam`. If a database connection isn't specified, it will to default to the first connection of it's type in the `connections()` list in `config_db.gleam`.
 
 ```bash
 # Uses the default connection
