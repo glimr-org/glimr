@@ -1,10 +1,7 @@
-//// ------------------------------------------------------------
 //// Application Config
-//// ------------------------------------------------------------
 //// 
 //// Application configuration module for managing environment 
 //// settings loaded from the .env file or hardcoded here
-////
 
 import dot_env/env
 import gleam/int

@@ -16,7 +16,7 @@ pub fn show(_req: Request, _ctx: Context) -> Response {
 
 pub fn store(req: Request, ctx: Context) -> Response {
   use validated <- contact_store_request.validate(req, ctx)
-  let assert Ok(submission) = create_submission.run(ctx.db.pool, validated)
+  let assert Ok(submission) = create_submission.run(ctx.db.main, validated)
 
   redirect.build()
   |> redirect.to("/contact/success")

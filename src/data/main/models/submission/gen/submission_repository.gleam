@@ -39,6 +39,89 @@ pub fn decoder() -> decode.Decoder(Submission) {
   ))
 }
 
+pub type CreateRow {
+  CreateRow(
+    id: Int,
+    name: String,
+    email: String,
+    avatar: String,
+    message: String,
+    created_at: Int,
+    updated_at: Int,
+  )
+}
+
+fn create_row_decoder() -> decode.Decoder(CreateRow) {
+  use id <- decode.field(0, decode.int)
+  use name <- decode.field(1, decode.string)
+  use email <- decode.field(2, decode.string)
+  use avatar <- decode.field(3, decode.string)
+  use message <- decode.field(4, decode.string)
+  use created_at <- decode.field(5, decode.int)
+  use updated_at <- decode.field(6, decode.int)
+  decode.success(CreateRow(
+    id,
+    name,
+    email,
+    avatar,
+    message,
+    created_at,
+    updated_at,
+  ))
+}
+
+pub fn create(
+  pool pool: pool.Pool,
+  name name: String,
+  email email: String,
+  avatar avatar: String,
+  message message: String,
+  created_at created_at: Int,
+  updated_at updated_at: Int,
+) -> Result(CreateRow, pool.DbError) {
+  use connection <- pool.get_connection(pool)
+  create_wc(
+    connection: connection,
+    name: name,
+    email: email,
+    avatar: avatar,
+    message: message,
+    created_at: created_at,
+    updated_at: updated_at,
+  )
+}
+
+pub fn create_wc(
+  connection connection: pool.Connection,
+  name name: String,
+  email email: String,
+  avatar avatar: String,
+  message message: String,
+  created_at created_at: Int,
+  updated_at updated_at: Int,
+) -> Result(CreateRow, pool.DbError) {
+  case
+    sqlight.query(
+      "INSERT INTO submissions (name, email, avatar, message, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
+      connection,
+      [
+        sqlight.text(name),
+        sqlight.text(email),
+        sqlight.text(avatar),
+        sqlight.text(message),
+        sqlight.int(created_at),
+        sqlight.int(updated_at),
+      ],
+      create_row_decoder(),
+    )
+  {
+    Ok([row]) -> Ok(row)
+    Ok([]) -> Error(NotFound)
+    Ok(_) -> Error(QueryError("Expected single row"))
+    Error(_) -> Error(QueryError("Query failed"))
+  }
+}
+
 pub fn delete(pool pool: pool.Pool, id id: Int) -> Result(Int, pool.DbError) {
   use connection <- pool.get_connection(pool)
   delete_wc(connection: connection, id: id)
@@ -164,89 +247,6 @@ pub fn list_all_wc(
     )
   {
     Ok(rows) -> Ok(rows)
-    Error(_) -> Error(QueryError("Query failed"))
-  }
-}
-
-pub type CreateRow {
-  CreateRow(
-    id: Int,
-    name: String,
-    email: String,
-    avatar: String,
-    message: String,
-    created_at: Int,
-    updated_at: Int,
-  )
-}
-
-fn create_row_decoder() -> decode.Decoder(CreateRow) {
-  use id <- decode.field(0, decode.int)
-  use name <- decode.field(1, decode.string)
-  use email <- decode.field(2, decode.string)
-  use avatar <- decode.field(3, decode.string)
-  use message <- decode.field(4, decode.string)
-  use created_at <- decode.field(5, decode.int)
-  use updated_at <- decode.field(6, decode.int)
-  decode.success(CreateRow(
-    id,
-    name,
-    email,
-    avatar,
-    message,
-    created_at,
-    updated_at,
-  ))
-}
-
-pub fn create(
-  pool pool: pool.Pool,
-  name name: String,
-  email email: String,
-  avatar avatar: String,
-  message message: String,
-  created_at created_at: Int,
-  updated_at updated_at: Int,
-) -> Result(CreateRow, pool.DbError) {
-  use connection <- pool.get_connection(pool)
-  create_wc(
-    connection: connection,
-    name: name,
-    email: email,
-    avatar: avatar,
-    message: message,
-    created_at: created_at,
-    updated_at: updated_at,
-  )
-}
-
-pub fn create_wc(
-  connection connection: pool.Connection,
-  name name: String,
-  email email: String,
-  avatar avatar: String,
-  message message: String,
-  created_at created_at: Int,
-  updated_at updated_at: Int,
-) -> Result(CreateRow, pool.DbError) {
-  case
-    sqlight.query(
-      "INSERT INTO submissions (name, email, avatar, message, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
-      connection,
-      [
-        sqlight.text(name),
-        sqlight.text(email),
-        sqlight.text(avatar),
-        sqlight.text(message),
-        sqlight.int(created_at),
-        sqlight.int(updated_at),
-      ],
-      create_row_decoder(),
-    )
-  {
-    Ok([row]) -> Ok(row)
-    Ok([]) -> Error(NotFound)
-    Ok(_) -> Error(QueryError("Expected single row"))
     Error(_) -> Error(QueryError("Query failed"))
   }
 }

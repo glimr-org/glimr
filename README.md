@@ -808,7 +808,7 @@ Install the `glimr_sqlite` and `sqlight` packages:
 gleam add sqlight glimr_sqlite
 ```
 
-In your `config_db.gleam` file, set up an sqlite connection, and add it to the `connections()` list:
+In your `config_db.gleam` file, set up an sqlite connection in the `connections()` list:
 
 ```gleam
 import dot_env/env
@@ -816,18 +816,14 @@ import glimr/db/driver.{type Connection}
 
 pub fn connections() -> List(Connection) {
   [
-    main(), // <--- add your connection to this list
+    driver.SqliteConnection(
+      name: "main",
+      is_default: True,
+      database: env.get_string("DB_DATABASE"),
+      pool_size: env.get_int("DB_POOL_SIZE"),
+    ),
     // ...
   ]
-}
-
-fn main() -> Connection { // <-- set up your connection
-  driver.SqliteConnection(
-    name: "main",
-    is_default: True,
-    database: env.get_string("DB_DATABASE"),
-    pool_size: env.get_int("DB_POOL_SIZE"),
-  )
 }
 ```
 
@@ -844,41 +840,35 @@ DB_DATABASE=src/data/main/data.db
 DB_POOL_SIZE=15
 ```
 
-Set up your connection in your `ctx.gleam` and `ctx_provider.gleam` files:
+Set up your connection in your `ctx_db.gleam`:
 
 ```gleam
-// app/http/context/ctx.gleam
-import app/http/context/ctx_app.{type AppContext}
-import glimr_sqlite/http/context/ctx.{type SqliteContext}
+import config/config_db
+import glimr_sqlite/db/pool.{type Pool as SqlitePool}
+import glimr_sqlite/sqlite
 
-pub type Context {
-  Context(
-    app: AppContext,
-    db: SqliteContext, // <--- Add the sqlite context
+pub type DbContext {
+  DbContext(
+    main: SqlitePool, // <--- Add to context
     // ...
   )
 }
 
-// app/providers/ctx_provider.gleam
-import app/http/context/ctx.{type Context}
-import app/http/context/ctx_app
-import config/config_db
-import glimr_sqlite/http/context/ctx as ctx_sqlite
+pub fn load() -> DbContext {
+  let connections = config_db.connections()
 
-pub fn register() -> Context {
-  ctx.Context(
-    app: ctx_app.load(),
-    db: ctx_sqlite.load(config_db.connections()), // <--- Load the sqlite context
+  DbContext(
+    main: sqlite.start("main", connections), // <--- Load by name
     // ...
   )
 }
 ```
 
-And then finally, use in your controllers:
+And then finally, use `ctx.db.main` in your controllers:
 
 ```gleam
 pub fn show(_req: Request, ctx: Context) -> Response {
-  case user_repository.find(ctx.db.pool, user_id) {
+  case user_repository.find(ctx.db.main, user_id) {
     Ok(user) -> {
       view.build()
       |> view.html("users/show.html")
@@ -901,7 +891,7 @@ import glimr_sqlite/console/kernel as kernel_sqlite
 pub fn register() -> List(Command) {
   list.flatten([
     kernel.commands(),
-    kernel_sqlite.commands(), // <--- Register the sqlite commands
+    kernel_sqlite.commands(), // <--- Register sqlite commands
     // ...
   ])
 }
@@ -933,7 +923,7 @@ Install the `glimr_postgres` and `pog` packages:
 gleam add pog glimr_postgres
 ```
 
-In your `config_db.gleam` file, set up a postgres connection, and add it to the `connections()` list:
+In your `config_db.gleam` file, set up a postgres connection in the `connections()` list:
 
 ```gleam
 import dot_env/env
@@ -941,22 +931,18 @@ import glimr/db/driver.{type Connection}
 
 pub fn connections() -> List(Connection) {
   [
-    main(), // <--- add your connection to this list
+    driver.PostgresConnection(
+      name: "main",
+      is_default: True,
+      host: env.get_string("DB_HOST"),
+      port: env.get_int("DB_PORT"),
+      database: env.get_string("DB_DATABASE"),
+      username: env.get_string("DB_USERNAME"),
+      password: env.get_string("DB_PASSWORD"),
+      pool_size: env.get_int("DB_POOL_SIZE"),
+    )
     // ...
   ]
-}
-
-fn main() -> Connection { // <-- set up your connection
-  driver.PostgresConnection(
-    name: "main",
-    is_default: True,
-    host: env.get_string("DB_HOST"),
-    port: env.get_int("DB_PORT"),
-    database: env.get_string("DB_DATABASE"),
-    username: env.get_string("DB_USERNAME"),
-    password: env.get_string("DB_PASSWORD"),
-    pool_size: env.get_int("DB_POOL_SIZE"),
-  )
 }
 ```
 
@@ -979,18 +965,14 @@ import glimr/db/driver.{type Connection}
 
 pub fn connections() -> List(Connection) {
   [
-    main(), // <--- add your connection to this list
+    driver.PostgresUriConnection(
+      name: "main",
+      is_default: True,
+      url: env.get_string("DB_URL"),
+      pool_size: env.get_int("DB_POOL_SIZE"),
+    )
     // ...
   ]
-}
-
-fn main() -> Connection {
-  driver.PostgresUriConnection( // <--- set up your connection
-    name: "main",
-    is_default: True,
-    url: env.get_string("DB_URL"),
-    pool_size: env.get_int("DB_POOL_SIZE"),
-  )
 }
 ```
 
@@ -1006,41 +988,35 @@ Run the following command to create a directory for your new database connection
 ```bash
 ./glimr setup:database main
 ```
-Set up your connection in your `ctx.gleam` and `ctx_provider.gleam` files:
+Set up your connection in your `ctx_db.gleam`:
 
 ```gleam
-// app/http/context/ctx.gleam
-import app/http/context/ctx_app.{type AppContext}
-import glimr_postgres/http/context/ctx.{type PostgresContext}
+import config/config_db
+import glimr_postgres/db/pool.{type Pool as PostgresPool}
+import glimr_postgres/postgres
 
-pub type Context {
-  Context(
-    app: AppContext,
-    db: PostgresContext, // <--- Add the postgres context
+pub type DbContext {
+  DbContext(
+    main: PostgresPool, // <--- Add to context
     // ...
   )
 }
 
-// app/providers/ctx_provider.gleam
-import app/http/context/ctx.{type Context}
-import app/http/context/ctx_app
-import config/config_db
-import glimr_postgres/http/context/ctx as ctx_postgres
+pub fn load() -> DbContext {
+  let connections = config_db.connections()
 
-pub fn register() -> Context {
-  ctx.Context(
-    app: ctx_app.load(),
-    db: ctx_postgres.load(config_db.connections()), // <--- Load the postgres context
+  DbContext(
+    main: postgres.start("main", connections), // <--- Load by name
     // ...
   )
 }
 ```
 
-And then finally, use in your controllers:
+And then finally, use `ctx.db.main` in your controllers:
 
 ```gleam
 pub fn show(_req: Request, ctx: Context) -> Response {
-  case user_repository.find(ctx.db.pool, user_id) {
+  case user_repository.find(ctx.db.main, user_id) {
     Ok(user) -> {
       view.build()
       |> view.html("users/show.html")
@@ -1063,7 +1039,7 @@ import glimr_postgres/console/kernel as kernel_postgres
 pub fn register() -> List(Command) {
   list.flatten([
     kernel.commands(),
-    kernel_postgres.commands(), // <--- Register the postgres commands
+    kernel_postgres.commands(), // <--- Register postgres commands
     // ...
   ])
 }
@@ -1071,7 +1047,7 @@ pub fn register() -> List(Command) {
 
 ### Multiple Database Connections
 
-Glimr supports multiple database connections at the same time, even with different drivers! Just set them up and add them to the `connections()` list in `config_db.gleam`:
+Glimr supports multiple database connections at the same time, even with different drivers! Just add them to the `connections()` list in `config_db.gleam`:
 
 ```gleam
 import dot_env/env
@@ -1079,135 +1055,79 @@ import glimr/db/driver.{type Connection}
 
 pub fn connections() -> List(Connection) {
   [
-    main(),
-    analytics(),
+    driver.PostgresUriConnection(
+      name: "main",
+      is_default: True,
+      url: env.get_string("DB_URL"),
+      pool_size: env.get_int("DB_POOL_SIZE"),
+    ),
+    driver.SqliteConnection(
+      name: "analytics",
+      is_default: True,
+      database: env.get_string("DB_ANALYTICS_DATABASE"),
+      pool_size: env.get_int("DB_ANALYTICS_POOL_SIZE"),
+    )
     // ...
   ]
 }
-
-fn main() -> Connection {
-  driver.PostgresUriConnection(
-    name: "main",
-    is_default: True,
-    url: env.get_string("DB_URL"),
-    pool_size: env.get_int("DB_POOL_SIZE"),
-  )
-}
-
-fn analytics() -> Connection {
-  driver.PostgresUriConnection(
-    name: "analytics",
-    is_default: False,
-    url: env.get_string("DB_ANALYTICS_URL"),
-    pool_size: env.get_int("DB_ANALYTICS_POOL_SIZE"),
-  )
-}
 ```
 
-You might have noticed the `is_default` property on the driver connections above. You can only have **1 default connection per driver** (sqlite/postgres). You can access your default connection pool through the context like so:
+You can then set up these connections in your `ctx_db.gleam`:
 
 ```gleam
-// gives you your default connection pool
-ctx.db.pool 
-```
-If you have a connection that has `is_default` set to false, you can access it via it's name from the context like so:
-
-```gleam
-// gives you the connection pool for the connection named "analytics".
-ctx.db.pool_for("analytics") 
-```
-
-If you need multiple database connections of different types, set it up in `config_db.gleam` like so:
-
-```gleam
-import dot_env/env
-import glimr/db/driver.{type Connection}
-
-pub fn connections() -> List(Connection) {
-  [
-    main(),
-    analytics(),
-    cache(),
-    // ...
-  ]
-}
-
-fn main() -> Connection {
-  driver.PostgresUriConnection(
-    name: "main",
-    is_default: True,
-    url: env.get_string("DB_URL"),
-    pool_size: env.get_int("DB_POOL_SIZE"),
-  )
-}
-
-fn analytics() -> Connection {
-  driver.PostgresUriConnection(
-    name: "analytics",
-    is_default: False,
-    url: env.get_string("DB_ANALYTICS_URL"),
-    pool_size: env.get_int("DB_ANALYTICS_POOL_SIZE"),
-  )
-}
-
-fn cache() -> Connection { // <--- sqlite connection...
-  driver.SqliteConnection(
-    name: "cache",
-    is_default: True,
-    database: env.get_string("DB_CACHE_DATABASE"),
-    pool_size: env.get_int("DB_CACHE_POOL_SIZE"),
-  )
-}
-```
-
-Set one context entry per driver instead of 1 `db` entry:
-
-```gleam
-// app/http/context/ctx.gleam
-import app/http/context/ctx_app.{type AppContext}
-import glimr_postgres/http/context/ctx.{type PostgresContext}
-import glimr_sqlite/http/context/ctx.{type SqliteContext}
-
-pub type Context {
-  Context(
-    // ...
-    pg: PostgresContext,
-    sqlite: SqliteContext,
-    // ...
-  )
-}
-
-// app/providers/ctx_provider.gleam
-import app/http/context/ctx.{type Context}
-import app/http/context/ctx_app
 import config/config_db
-import glimr_postgres/http/context/ctx as ctx_postgres
-import glimr_sqlite/http/context/ctx as ctx_sqlite
+import glimr_sqlite/db/pool.{type Pool as SqlitePool}
+import glimr_postgres/db/pool.{type Pool as PostgresPool}
+import glimr_sqlite/sqlite
+import glimr_postgres/postgres
 
-pub fn register() -> Context {
-  ctx.Context(
+pub type DbContext {
+  DbContext(
+    main: PostgresPool,
+    analytics: SqlitePool,
     // ...
-    pg: ctx_postgres.load(config_db.connections()),
-    sqlite: ctx_sqlite.load(config_db.connections()),
+  )
+}
+
+pub fn load() -> DbContext {
+  let connections = config_db.connections()
+
+  DbContext(
+    main: postgres.start("main", connections),
+    analytics: sqlite.start("analytics", connections),
     // ...
   )
 }
 ```
 
-Now you can access the connection pools from your different databases:
+And use them like so:
 
 ```gleam
-// gives you your default connection pool for the driver
-ctx.pg.pool 
-ctx.sqlite.pool 
-```
-If you have a connection that has `is_default` set to false, you can access it via it's name from the context like so:
+// your "main" postgres connection pool
+ctx.db.main 
 
-```gleam
-// gives you the connection pool for a connection by it's name
-ctx.pg.pool_for("anotha_one") 
-ctx.sqlite.pool_for("something_else") 
+// your "analytics" sqlite connection pool
+ctx.db.analytics 
 ```
+
+You might have noticed the `is_default` property on the driver connections above. You can only have **1 default connection per driver** (sqlite/postgres). This sets a default fallback when using console commands that require a database connection, allowing you to do this:
+
+```bash
+# Uses the is_default connection for sqlite
+./glimr sqlite:gen 
+
+# Uses the "analytics" connection for sqlite
+./glimr sqlite:gen --database=analytics 
+
+# Uses the is_default connection for postgres
+./glimr postgres:gen 
+
+# Uses the "cache" connection for postgres
+./glimr postgres:gen --database=cache 
+
+```
+
+To learn more about console commands with database access, (see [Console Commands](#commands-with-database-access) section).
 
 ### Migrations
 

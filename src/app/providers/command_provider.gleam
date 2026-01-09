@@ -7,6 +7,6 @@ pub fn register() -> List(Command) {
   list.flatten([
     kernel.commands(),
     kernel_sqlite.commands(),
-    // Add other third-party commands here...
+    // ...
   ])
 }

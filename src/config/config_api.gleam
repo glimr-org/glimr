@@ -1,11 +1,8 @@
-//// ------------------------------------------------------------
 //// API Configuration
-//// ------------------------------------------------------------
 ////
 //// Configuration module for managing API-specific application 
 //// settings. Controls route prefixes and behavior for API 
 //// endpoints in the app.
-////
 
 /// ------------------------------------------------------------
 /// API Route Prefix
