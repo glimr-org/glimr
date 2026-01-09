@@ -22,6 +22,7 @@ If you'd like to stay updated on Glimr's development, Follow [@migueljarias](htt
   - [Setup](#setup)
       - [SQLite](#sqlite)
       - [PostgreSQL](#postgresql)
+      - [Multiple Databases](#multiple-database-connections)
   - [Migrations](#migrations)
   - [Queries](#queries)
 - [Console Commands](#console-commands)
@@ -1677,7 +1678,9 @@ The framework automatically:
 
 ### Multiple Database Connections
 
-All commands that need a database connection automatically accept a `--database` option for you to pass the name of the database connection you need access to specified in your `config_db.gleam`. If a database connection isn't specified, it will to default to the first connection of it's type in the `connections()` list in `config_db.gleam`.
+All commands that need a database connection automatically accept a `--database` option for you to pass the name of the database connection you need access to specified in your `config_db.gleam`. 
+
+If a database connection isn't specified, it will to default to the first connection of it's type in the `connections()` list in `config_db.gleam`.
 
 ```bash
 # Uses the default connection
