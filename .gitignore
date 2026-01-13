@@ -1,6 +1,15 @@
+.DS_Store
 *.beam
 *.ez
 /build
 erl_crash.dump
 .env
-Makefile
+.env
+.env.backup
+.env.production
+/.fleet
+/.idea
+/.nova
+/.vscode
+/.zed
+Thumbs.db

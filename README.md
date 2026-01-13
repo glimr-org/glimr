@@ -25,6 +25,14 @@ If you'd like to stay updated on Glimr's development, Follow [@migueljarias](htt
       - [Multiple Databases](#multiple-database-connections)
   - [Migrations](#migrations)
   - [Queries](#queries)
+- [Cache](#cache)
+  - [Store Types](#store-types)
+  - [File Store](#file-store)
+  - [Redis Store](#redis-store)
+  - [Database Store (SQLite)](#database-store-sqlite)
+  - [Database Store (PostgreSQL)](#database-store-postgresql)
+  - [Using the Cache](#using-the-cache)
+  - [Cache Operations](#cache-operations)
 - [Console Commands](#console-commands)
   - [Creating Commands](#creating-commands)
   - [Commands with Database Access](#commands-with-database-access)
@@ -60,6 +68,7 @@ Glimr is a fully featured web framework built for Gleam. It provides a delightfu
 - **SQL Queries** - Write raw SQL files with full editor LSP support, compiled to typed Gleam functions
 - **Connection Pooling** - Efficient database connection management for PostgreSQL and SQLite
 - **Transaction Support** - Atomic operations with automatic retry on deadlock
+- **Caching** - Unified caching API with file, SQLite, and PostgreSQL backends
 - **Console Commands** - CLI task runner with database access support and argument parsing
 
 ## Installation
@@ -1525,6 +1534,582 @@ pub fn store(req: Request, ctx: Context) -> Response {
 ```
 
 > **Note:** Use the `_wc` (with connection) variants of repository functions inside transactions. These accept a `Connection` instead of a `Pool`, allowing all operations to share the same transactional connection.
+
+## Cache
+
+Glimr provides a unified caching API with support for multiple storage backends: file-based caching, SQLite database, and PostgreSQL database. Each driver implements the same operations, making it easy to swap backends without changing application code.
+
+### Store Types
+
+Cache stores are configured in `src/config/config_cache.gleam`. There are three store types:
+
+```gleam
+import glimr/cache/driver.{type CacheStore, FileStore, DatabaseStore, RedisStore}
+
+pub fn stores() -> List(CacheStore) {
+  [
+    // File-based cache - stores entries as files on disk
+    FileStore(
+      name: "file", 
+      path: "priv/storage/framework/cache/data",
+    ),
+
+    // Database-backed cache - uses your existing database
+    DatabaseStore(
+      name: "database",
+      database: "main",
+      table: "cache",
+    ),
+
+    // Redis cache (coming soon)
+    RedisStore(
+      name: "redis",
+      url: env.get_string("REDIS_URL"),
+      pool_size: env.get_int("REDIS_POOL_SIZE"),
+    ),
+  ]
+}
+```
+
+### File Store
+
+The file store caches values as files on disk using a SHA256 hash-based directory structure for efficient filesystem access.
+
+**Setup:**
+
+The file cache is included with the core `glimr` package. No additional dependencies needed.
+
+Set up the store in `config_cache.gleam`:
+
+```gleam
+import glimr/cache/driver.{FileStore}
+
+pub fn stores() -> List(CacheStore) {
+  [
+    FileStore(
+      name: "file", 
+      path: "priv/storage/framework/cache/data",
+    ),
+    // ...
+  ]
+}
+```
+
+Set up the cache in your `ctx_cache.gleam`:
+
+```gleam
+import config/config_cache
+import glimr/cache/file
+import glimr/cache/file/pool.{type Pool as FilePool}
+
+pub type CacheContext {
+  CacheContext(
+    file: FilePool,
+  )
+}
+
+pub fn load() -> CacheContext {
+  let stores = config_cache.stores()
+
+  CacheContext(
+    file: file.start("file", stores),
+  )
+}
+```
+
+Register the cache context in your `ctx_provider.gleam`:
+
+```gleam
+import app/http/context/ctx.{type Context}
+import app/http/context/ctx_cache
+
+pub fn register() -> Context {
+  ctx.Context(
+    // ...
+    cache: ctx_cache.load(),
+  )
+}
+```
+
+Use it in your controllers:
+
+```gleam
+import glimr/cache/file/cache
+
+pub fn show(req: Request, ctx: Context) -> Response {
+  case cache.get(ctx.cache.file, "user:123") {
+    Ok(value) -> // use cached value
+    Error(cache.NotFound) -> // cache miss, compute value
+    Error(_) -> wisp.internal_server_error()
+  }
+}
+```
+
+### Redis Store
+
+The Redis store provides high-performance caching using Redis as the backend. It also works with Redis-compatible alternatives like Valkey, KeyDB, and Dragonfly.
+
+**Setup:**
+
+Install `glimr_redis`:
+
+```bash
+gleam add glimr_redis
+```
+
+Set up the store in `config_cache.gleam`:
+
+```gleam
+import dot_env/env
+import glimr/cache/driver.{RedisStore}
+
+pub fn stores() -> List(CacheStore) {
+  [
+    RedisStore(
+      name: "redis",
+      url: env.get_string("REDIS_URL"),
+      pool_size: env.get_int("REDIS_POOL_SIZE"),
+    ),
+    // ...
+  ]
+}
+```
+
+Update your `.env` variables:
+
+```env
+REDIS_URL=redis://localhost:6379
+REDIS_POOL_SIZE=10
+```
+
+Set up the cache in your `ctx_cache.gleam`:
+
+```gleam
+import config/config_cache
+import glimr_redis/redis
+import glimr_redis/cache/pool.{type Pool as RedisCachePool}
+
+pub type CacheContext {
+  CacheContext(
+    redis: RedisCachePool,
+  )
+}
+
+pub fn load() -> CacheContext {
+  let stores = config_cache.stores()
+
+  CacheContext(
+    redis: redis.start("redis", stores),
+  )
+}
+```
+
+Register the cache context in your `ctx_provider.gleam`:
+
+```gleam
+import app/http/context/ctx.{type Context}
+import app/http/context/ctx_cache
+
+pub fn register() -> Context {
+  ctx.Context(
+    // ...
+    cache: ctx_cache.load(),
+  )
+}
+```
+
+Use it in your controllers:
+
+```gleam
+import glimr_redis/cache/cache as redis_cache
+
+pub fn show(req: Request, ctx: Context) -> Response {
+  case redis_cache.get(ctx.cache.redis, "user:123") {
+    Ok(value) -> // use cached value
+    Error(cache.NotFound) -> // cache miss
+    Error(_) -> wisp.internal_server_error()
+  }
+}
+```
+
+**Redis-Compatible Alternatives:**
+
+The Redis driver works with any Redis-compatible server:
+
+- **[Valkey](https://valkey.io/)** - Open-source Redis fork maintained by the Linux Foundation
+- **[KeyDB](https://docs.keydb.dev/)** - Multi-threaded Redis fork with higher throughput
+- **[Dragonfly](https://dragonflydb.io/)** - Modern in-memory datastore with Redis compatibility
+
+Just point `REDIS_URL` to your alternative server:
+
+```env
+# Valkey
+REDIS_URL=redis://localhost:6379
+
+# KeyDB
+REDIS_URL=redis://localhost:6379
+
+# Dragonfly
+REDIS_URL=redis://localhost:6379
+```
+
+### Database Store (SQLite)
+
+The SQLite database store caches values in a database table, ideal when you already have SQLite set up and want to avoid additional infrastructure.
+
+**Setup:**
+
+Ensure you have `glimr_sqlite` and `sqlight` installed:
+
+```bash
+gleam add glimr_sqlite sqlight
+```
+
+Set up the store in `config_cache.gleam`:
+
+```gleam
+import glimr/cache/driver.{DatabaseStore}
+
+pub fn stores() -> List(CacheStore) {
+  [
+    DatabaseStore(
+      name: "database",
+      database: "main",
+      table: "cache"
+    ),
+    // ...
+  ]
+}
+```
+
+Set up the cache in your `ctx_cache.gleam`:
+
+```gleam
+import config/config_cache
+import glimr_sqlite/sqlite
+import glimr_sqlite/cache/pool.{type Pool as SqliteCachePool}
+import glimr_sqlite/db/pool.{type Pool as SqlitePool}
+
+pub type CacheContext {
+  CacheContext(
+    database: SqliteCachePool,
+  )
+}
+
+pub fn load(db_pool: SqlitePool) -> CacheContext {
+  let stores = config_cache.stores()
+
+  CacheContext(
+    database: sqlite.start_cache(db_pool, "database", stores)
+    // ...
+  )
+}
+```
+
+Register the cache context in your `ctx_provider.gleam`:
+
+```gleam
+import app/http/context/ctx.{type Context}
+import app/http/context/ctx_cache
+import app/http/context/ctx_db
+
+pub fn register() -> Context {
+  let db = ctx_db.load()
+
+  ctx.Context(
+    // ...
+    db: db,
+    cache: ctx_cache.load(db.main),
+  )
+}
+```
+
+Generate and run the cache table migration:
+
+```bash
+# Generate the migration
+./glimr sqlite:cache-table
+
+# Or generate and run migrations in one step
+./glimr sqlite:cache-table --migrate
+```
+
+Use it in your controllers:
+
+```gleam
+import glimr_sqlite/cache/cache
+
+pub fn show(req: Request, ctx: Context) -> Response {
+  case cache.get(ctx.cache.database, "user:123") {
+    Ok(value) -> // use cached value
+    Error(cache.NotFound) -> // cache miss
+    Error(_) -> wisp.internal_server_error()
+  }
+}
+```
+
+### Database Store (PostgreSQL)
+
+The PostgreSQL database store caches values in a database table, ideal when you already have PostgreSQL set up.
+
+**Setup:**
+
+Ensure you have `glimr_postgres` and `pog` installed:
+
+```bash
+gleam add glimr_postgres pog
+```
+
+Set up the store in `config_cache.gleam`:
+
+```gleam
+import glimr/cache/driver.{DatabaseStore}
+
+pub fn stores() -> List(CacheStore) {
+  [
+    DatabaseStore(
+      name: "database",
+      database: "main",
+      table: "cache",
+    ),
+    // ...
+  ]
+}
+```
+
+Set up the cache in your `ctx_cache.gleam`:
+
+```gleam
+import config/config_cache
+import glimr_postgres/postgres
+import glimr_postgres/cache/pool.{type Pool as PostgresCachePool}
+import glimr_postgres/db/pool.{type Pool as PostgresPool}
+
+pub type CacheContext {
+  CacheContext(
+    database: PostgresCachePool,
+  )
+}
+
+pub fn load(db_pool: PostgresPool) -> CacheContext {
+  let stores = config_cache.stores()
+
+  CacheContext(
+    database: postgres.start_cache(db_pool, "database", stores)
+  )
+}
+```
+
+Register the cache context in your `ctx_provider.gleam`:
+
+```gleam
+import app/http/context/ctx.{type Context}
+import app/http/context/ctx_cache
+import app/http/context/ctx_db
+
+pub fn register() -> Context {
+  let db = ctx_db.load()
+
+  ctx.Context(
+    // ...
+    db: db,
+    cache: ctx_cache.load(db.main),
+  )
+}
+```
+
+Generate and run the cache table migration:
+
+```bash
+# Generate the migration
+./glimr postgres:cache-table
+
+# Or generate and run migrations in one step
+./glimr postgres:cache-table --migrate
+```
+
+Use it in your controllers:
+
+```gleam
+import glimr_postgres/cache/cache as pg_cache
+
+pub fn show(req: Request, ctx: Context) -> Response {
+  case pg_cache.get(ctx.cache.database, "user:123") {
+    Ok(value) -> // use cached value
+    Error(cache.NotFound) -> // cache miss
+    Error(_) -> wisp.internal_server_error()
+  }
+}
+```
+
+### Using the Cache
+
+All cache drivers share the same API. Import the appropriate cache module for your backend:
+
+```gleam
+// For file cache
+import glimr/cache/file/cache
+
+// For SQLite cache
+import glimr_sqlite/cache/cache
+
+// For PostgreSQL cache
+import glimr_postgres/cache/cache
+
+// For Redis cache
+import glimr_redis/cache/cache
+```
+
+### Cache Operations
+
+All cache drivers support these operations:
+
+| Operation | Description |
+|-----------|-------------|
+| `get(pool, key)` | Get a value by key |
+| `put(pool, key, value, ttl)` | Store with TTL (seconds) |
+| `put_forever(pool, key, value)` | Store without expiration |
+| `forget(pool, key)` | Delete a key |
+| `has(pool, key)` | Check if key exists |
+| `flush(pool)` | Delete all cached values |
+| `pull(pool, key)` | Get and delete in one operation |
+| `increment(pool, key, by)` | Increment numeric value |
+| `decrement(pool, key, by)` | Decrement numeric value |
+| `remember(pool, key, ttl, fn)` | Get or compute and cache |
+| `remember_forever(pool, key, fn)` | Get or compute (no expiration) |
+
+**JSON operations** (for structured data):
+
+| Operation | Description |
+|-----------|-------------|
+| `get_json(pool, key, decoder)` | Get and decode JSON |
+| `put_json(pool, key, value, encoder, ttl)` | Encode and store JSON |
+| `put_json_forever(pool, key, value, encoder)` | Store JSON permanently |
+| `remember_json(pool, key, ttl, decoder, fn, encoder)` | Get or compute JSON |
+
+**Database-only operations:**
+
+| Operation | Description |
+|-----------|-------------|
+| `create_table(pool)` | Create the cache table |
+| `cleanup_expired(pool)` | Remove expired entries |
+
+#### Basic Usage
+
+```gleam
+import glimr/cache/file/cache
+
+// Store a value for 1 hour (3600 seconds)
+cache.put(ctx.cache.file, "user:123:name", "Alice", 3600)
+
+// Get a value
+case cache.get(ctx.cache.file, "user:123:name") {
+  Ok(name) -> io.println("Hello, " <> name)
+  Error(cache.NotFound) -> io.println("Cache miss")
+  Error(_) -> io.println("Cache error")
+}
+
+// Store permanently
+cache.put_forever(ctx.cache.file, "config:site_name", "My App")
+
+// Delete a value
+cache.forget(ctx.cache.file, "user:123:name")
+
+// Check existence
+case cache.has(ctx.cache.file, "user:123:name") {
+  True -> io.println("Cached")
+  False -> io.println("Not cached")
+}
+```
+
+#### Remember Pattern
+
+The `remember` function is the most common cache pattern - get from cache, or compute and store if missing:
+
+```gleam
+// Get user from cache, or fetch from database and cache for 1 hour
+let user = cache.remember(ctx.cache.file, "user:" <> id, 3600, fn() {
+  user_repository.find(ctx.db.pool, id)
+  |> result.map(fn(u) { u.name })
+})
+```
+
+#### JSON Caching
+
+For structured data, use the JSON operations:
+
+```gleam
+import gleam/dynamic/decode
+import gleam/json
+
+// Define encoder and decoder
+let encoder = fn(user: User) {
+  json.object([
+    #("id", json.int(user.id)),
+    #("name", json.string(user.name)),
+  ])
+}
+
+let decoder = {
+  use id <- decode.field("id", decode.int)
+  use name <- decode.field("name", decode.string)
+  decode.success(User(id: id, name: name))
+}
+
+// Store JSON
+cache.put_json(ctx.cache.file, "user:123", user, encoder, 3600)
+
+// Retrieve JSON
+case cache.get_json(ctx.cache.file, "user:123", decoder) {
+  Ok(user) -> // use user
+  Error(cache.NotFound) -> // cache miss
+  Error(cache.SerializationError(_)) -> // invalid JSON
+  Error(_) -> // other error
+}
+
+// Remember pattern with JSON
+let user = cache.remember_json(
+  ctx.cache.file,
+  "user:" <> id,
+  3600,
+  decoder,
+  fn() { user_repository.find(ctx.db.pool, id) },
+  encoder,
+)
+```
+
+#### Increment/Decrement
+
+For counters and rate limiting:
+
+```gleam
+// Increment page view counter
+let assert Ok(views) = cache.increment(ctx.cache.file, "page:home:views", 1)
+
+// Rate limiting example
+let rate_key = "rate:" <> user_id <> ":" <> current_minute()
+case cache.increment(ctx.cache.file, rate_key, 1) {
+  Ok(count) if count > 100 -> Error("Rate limit exceeded")
+  Ok(_) -> Ok("Allowed")
+  Error(_) -> Ok("Allowed") // fail open
+}
+```
+
+#### Cache Errors
+
+All cache operations return `Result(value, CacheError)`:
+
+```gleam
+import glimr/cache/cache.{type CacheError, NotFound, SerializationError, ConnectionError, ComputeError}
+
+case cache.get(pool, key) {
+  Ok(value) -> // success
+  Error(NotFound) -> // key doesn't exist or expired
+  Error(SerializationError(msg)) -> // JSON decode/encode failed
+  Error(ConnectionError(msg)) -> // storage backend error
+  Error(ComputeError(msg)) -> // remember callback failed
+}
+```
 
 ## Console Commands
 

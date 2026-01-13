@@ -6,6 +6,7 @@
 
 import app/providers/command_provider
 import bootstrap/bootstrap
+import config/config_cache
 import config/config_db
 import glimr/console/kernel as glimr_kernel
 
@@ -20,5 +21,6 @@ pub fn init() -> Nil {
   glimr_kernel.run(
     commands: command_provider.register(),
     db_connections: config_db.connections(),
+    cache_stores: config_cache.stores(),
   )
 }
