@@ -22,8 +22,8 @@ If you'd like to stay updated on Glimr's development, Follow [@migueljarias](htt
     - [API Routes](#api-routes)
     - [Custom Route Files](#custom-route-files)
     - [Direct Pattern Matching](#direct-pattern-matching)
-- [Controllers](#creating-controllers)
-- [Actions](#creating-actions)
+- [Controllers](#controllers)
+- [Actions](#actions)
 - [Middleware](#middleware)
 - [Form Validation](#form-validation)
 - [Views & Responses](#views--responses)
@@ -581,7 +581,7 @@ pub fn register() -> List(RouteGroup(Context)) {
 Create controllers in `src/app/http/controllers/`. Use the following command:
 
 ```bash
-./glimr make:controller user
+./glimr make:controller user_controller
 ```
 
 This creates `user_controller.gleam`. In it you can add your custom logic.
@@ -611,7 +611,7 @@ pub fn store(req: Request, ctx: Context) -> Response {
 You can also create resource controllers that come set up with index,show,edit,update,delete functions with this command:
 
 ```bash
-./glimr make:controller --resource
+./glimr make:controller user_controller --resource
 ```
 
 ## Actions
@@ -727,7 +727,7 @@ pub fn handle(req: Request, ctx: Context, next: Next(Context)) -> Response {
 }
 ```
 
-### Applying Middleware to Route Definition
+### Applying Middleware to a Route
 
 Apply middleware to a single route using the pipe operator:
 
@@ -745,7 +745,7 @@ pub fn routes() {
 
 ### Applying Middleware to Route Handlers
 
-You can instead apply middleware to specific controller functions if you prefer:
+You can also apply middleware to specific controller functions rather than on a route if you prefer:
 
 ```gleam
 import app/http/middleware/logger.{handle as logger}
