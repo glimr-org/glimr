@@ -10,9 +10,18 @@ If you'd like to stay updated on Glimr's development, Follow [@migueljarias](htt
 - [Features](#features)
 - [Installation](#installation)
 - [Project Structure](#project-structure)
-- [Routes](#defining-routes)
+- [Build Tools](#build-tools)
+    - [Build Command](#build-command)
+    - [Run Command](#run-command)
+    - [Hooks](#hooks)
+    - [Glimr Commands](#glimr-commands)
+- [Routes](#routes)
+    - [Defining Routes](#defining-routes)
+    - [Route Helpers](#route-helpers)
     - [Route Groups](#route-groups)
     - [API Routes](#api-routes)
+    - [Custom Route Files](#custom-route-files)
+    - [Direct Pattern Matching](#direct-pattern-matching)
 - [Controllers](#creating-controllers)
 - [Actions](#creating-actions)
 - [Middleware](#middleware)
@@ -52,7 +61,7 @@ Glimr is a fully featured web framework built for Gleam. It provides a delightfu
 
 ## Features
 
-- **Type Safe Routing** - Pattern matching routes with compile-time type safety
+- **Type Safe Routing** - Generated pattern matching routes with compile-time type safety
 - **View Builder** - Fluent API for rendering HTML and Lustre components with layouts
 - **Template Engine** - Simple `{{ variable }}` syntax for dynamic content
 - **Redirect Builder** - Clean redirect API with flash message support
@@ -107,6 +116,10 @@ APP_KEY=your-secret-key-here
 ### Run the Application
 
 ```sh
+# Run with hot reloading and hook support
+./glimr run
+
+# Or run with standard gleam command
 gleam run
 ```
 
@@ -141,9 +154,366 @@ Visit `http://localhost:8000` in your browser.
 └── gleam.toml                        # Project configuration
 ```
 
+## Build Tools
+
+Gleam provides `gleam build` and `gleam run` out of the box, which you can of course use. Glimr however provides similar commands that also support hooks to customize the build process. Also, `gleam run` currently does not support hot reloading, while `./glimr run` does.
+
+### Build Command
+
+```bash
+./glimr build
+```
+
+This runs any configured `pre-build` hooks, compiles your Gleam code, then runs `post-build` hooks.
+
+### Run Command
+
+```bash
+./glimr run
+```
+
+This runs `pre-run` hooks, starts your application, and watches for file changes. When `.gleam` files change, it automatically reloads your application.
+
+### Hooks
+
+Hooks let you run shell commands or Glimr console commands at specific points during the build/run lifecycle. Configure them in `glimr.toml` at your project root.
+
+Your `glimr.toml` file comes with some preconfigured behavior by default, feel free to extend or remove an pre-existing behavior altogether.
+
+#### Available Hooks
+
+| Hook | When it runs |
+|------|--------------|
+| `hooks.build.pre` | Before `./glimr build` compiles |
+| `hooks.build.post` | After `./glimr build` completes |
+| `hooks.run.pre` | Once when `./glimr run` starts |
+| `hooks.run.reload.default` | When any `.gleam` file changes (before restart) |
+| `hooks.run.reload.routes-modified` | When route or controller files change |
+
+### Glimr Commands
+
+Hooks that start with `./glimr` run in-process for better performance:
+
+```toml
+[hooks.build]
+pre = [
+  "./glimr route:compile",  # runs in-process (fast)
+  "npm run css:build",      # runs as shell command
+]
+```
+
 ## Routes
 
-Routes are defined using pattern matching in `src/routes/web.gleam`, `src/routes/api.gleam`, or any other route file you register:
+Glimr brings the speed and performance of a pattern matched routing system, with an ergonomic api. This allows us to do a bit more, with less verbosity. 404s and 405s are also automatically taken care of.
+
+### Defining Routes
+
+Routes are defined in `src/routes/web.gleam`, `src/routes/api.gleam`, or any other route file you register, with a very familiar api:
+
+```gleam
+// src/routes/web.gleam
+import app/http/controllers/contact_controller
+import app/http/controllers/contact_success_controller
+import glimr/routing/route
+
+pub fn routes() {
+  [
+    route.redirect("/", "/contact"),
+
+    route.prefix("/contact", [
+      route.get("/", contact_controller.show),
+      route.post("/", contact_controller.store),
+      route.get("/success", contact_success_controller.show),
+    ]),
+  ]
+}
+```
+
+Route files are automatically compiled into regular pattern matching when using any of these commands:
+
+```bash
+# When building for production, routes are automatically compiled.
+# This is set up in the glimr.toml file via hooks.
+./glimr build
+
+# When any .gleam file inside the routes/ or controllers/ folders are
+# modified, they're automatically compiled when ./glimr run is 
+# running. This is set up in the glimr.toml file via hooks.
+./glimr run
+
+# If you ever need to compile routes manually, you can just call 
+# this internal Glimr command.
+./glimr route:compile
+```
+
+This then compiles to `src/routes/compiled/*`: 
+
+```gleam
+// src/routes/compiled/web.gleam
+import app/http/controllers/contact_controller
+import app/http/controllers/contact_success_controller
+import gleam/http.{Get, Post}
+import wisp
+
+pub fn routes(path, method, req, ctx) {
+  case path {
+    [] -> wisp.redirect("/contact")
+
+    ["contact"] ->
+      case method {
+        Get -> contact_controller.show(req, ctx)
+        Post -> contact_controller.store(req, ctx)
+        _ -> wisp.method_not_allowed([Get, Post])
+      }
+
+    ["contact", "success"] ->
+      case method {
+        Get -> contact_success_controller.show(req, ctx)
+        _ -> wisp.method_not_allowed([Get])
+      }
+
+    _ -> wisp.not_found()
+  }
+}
+```
+
+You also still benefit from full type-safety in your controllers when it comes to parameters using the `{id}` syntax:
+
+```gleam
+// src/routes/web.gleam
+pub fn routes() {
+  [
+    // ...
+
+    route.get("/contact/{submission}", submission_controller.show),
+  ]
+}
+```
+
+This gets compiled to:
+
+```gleam
+pub fn routes(path, method, req, ctx) {
+  case path {
+    // ...
+
+    ["contact", submission] ->
+      case method {
+        Get -> submission_controller.show(req, ctx, submission)
+        _ -> wisp.method_not_allowed([Get])
+      }
+
+    _ -> wisp.not_found()
+  }
+}
+```
+
+Allowing you to easily use the `submission` value in your controller:
+
+```gleam
+// src/app/http/controllers/submission_controller.gleam
+pub fn show(_req: Request, _ctx: Context, submission: String) {
+  // ...
+}
+```
+
+#### Route Handler Setup
+
+Controller functions must accept parameters in a specific order, 1: `req`, 2: `ctx`, and finally your request parameters in the order they're defined in your route:
+
+```gleam
+route.get("/posts/{post}/comments/{comment}", comment_controller.show)
+
+// comment_controller.show function must have these params in this order:
+pub fn show(req: Request, ctx: Context, post: String, comment: String) -> wisp.Response {
+  // ...
+}
+```
+
+Route handlers must also always return a `wisp.Response`.
+
+### Route Helpers
+
+Convenient helpers that would be tedious to write by hand, all compiled to efficient pattern matching.
+
+#### Redirects
+
+Use `route.redirect` for temporary redirects (302) and `route.redirect_permanent` for permanent redirects (301):
+
+```gleam
+pub fn routes() {
+  [
+    route.redirect("/old-page", "/new-page"),
+    route.redirect_permanent("/legacy", "/modern"),
+  ]
+}
+```
+
+#### Route Middleware
+
+Apply middleware to a single route using the pipe operator:
+
+```gleam
+import app/http/middleware/auth
+import glimr/routing/route
+
+pub fn routes() {
+  [
+    route.get("/dashboard", dashboard_controller.show)
+      |> route.middleware([auth.handle]),
+  ]
+}
+```
+
+### Route Groups
+
+Organize your routes in ways that would not be possible via pattern matching:
+
+#### Group Middleware
+
+Apply middleware to multiple routes at once with `route.group_middleware`:
+
+```gleam
+import app/http/middleware/auth
+import glimr/routing/route
+
+pub fn routes() {
+  [
+    route.group_middleware([auth.handle], [
+      route.get("/dashboard", dashboard_controller.show),
+      route.get("/settings", settings_controller.show),
+      route.post("/settings", settings_controller.update),
+    ]),
+  ]
+}
+```
+
+#### Group Prefix
+
+Use `route.prefix` to group routes under a common path prefix:
+
+```gleam
+import glimr/routing/route
+
+pub fn routes() {
+  [
+    route.prefix("/users", [
+      route.get("/", user_controller.index),
+      route.post("/", user_controller.store),
+      route.get("/{id}", user_controller.show),
+      route.put("/{id}", user_controller.update),
+      route.delete("/{id}", user_controller.destroy),
+    ]),
+  ]
+}
+```
+
+This compiles to `/users`, `/users/{id}`, etc. You can also nest prefixes:
+
+```gleam
+pub fn routes() {
+  [
+    route.prefix("/api", [
+      route.prefix("/v1", [
+        route.get("/users", api_controller.users),
+      ]),
+    ]),
+  ]
+}
+```
+
+This compiles to `/api/v1/users`.
+
+#### Nesting Route Groups
+
+You can nest `route.prefix` and `route.group_middleware` for organized, protected route groups:
+
+```gleam
+import app/http/middleware/auth
+import app/http/middleware/admin
+import glimr/routing/route
+
+pub fn routes() {
+  [
+    route.prefix("/admin", [
+      route.group_middleware([auth.handle, admin.handle], [
+        route.get("/dashboard", admin_controller.dashboard),
+        route.get("/users", admin_controller.users),
+        route.get("/users/{id}", admin_controller.show),
+      ]),
+    ]),
+  ]
+}
+```
+
+This compiles to routes like `/admin/dashboard`, `/admin/users`, and `/admin/users/{id}`, all protected by the `auth` and `admin` middleware.
+
+#### Adding Route-Specific Middleware to Groups
+
+You can add additional middleware to specific routes within a group:
+
+```gleam
+pub fn routes() {
+  [
+    route.group_middleware([auth.handle], [
+      route.get("/dashboard", dashboard_controller.show),
+      route.get("/reports", reports_controller.show)
+        |> route.middleware([logging.handle]),  // adds logging on top of auth
+    ]),
+  ]
+}
+```
+
+The `/reports` route will have both `auth.handle` and `logging.handle` applied, while `/dashboard` only has `auth.handle`.
+
+### API Routes
+
+API routes are automatically:
+- Prefixed with `/api` (configured in `route_provider.gleam`)
+- Return JSON error responses (404, 405, 500, etc.) instead of HTML
+
+### Custom Route Files
+
+You can create a route file in `src/routes/` like `admin.gleam` for example. Any route file in that folder automatically gets compiled when the route compiler runs.
+
+Compile your new route file with `./glimr route:compile`, and then register it in `src/app/providers/route_provider.gleam`. It needs a prefix and a middleware stack:
+
+```gleam
+import glimr/routing/router.{type RouteGroup}
+import glimr/http/kernel
+import routes/compiled/api
+import routes/compiled/web
+import routes/compiled/admin
+
+pub fn register() -> List(RouteGroup(Context)) {
+  [
+    // API routes - prefixed with "/api"
+    router.RouteGroup(
+      prefix: "/api",
+      middleware_group: kernel.Api,  // JSON error responses
+      routes: api.routes,
+    ),
+
+    // Admin routes - prefixed with "/admin"
+    router.RouteGroup(
+      prefix: "/admin",
+      middleware_group: kernel.Custom("admin"),  // Custom middleware stack
+      routes: admin.routes,
+    ),
+
+    // Default web routes - no prefix (must be last)
+    router.RouteGroup(
+      prefix: "",
+      middleware_group: kernel.Web,  // HTML error responses
+      routes: web.routes,
+    ),
+  ]
+}
+```
+
+### Direct Pattern Matching
+
+If you'd prefer to use regular pattern matching directly, that's entirely possible. Simply update `glimr.toml` so that `./glimr route:compile` doesn't run for any of the defined hooks. Delete the compiled folder in `src/routes`, and edit the `web.gleam` and `api.gleam` files to use pattern matching:
 
 ```gleam
 import gleam/http.{Get, Post}
@@ -172,7 +542,7 @@ pub fn routes(path, method, req, ctx) {
     // equivalent to "/users/:user_id"
     ["users", user_id] ->
       case method {
-        Get -> user_controller.show(user_id, req, ctx)
+        Get -> user_controller.show(req, ctx, user_id)
         _ -> wisp.method_not_allowed([Get])
       }
 
@@ -181,82 +551,30 @@ pub fn routes(path, method, req, ctx) {
 }
 ```
 
-**How it works:**
-- Pattern match on `path` (list of URL segments)
-- Pattern match on `method` to handle different HTTP methods
-- Type-safe parameter extraction from the path
-
-### Route Redirects
-
-Define redirects directly in your routes:
-
-```gleam
-["old-contact"] -> wisp.redirect("/contact")
-```
-
-### Route Parameters
-
-Parameters are extracted directly via pattern matching:
-
-```gleam
-// Route definition with type-safe parameter extraction
-pub fn routes(path, method, req, ctx) {
-  case path {
-    ["posts", slug, "comments", comment_id] ->
-      case method {
-        Get -> comment_controller.show(req, ctx, slug, comment_id)
-        ...
-      }
-
-    ...
-  }
-}
-
-// Controller receives parameters directly
-pub fn show(req: Request, ctx: Context, slug: String, comment_id: String) -> Response {
-  // Use slug and comment_id...
-}
-```
-
-### Route Groups
-
-Route groups are defined in `src/app/providers/route_provider.gleam`. Each group has a prefix and middleware stack:
+Lastly, update the registry in `route_provider.gleam` to use `routes/web` and `routes/api` instead of `routes/compiled/web`, etc.
 
 ```gleam
 import glimr/routing/router.{type RouteGroup}
 import glimr/http/kernel
+import routes/api
+import routes/web
 
 pub fn register() -> List(RouteGroup(Context)) {
   [
-    // API routes - prefixed with "/api"
     router.RouteGroup(
       prefix: "/api",
-      middleware_group: kernel.Api,  // JSON error responses
+      middleware_group: kernel.Api,
       routes: api.routes,
     ),
 
-    // Admin routes - prefixed with "/admin"
-    router.RouteGroup(
-      prefix: "/admin",
-      middleware_group: kernel.Custom("admin"),  // Custom middleware stack
-      routes: admin.routes,
-    ),
-
-    // Default web routes - no prefix (must be last)
     router.RouteGroup(
       prefix: "",
-      middleware_group: kernel.Web,  // HTML error responses
+      middleware_group: kernel.Web,
       routes: web.routes,
     ),
   ]
 }
 ```
-
-### API Routes
-
-API routes are automatically:
-- Prefixed with `/api` (configured in `route_provider.gleam`)
-- Return JSON error responses (404, 405, 500, etc.) instead of HTML
 
 ## Controllers
 
@@ -409,9 +727,25 @@ pub fn handle(req: Request, ctx: Context, next: Next(Context)) -> Response {
 }
 ```
 
+### Applying Middleware to Route Definition
+
+Apply middleware to a single route using the pipe operator:
+
+```gleam
+import app/http/middleware/auth
+import glimr/routing/route
+
+pub fn routes() {
+  [
+    route.get("/dashboard", dashboard_controller.show)
+      |> route.middleware([auth.handle]),
+  ]
+}
+```
+
 ### Applying Middleware to Route Handlers
 
-Apply middleware to specific controller functions:
+You can instead apply middleware to specific controller functions if you prefer:
 
 ```gleam
 import app/http/middleware/logger.{handle as logger}
@@ -484,6 +818,118 @@ This allows middleware to:
 - Log response times
 - Compress response bodies
 - Transform response data
+
+### Middleware Groups
+
+Middleware groups let you define different middleware stacks for different types of routes. By default, Glimr provides `Web` and `Api` groups, but you can create your own.
+
+#### Built-in Groups
+
+Groups are defined in `src/app/http/kernel.gleam`:
+
+```gleam
+import glimr/http/kernel.{type MiddlewareGroup}
+
+pub fn handle(
+  req: Request,
+  ctx: Context,
+  middleware_group: MiddlewareGroup,
+  router: fn(Request) -> Response,
+) -> Response {
+  let req = wisp.method_override(req)
+
+  case middleware_group {
+    kernel.Api -> api_middleware(req, ctx, router)
+    _ -> web_middleware(req, ctx, router)
+  }
+}
+
+fn web_middleware(req, _ctx, router) -> Response {
+  use <- wisp.serve_static(req, under: "/static", from: static_dir)
+  use <- wisp.log_request(req)
+  use <- error_handler.default_html_responses()  // HTML error pages
+  use <- wisp.rescue_crashes
+  use req <- wisp.handle_head(req)
+
+  router(req)
+}
+
+fn api_middleware(req, _ctx, router) -> Response {
+  use <- wisp.log_request(req)
+  use <- error_handler.default_json_responses()  // JSON error responses
+  use <- wisp.rescue_crashes
+  use req <- wisp.handle_head(req)
+
+  router(req)
+}
+```
+
+The key difference: `Web` serves static files and returns HTML error pages, while `Api` returns JSON error responses.
+
+#### Assigning Groups to Routes
+
+In `src/app/providers/route_provider.gleam`, assign middleware groups to route groups:
+
+```gleam
+import glimr/http/kernel
+import glimr/routing/router.{type RouteGroup}
+
+pub fn register() -> List(RouteGroup(Context)) {
+  [
+    router.RouteGroup(
+      prefix: "/api",
+      middleware_group: kernel.Api,
+      routes: api.routes,
+    ),
+
+    router.RouteGroup(
+      prefix: "",
+      middleware_group: kernel.Web,
+      routes: web.routes,
+    ),
+  ]
+}
+```
+
+#### Creating Custom Groups
+
+Create a custom middleware group using `kernel.Custom("name")`:
+
+```gleam
+// src/app/providers/route_provider.gleam
+router.RouteGroup(
+  prefix: "/admin",
+  middleware_group: kernel.Custom("admin"),
+  routes: admin.routes,
+),
+```
+
+Then handle it in `src/app/http/kernel.gleam`:
+
+```gleam
+pub fn handle(req, ctx, middleware_group, router) -> Response {
+  let req = wisp.method_override(req)
+
+  case middleware_group {
+    kernel.Api -> api_middleware(req, ctx, router)
+    kernel.Custom("admin") -> admin_middleware(req, ctx, router)
+    _ -> web_middleware(req, ctx, router)
+  }
+}
+
+fn admin_middleware(req, ctx, router) -> Response {
+  use <- wisp.log_request(req)
+  use <- error_handler.default_html_responses()
+  use <- wisp.rescue_crashes
+  use req <- wisp.handle_head(req)
+  // Add admin-specific middleware here, like auth checks
+  use req, ctx <- admin_auth.require(req, ctx)
+
+  router(req)
+}
+```
+
+This lets you define completely different middleware stacks for different parts of your application.
 
 ## Form Validation
 
@@ -1561,7 +2007,7 @@ pub fn stores() -> List(CacheStore) {
       table: "cache",
     ),
 
-    // Redis cache (coming soon)
+    // Redis cache - stores entries in Redis or compatible kv store
     RedisStore(
       name: "redis",
       url: env.get_string("REDIS_URL"),

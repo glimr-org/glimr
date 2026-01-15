@@ -4,6 +4,16 @@ import glimr/http/error_handler
 import glimr/http/kernel.{type MiddlewareGroup}
 import wisp.{type Request, type Response}
 
+// HTTP Kernel
+//
+// https://github.com/glimr-org/glimr?tab=readme-ov-file#middleware-groups
+//
+// This is the kernel for our HTTP layer. This is where we set
+// up our middleware groups which contain multiple middleware
+// that we want assigned to a specific route group. By default
+// you have "web" and "api" groups, but can define your own
+// in the handle() method.
+
 pub fn handle(
   req: Request,
   ctx: Context,
@@ -13,13 +23,13 @@ pub fn handle(
   let req = wisp.method_override(req)
 
   case middleware_group {
-    kernel.Api -> handle_api_middleware(req, ctx, router)
+    kernel.Api -> api_middleware(req, ctx, router)
     // Add custom middleware groups here...
-    _ -> handle_web_middleware(req, ctx, router)
+    _ -> web_middleware(req, ctx, router)
   }
 }
 
-fn handle_web_middleware(
+fn web_middleware(
   req: Request,
   _ctx: Context,
   router: fn(Request) -> Response,
@@ -37,7 +47,7 @@ fn handle_web_middleware(
   router(req)
 }
 
-fn handle_api_middleware(
+fn api_middleware(
   req: Request,
   _ctx: Context,
   router: fn(Request) -> Response,

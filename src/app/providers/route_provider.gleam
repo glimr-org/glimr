@@ -2,8 +2,8 @@ import app/http/context/ctx.{type Context}
 import config/config_api
 import glimr/http/kernel
 import glimr/routing/router.{type RouteGroup}
-import routes/api
-import routes/web
+import routes/compiled/api
+import routes/compiled/web
 
 pub fn register() -> List(RouteGroup(Context)) {
   [

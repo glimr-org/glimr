@@ -1,0 +1,38 @@
+# Define any shell commands or Glimr commands you want to run
+# when running the `./glimr build` command
+[hooks.build]
+
+  # Before `./glimr build` logic is ran
+  pre = [
+    "./glimr route:compile",
+    "gleam format",
+  ]
+
+  # After `./glimr build` logic is ran
+  post = []
+
+# Define any shell commands or Glimr commands you want to run
+# when running the `./glimr run` command
+[hooks.run]
+
+  # Before `./glimr run` logic is ran
+  pre = [
+    "./glimr route:compile",
+    "gleam format",
+  ]
+
+# Define any shell commands or Glimr commands you want to run
+# during the `./glimr run` command, when an app reload needs 
+# to occur. (When .gleam files are modified)
+[hooks.run.reload]
+
+  # When any .gleam file is modified
+  default = [
+    "gleam format",
+  ]
+
+  # When any .gleam file within the src/routes/ directory or the 
+  # src/app/http/controllers directory is modified
+  routes-modified = [
+    "./glimr route:compile",
+  ]
