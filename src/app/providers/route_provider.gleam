@@ -1,9 +1,9 @@
 import app/http/context/ctx.{type Context}
+import bootstrap/gen/routes/api
+import bootstrap/gen/routes/web
 import config/config_api
 import glimr/http/kernel
 import glimr/routing/router.{type RouteGroup}
-import routes/compiled/api
-import routes/compiled/web
 
 pub fn register() -> List(RouteGroup(Context)) {
   [

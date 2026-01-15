@@ -246,10 +246,10 @@ Route files are automatically compiled into regular pattern matching when using 
 ./glimr route:compile
 ```
 
-This then compiles to `src/routes/compiled/*`: 
+This then compiles to `src/bootstrap/gen/routes/*`: 
 
 ```gleam
-// src/routes/compiled/web.gleam
+// src/bootstrap/gen/routes/web.gleam
 import app/http/controllers/contact_controller
 import app/http/controllers/contact_success_controller
 import gleam/http.{Get, Post}
@@ -481,9 +481,9 @@ Compile your new route file with `./glimr route:compile`, and then register it i
 ```gleam
 import glimr/routing/router.{type RouteGroup}
 import glimr/http/kernel
-import routes/compiled/api
-import routes/compiled/web
-import routes/compiled/admin
+import bootstrap/gen/routes/api
+import bootstrap/gen/routes/web
+import bootstrap/gen/routes/admin
 
 pub fn register() -> List(RouteGroup(Context)) {
   [
@@ -513,7 +513,7 @@ pub fn register() -> List(RouteGroup(Context)) {
 
 ### Direct Pattern Matching
 
-If you'd prefer to use regular pattern matching directly, that's entirely possible. Simply update `glimr.toml` so that `./glimr route:compile` doesn't run for any of the defined hooks. Delete the compiled folder in `src/routes`, and edit the `web.gleam` and `api.gleam` files to use pattern matching:
+If you'd prefer to use regular pattern matching directly, that's entirely possible. Simply update `glimr.toml` so that `./glimr route:compile` doesn't run for any of the defined hooks. Delete the routes folder in `bootstrap/gen`, and edit the `web.gleam` and `api.gleam` files to use pattern matching:
 
 ```gleam
 import gleam/http.{Get, Post}
@@ -551,7 +551,7 @@ pub fn routes(path, method, req, ctx) {
 }
 ```
 
-Lastly, update the registry in `route_provider.gleam` to use `routes/web` and `routes/api` instead of `routes/compiled/web`, etc.
+Lastly, update the registry in `route_provider.gleam` to use `routes/web` and `routes/api` instead of `bootstrap/gen/routes/web`, etc.
 
 ```gleam
 import glimr/routing/router.{type RouteGroup}
