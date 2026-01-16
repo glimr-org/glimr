@@ -15,7 +15,7 @@ version = "1.0.0"
 [dependencies]
 gleam_stdlib = ">= 0.44.0 and < 0.67.1"
 glimr = ">= 0.7.0 and < 0.8.0"
-glimr_sqlite = ">= 0.3.0 and < 0.4.0"
+glimr_postgres = ">= 0.3.0 and < 0.4.0"
 wisp = ">= 2.1.0 and < 3.0.0"
 lustre = ">= 5.4.0 and < 6.0.0"
 mist = ">= 5.0.3 and < 6.0.0"

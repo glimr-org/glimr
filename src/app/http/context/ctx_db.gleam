@@ -1,6 +1,6 @@
 import config/config_db
-import glimr_sqlite/db/pool.{type Pool as SqlitePool}
-import glimr_sqlite/sqlite
+import glimr_postgres/db/pool.{type Pool as PostgresPool}
+import glimr_postgres/postgres
 
 // Database Context
 //
@@ -12,7 +12,7 @@ import glimr_sqlite/sqlite
 
 pub type DbContext {
   DbContext(
-    main: SqlitePool,
+    main: PostgresPool,
     // ...
   )
 }
@@ -20,5 +20,5 @@ pub type DbContext {
 pub fn load() -> DbContext {
   let connections = config_db.connections()
 
-  DbContext(main: sqlite.start("main", connections))
+  DbContext(main: postgres.start("main", connections))
 }
