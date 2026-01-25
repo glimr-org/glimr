@@ -2,37 +2,51 @@
 # when running the `./glimr build` command
 [hooks.build]
 
-  # Before `./glimr build` logic is ran
+  # Before `gleam build` logic is ran
   pre = [
     "./glimr route:compile",
-    "gleam format",
+    "./glimr loom:compile",
   ]
 
-  # After `./glimr build` logic is ran
-  post = []
+  # After `gleam build` logic is ran
+  post = [
+    "gleam format",
+  ]
 
 # Define any shell commands or Glimr commands you want to run
 # when running the `./glimr run` command
 [hooks.run]
 
-  # Before `./glimr run` logic is ran
+  # Before `gleam run` logic is ran
   pre = [
     "./glimr route:compile",
-    "gleam format",
+    "./glimr loom:compile",
   ]
 
 # Define any shell commands or Glimr commands you want to run
 # during the `./glimr run` command, when an app reload needs 
-# to occur. (When .gleam files are modified)
+# to occur. (When .gleam or .loom.html files are modified)
 [hooks.run.reload]
 
-  # When any .gleam file is modified
-  default = [
-    "gleam format",
-  ]
+  # When any .gleam or .loom.html file is modified, before
+  # the app is reloaded
+  pre = []
 
   # When any .gleam file within the src/routes/ directory or the 
-  # src/app/http/controllers directory is modified
-  routes-modified = [
+  # src/app/http/controllers directory is modified. Parses
+  # $PATH variables as the file path to the modified file
+  route-modified = [
+    "./glimr route:compile --path=$PATH",
+  ]
+  
+  # When any .loom.html file within the src/resources/views 
+  # directory is modified. Parses $PATH variables as the
+  # file path to the modified file
+  loom-modified = [
+    "./glimr loom:compile --path=$PATH",
     "./glimr route:compile",
   ]
+
+  # After all other reload hooks run, right before the 
+  # actual reload occurs
+  post-modified = []

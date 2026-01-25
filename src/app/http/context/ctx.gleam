@@ -1,5 +1,5 @@
+// import app/http/context/ctx_db.{type DbContext}
 import app/http/context/ctx_cache.{type CacheContext}
-import app/http/context/ctx_db.{type DbContext}
 
 // Application Context
 //
@@ -11,8 +11,8 @@ import app/http/context/ctx_db.{type DbContext}
 
 pub type Context {
   Context(
-    db: DbContext,
     cache: CacheContext,
+    // db: DbContext,
     // ...
   )
 }

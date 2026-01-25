@@ -27,6 +27,7 @@ If you'd like to stay updated on Glimr's development, Follow [@migueljarias](htt
 - [Middleware](#middleware)
 - [Form Validation](#form-validation)
 - [Views & Responses](#views--responses)
+- [Loom Template Engine](#loom-template-engine)
 - [Database](#database)
   - [Setup](#setup)
       - [SQLite](#sqlite)
@@ -62,13 +63,12 @@ Glimr is a fully featured web framework built for Gleam. It provides a delightfu
 ## Features
 
 - **Type Safe Routing** - Generated pattern matching routes with compile-time type safety
-- **View Builder** - Fluent API for rendering HTML and Lustre components with layouts
-- **Template Engine** - Simple `{{ variable }}` syntax for dynamic content
-- **Redirect Builder** - Clean redirect API with flash message support
+- **View Builder** - Fluent API for rendering HTML and Loom Templates
+- **Loom Template Engine** - Blade-inspired templates with components, slots, and conditionals
+- **Redirect Builder** - Clean redirect API with flash message support coming soon.
 - **Middleware System** - Composable middleware at route and group levels
 - **Middleware Groups** - Pre-configured middleware stacks for different route types (Web, API, Custom)
 - **Form Validation** - Elegant form validation layer to easily validate requests
-- **Lustre Integration** - Server-side rendering of Lustre components
 - **Context/Singleton System** - Type-safe use of singletons throughout your application
 - **Controller Pattern** - Organized request handlers with clear separation of concerns
 - **Configuration Management** - Environment-based configuration with `.env` support
@@ -174,6 +174,25 @@ This runs any configured `pre-build` hooks, compiles your Gleam code, then runs 
 
 This runs `pre-run` hooks, starts your application, and watches for file changes. When `.gleam` files change, it automatically reloads your application.
 
+#### Dev Proxy
+
+When running via `./glimr run`, a dev proxy sits in front of your application to provide a seamless development experience. The proxy holds incoming requests during app restarts, so you never see connection errors when the app is recompiling.
+
+```
+Browser → Proxy (APP_PORT) → App (DEV_PROXY_PORT)
+```
+
+Configure the ports in your `.env` file:
+
+```env
+APP_PORT=8000         # Port you access in your browser
+DEV_PROXY_PORT=8001   # Internal port for the app (proxy forwards here)
+```
+
+Access your app at `http://localhost:8000` (or whatever `APP_PORT` is set to). The proxy handles forwarding to the internal port automatically.
+
+In production (when running directly via `gleam run`), there's no proxy—your app listens directly on `APP_PORT`.
+
 ### Hooks
 
 Hooks let you run shell commands or Glimr console commands at specific points during the build/run lifecycle. Configure them in `glimr.toml` at your project root.
@@ -187,8 +206,10 @@ Your `glimr.toml` file comes with some preconfigured behavior by default, feel f
 | `hooks.build.pre` | Before `./glimr build` compiles |
 | `hooks.build.post` | After `./glimr build` completes |
 | `hooks.run.pre` | Once when `./glimr run` starts |
-| `hooks.run.reload.default` | When any `.gleam` file changes (before restart) |
-| `hooks.run.reload.routes-modified` | When route or controller files change |
+| `hooks.run.reload.pre` | When any `.gleam` file changes (before restart) |
+| `hooks.run.reload.route-modified` | When route or controller files change |
+| `hooks.run.reload.loom-modified` | When loom file or loom data files change |
+| `hooks.run.reload.post-modified` | After all other reload hooks run, before the actual restart occurs |
 
 ### Glimr Commands
 
@@ -283,20 +304,24 @@ You also still benefit from full type-safety in your controllers when it comes t
 // src/routes/web.gleam
 pub fn routes() {
   [
-    // ...
-
     route.get("/contact/{submission}", submission_controller.show),
+    // ...
   ]
 }
 ```
 
-This gets compiled to:
+```gleam
+// src/app/http/controllers/submission_controller.gleam
+pub fn show(_req: Request, _ctx: Context, submission: String) {
+  // ...
+}
+```
+
+That's because the route file gets compiled to:
 
 ```gleam
 pub fn routes(path, method, req, ctx) {
   case path {
-    // ...
-
     ["contact", submission] ->
       case method {
         Get -> submission_controller.show(req, ctx, submission)
@@ -305,14 +330,6 @@ pub fn routes(path, method, req, ctx) {
 
     _ -> wisp.not_found()
   }
-}
-```
-
-Allowing you to easily use the `submission` value in your controller:
-
-```gleam
-// src/app/http/controllers/submission_controller.gleam
-pub fn show(_req: Request, _ctx: Context, submission: String) {
   // ...
 }
 ```
@@ -338,7 +355,7 @@ Convenient helpers that would be tedious to write by hand, all compiled to effic
 
 #### Redirects
 
-Use `route.redirect` for temporary redirects (302) and `route.redirect_permanent` for permanent redirects (301):
+Use `route.redirect` for temporary redirects (303) and `route.redirect_permanent` for permanent redirects (308):
 
 ```gleam
 pub fn routes() {
@@ -601,10 +618,7 @@ pub fn show(req: Request, ctx: Context) -> Response {
 pub fn store(req: Request, ctx: Context) -> Response {
   // Handle POST request...
 
-  redirect.build()
-  |> redirect.back(req)
-  |> redirect.flash([#("message", "User created!")])
-  |> redirect.go()
+  redirect.back(req)
 }
 ```
 
@@ -661,12 +675,9 @@ pub fn update(req: Request, ctx: Context, submission_id: String) -> Response {
   use validated <- contact_store_request.validate(req, ctx)
   let assert Ok(submission_id) = int.parse(submission_id)
 
-  case update_submission.run(ctx.db.pool, submission_id, validated) {
+  case update_submission.run(ctx.db.main, submission_id, validated) {
     Ok(submission) -> {
-      redirect.build()
-      |> redirect.to("/contact/updated")
-      |> redirect.flash([#("message", "Thanks " <> submission.name <> "!")])
-      |> redirect.go()
+      redirect.to("/contact/updated")
     }
     Error(NotFound) -> wisp.not_found()
     Error(_) -> wisp.internal_server_error()
@@ -685,15 +696,13 @@ pub fn store(req: Request, ctx: Context) -> Response {
   use validated <- user_store_request.validate(req, ctx)
 
   case {
-    use user <- result.try(create_user.run(ctx.db.pool, validated))
+    use user <- result.try(create_user.run(ctx.db.main, validated))
     use _ <- result.try(send_welcome_email.run(ctx.notif, user))
     use _ <- result.try(notify_admin.run(ctx.notif, user))
     Ok(user)
   } {
     Ok(user) -> {
-      redirect.build()
-      |> redirect.to("/users/" <> int.to_string(user.id))
-      |> redirect.go()
+      redirect.to("/users/" <> int.to_string(user.id))
     }
     Error(_) -> wisp.internal_server_error()
   }
@@ -999,17 +1008,15 @@ pub fn store(req: Request, ctx: Context) -> Response {
 
   // Do something with your validated data
   let assert Ok(user) = user_repository.create(
-    pool: ctx.db.pool,
+    pool: ctx.db.main,
     name: validated.name,
     email: validated.email,
     avatar: validated.avatar.path,
   )
 
   // Redirect back with success message
-  redirect.build()
-  |> redirect.back(req)
-  |> redirect.flash([#("message", "User created successfully!")])
-  |> redirect.go()
+  redirect.back(req)
+  |> response.flash([#("message", "User created successfully!")])
 }
 ```
 
@@ -1140,67 +1147,579 @@ pub fn rules(form: FormData) {
 
 ## Views & Responses
 
-Glimr provides a fluent builder pattern for rendering views with layouts and template variables.
+Glimr provides a powerful templating engine called Loom, along with a fluent builder pattern for rendering simple html files. To learn more about Loom, check out the [Loom Template Engine](#loom-template-engine).
 
-### Rendering Views
+### Rendering HTML Files
 
 ```gleam
-import glimr/response/view
+import glimr/response/response
 
 pub fn show(req: Request, ctx: Context) -> Response {
-  view.build()
-  |> view.html("welcome.html")
-  |> view.data([#("title", "Welcome")])
-  |> view.render()
+  response.html_file("welcome.html", 200)
 }
 ```
 
-### Rendering Lustre Components
+HTML files are found in `src/resources/views`.
 
-Glimr seamlessly integrates with [Lustre](https://hexdocs.pm/lustre/) for server-side rendering:
+### Rendering Raw HTML
 
 ```gleam
-import glimr/response/view
-import resources/views/contact/contact_form
+import glimr/response/response
 
 pub fn show(req: Request, ctx: Context) -> Response {
-  let model = contact_form.init(Nil)
-
-  view.build()
-  |> view.lustre(contact_form.view(model))
-  |> view.data([#("title", "Contact Us")])
-  |> view.render()
+  response.html("<h1>This is raw HTML</h1>", 200)
 }
 ```
 
-### Set Layout
+### Loom Template Engine
 
-Set a layout for a specific view:
+You may need things like conditionals, loops, variables, etc. and that's where Loom comes in. Loom is Glimr's powerful template engine that compiles `.loom.html` files to type-safe Gleam code. It provides a familiar templating syntax while maintaining Gleam's type safety. Loom can also be used with things like [HTMX](https://htmx.org/) for extra frontend behavior.
+
+#### Usage
+
+The simplest way to use loom, is to create a `.loom.html` file:
+
+**home.loom.html**
+```html
+<h1>Hello This is a loom file</h1>
+<p>This is a simple loom file...</p>
+```
+This will automatically be compiled into `src/bootstrap/gen/loom/home.gleam`. Each compiled loom file comes with a `html` method that returns the compiled html for that view. Use it in a route handler or controller like so:
 
 ```gleam
-view.build()
-|> view.html("dashboard.html")
-// Layouts are set in src/resources/views/layouts/*
-|> view.layout("admin.html")
-|> view.data([#("title", "Admin Dashboard")])
-|> view.render()
+// web/routes.gleam
+import bootstrap/gen/loom/home
+import glimr/response/response
+import glimr/routing/route
+
+pub fn routes() {
+  [
+    route.get("/", fn(_req, _ctx) {
+      response.html(home.html(), 200)
+    })
+
+    // ...
+  ]
+}
 ```
 
-### Template Variables
+> **Note:** creating/modifying/deleting `.loom.html` or `app/loom/*` files will automatically trigger the equivalent gleam file to be generated if you have the `./glimr run` command running. If you don't, you can always manually compile by running the `./glimr loom:compile` command.
 
-Views use `{{ variable }}` syntax for template substitution. The special `{{ _content_ }}` variable is reserved for the main content:
+#### Variables
+
+If your loom file needs access to variable data, create a corresponding data file in `app/loom/*` with the same name, and define a `Data` type with whatever data you need: 
+
+```gleam
+// app/loom/home.gleam
+pub type Data {
+  Data(name: String)
+}
+```
+
+Use the variable in your `.loom.html` file:
+
+**home.loom.html**
+```html
+<h1>Hello This is a loom file</h1>
+<p>This is a simple loom file, and my name is {{ name }}!</p>
+```
+
+Now you'll be able to pass it as a labeled argument to the generated `html` function:
+
+```gleam
+// web/routes.gleam
+import bootstrap/gen/loom/home
+import glimr/response/response
+import glimr/routing/route
+
+pub fn routes() {
+  [
+    route.get("/", fn(_req, _ctx) {
+      response.html(home.html(name: "John"), 200)
+    })
+
+    // ...
+  ]
+}
+```
+
+##### Escaped Variables
+
+Use double curly braces to output escaped variables:
 
 ```html
-<!-- layouts/app.html -->
+<h1>Hello, {{ name }}!</h1>
+<p>Your email is {{ user.email }}</p>
+```
+
+##### Unescaped Variables
+
+For unescaped (raw) HTML output, use triple curly braces:
+
+```html
+{{{ html_content }}}
+```
+
+#### Conditionals
+
+Loom uses directive attributes for conditionals. Add `l-if` to any HTML element:
+
+```html
+<div l-if="show_welcome" class="welcome">Welcome back!</div>
+
+<a l-if="is_admin" href="/admin">Admin Panel</a>
+```
+
+You can use `&&` (and) and `||` (or) operators for complex conditions:
+
+```html
+<a l-if="is_logged_in && is_admin" href="/admin">Admin Panel</a>
+
+<p l-if="is_guest || !is_verified">Please verify your account</p>
+```
+
+For grouping, use `{}` instead of `()` (Gleam syntax):
+
+```html
+<button l-if="is_admin || {is_moderator && has_permission}">Delete</button>
+```
+
+##### Else and Else-If
+
+Use `l-else` for fallback content on the next sibling element:
+
+```html
+<p l-if="is_logged_in">Welcome back, {{ user.name }}!</p>
+<p l-else>Please log in to continue.</p>
+```
+
+Use `l-else-if` for multiple conditions:
+
+```html
+<div l-if="status == 'success'" class="alert-success">Operation completed!</div>
+<div l-else-if="status == 'warning'" class="alert-warning">Please review your input.</div>
+<div l-else-if="status == 'error'" class="alert-error">Something went wrong.</div>
+<div l-else class="alert-info">No status available.</div>
+```
+
+You can chain as many `l-else-if` as needed, and `l-else` at the end is optional:
+
+```html
+<x-admin-dashboard l-if="user.role == 'admin'" />
+<x-mod-dashboard l-else-if="user.role == 'moderator'" />
+<x-member-dashboard l-else-if="user.role == 'member'" />
+```
+
+##### Template Wrapper
+
+When you need to conditionally render multiple elements without a wrapper, use `<template>`:
+
+```html
+<template l-if="show_details">
+  <h2>Details</h2>
+  <p>{{ description }}</p>
+  <span>{{ extra_info }}</span>
+</template>
+```
+
+The `<template>` tag itself is not rendered - only its children appear in the output.
+
+##### Conditional Classes and Styles
+
+Use `:class` and `:style` to conditionally apply CSS classes and inline styles. This is cleaner than embedding conditionals inside attributes:
+
+```html
+<!-- Conditional classes -->
+<div :class="['antialias', #('active', is_active), #('font-bold', is_active)]">
+  Content
+</div>
+
+<!-- Conditional styles -->
+<div :style="['color: black', #('color: red', has_error), #('font-weight: bold', True)]">
+  Content
+</div>
+```
+
+Each item is either:
+- A static string that's always applied (e.g., `'btn primary'`)
+- A conditional tuple `#(String, Bool)` where the string is applied only if the condition is `True`
+
+**Example with mixed static and conditional values:**
+
+```html
+<!-- Static "btn" class + conditional "active" class -->
+<button :class="['btn', #('active', is_selected)]">
+  Click me
+</button>
+
+<!-- Static margin + conditional color -->
+<div :style="['margin: 0', #('color: red', has_error)]">
+  Content
+</div>
+```
+
+Note: Use `:class` with static strings in the list rather than combining `class` and `:class` attributes.
+
+**Using with loop variables:**
+
+This is particularly useful for zebra striping or highlighting specific rows, you'll learn more about the loop variable in the [Loops](#loops) section:
+
+```html
+<tr l-for="item in items, loop" :class="[#('bg-gray-100', loop.even), #('bg-white', loop.odd)]">
+  <td>{{ item.name }}</td>
+</tr>
+```
+
+#### Loops
+
+Loom uses an `l-for` directive for loops. The syntax is `item in collection`:
+
+```html
+<ul>
+  <li l-for="item in items">{{ item.name }} - {{ item.price }}</li>
+</ul>
+```
+
+Nested loops are supported:
+
+```html
+<div l-for="category in categories">
+  <h2>{{ category.name }}</h2>
+  <p l-for="product in category.products">{{ product.name }}</p>
+</div>
+```
+
+##### Tuple Destructuring
+
+When iterating over a list of tuples, you can destructure them directly:
+
+```html
+<!-- For List(#(String, String)) -->
+<dl>
+  <template l-for="(key, value) in items">
+    <dt>{{ key }}</dt>
+    <dd>{{ value }}</dd>
+  </template>
+</dl>
+
+<!-- For List(#(String, String, Int)) -->
+<p l-for="(name, description, count) in entries">
+  {{ name }}: {{ description }} ({{ count }})
+</p>
+```
+
+##### Loop Variable
+
+When you need access to loop metadata (like the current index or whether it's the first/last item), add a loop variable after the collection:
+
+```html
+<div l-for="user in users, loop">
+  <h2 l-if="loop.first">Users:</h2>
+
+  <p :class='[#("bg-gray", loop.even)]'>
+    {{ loop.iteration }}. {{ user.name }}
+  </p>
+
+  <p l-if="loop.last">Total: {{ loop.count }} users</p>
+</div>
+```
+
+The loop variable provides these properties:
+
+| Property | Description |
+|----------|-------------|
+| `loop.index` | The index of the current iteration (starts at 0) |
+| `loop.iteration` | The current iteration number (starts at 1) |
+| `loop.first` | Whether this is the first iteration |
+| `loop.last` | Whether this is the last iteration |
+| `loop.even` | Whether this is an even iteration (0-indexed) |
+| `loop.odd` | Whether this is an odd iteration (0-indexed) |
+| `loop.count` | The total number of items being iterated |
+| `loop.remaining` | The iterations remaining after this one |
+
+**Named loop variables for nested loops:**
+
+Unlike other template engines that require accessing parent loops through a special property, Loom lets you name your loop variables for direct access:
+
+```html
+<div l-for="user in users, user_loop">
+  <div l-for="post in user.posts, post_loop">
+    <h3 l-if="user_loop.first">First user's posts:</h3>
+    <p>Post {{ post_loop.iteration }} of {{ post_loop.count }}</p>
+  </div>
+</div>
+```
+
+This is cleaner and more explicit than accessing parent loops through a chain like `loop.parent.first`.
+
+**Combining tuple destructuring with loop variable:**
+
+```html
+<tr l-for="(player, points) in scores, loop" :class="[#('striped', loop.odd)]">
+  <td>{{ loop.iteration }}</td>
+  <td>{{ player }}</td>
+  <td>{{ points }}</td>
+</tr>
+```
+
+> **Note:** Adding a loop variable incurs a small performance cost (O(2n) instead of O(n)) because the list length must be computed upfront. Only add a loop variable when you need the metadata.
+
+#### Components
+
+Components are reusable template partials. Use the following command to create a component. Create components in `src/resources/views/components/`:
+
+**components/alert.loom.html:**
+```html
+<div class="alert alert-{{ type }}">
+  <slot />
+  <button class="close">&times;</button>
+</div>
+```
+
+Components are prefixed with `x-`:
+
+```html
+<x-alert>
+  Your changes have been saved!
+</x-alert>
+```
+
+##### Variables in Components
+
+Similar to loom views, you can set variable data for components by defining a `app/loom/components/*` file with the same name:
+
+```gleam
+// app/loom/components/alert.gleam
+pub type Data {
+  Data(dismissable: Bool, type: String)
+}
+```
+
+Now you can use the variable as a prop for the component:
+
+```html
+<x-alert type="success" dismissable>
+  Your changes have been saved!
+</x-alert>
+
+<x-alert type="error" :dismissable="other_data == 'something'">
+  Something went wrong.
+</x-alert>
+```
+
+##### Passing HTML Attributes to Components
+
+When you add attributes to a component that aren't defined in its `Data` type, they're treated as HTML attributes and passed through to the component's root element:
+
+```html
+<!-- "type" is a Data field, "id" and "class" are HTML attributes -->
+<x-alert type="success" id="my-alert" class="mb-4">
+  Your changes have been saved!
+</x-alert>
+```
+
+**Merging behavior:**
+- `class` and `style` are **merged** with the root element's existing values
+- All other attributes **override** any existing values
+
+**Custom placement with `@attributes`:**
+
+By default, HTML attributes are added to the first element. Use `@attributes` to control where they go:
+
+**components/alert.loom.html:**
+```html
+<div class="alert alert-{{ type }}">
+  <slot />
+  <button @attributes class="close">&times;</button>
+</div>
+```
+
+##### Nested Components
+
+Components can be nested within other components:
+
+```html
+<x-card>
+  <x-card-header>{{ title }}</x-card-header>
+  <x-card-body>
+    {{ content }}
+  </x-card-body>
+</x-card>
+```
+
+Organize related components in subdirectories with the `x-deeply:nested:component` syntax:
+
+```html
+<x-forms:input type="email" :value="email" />
+<x-forms:button>Submit</x-forms:button>
+```
+
+##### Slots
+
+Slots are defined in component templates using the `<slot>` element. Use `<slot />` for the default slot and `<slot name="x" />` for named slots:
+
+**components/card.loom.html:**
+```html
+<div class="card">
+  <div class="card-header">
+    <slot name="header" />
+  </div>
+  <div class="card-body">
+    <slot />
+  </div>
+  <div class="card-footer">
+    <slot name="footer" />
+  </div>
+</div>
+```
+
+**Using slots when calling the component:**
+```html
+<x-card>
+  <slot name="header">
+    <h2>Custom Header</h2>
+  </slot>
+
+  <p>This is the main content (default slot).</p>
+
+  <slot name="footer">
+    <button>Action</button>
+  </slot>
+</x-card>
+```
+
+##### Slot Fallback Content
+
+Slots can have fallback content that displays when no content is provided:
+
+**components/card.loom.html:**
+```html
+<div class="card">
+  <div class="card-header">
+    <slot name="header">
+      <h3>Default Header</h3>
+    </slot>
+  </div>
+  <div class="card-body">
+    <slot>
+      <p class="text-muted">No content provided</p>
+    </slot>
+  </div>
+  <div class="card-footer">
+    <slot name="footer">
+      <small>Default footer</small>
+    </slot>
+  </div>
+</div>
+```
+
+When the component is used without providing content for a slot, the fallback is shown:
+
+```html
+<!-- Only provides header, body and footer use fallbacks -->
+<x-card>
+  <slot name="header">
+    <h2>My Custom Header</h2>
+  </slot>
+</x-card>
+```
+
+##### Conditional Slot Rendering
+
+Check if a slot has content using `slot` or `slot.name` in `l-if` conditions:
+
+```html
+<div class="card">
+  <!-- Only show header wrapper if header content was provided -->
+  <div l-if="slot.header" class="card-header">
+    <slot name="header" />
+  </div>
+
+  <div class="card-body">
+    <slot />
+  </div>
+
+  <!-- Only show footer wrapper if footer content was provided -->
+  <template l-if="slot.footer">
+    <div class="card-footer">
+      <slot name="footer" />
+    </div>
+  </template>
+</div>
+```
+
+- `slot` checks if the default slot has content
+- `slot.header` checks if the named slot "header" has content
+
+#### Layouts
+
+Layouts are just components that wrap your page content. Create a layout in `src/resources/views/components/layouts/`:
+
+**components/layouts/app.loom.html:**
+```html
 <!DOCTYPE html>
 <html>
-  <head>
-    <title>{{ title }} - {{ app_name }}</title>
-  </head>
-  <body>
-    {{ _content_ }}
-  </body>
+<head>
+  <title>{{ title }}</title>
+</head>
+<body>
+  <header>
+    <nav>...</nav>
+  </header>
+
+  <main>
+    <slot />
+  </main>
+
+  <footer>© 2024</footer>
+</body>
 </html>
+```
+
+Use `<slot />` to mark where child content will be inserted. You can also use named slots:
+
+```html
+<header>
+  <slot name="header" />
+</header>
+<main>
+  <slot />
+</main>
+<aside>
+  <slot name="sidebar" />
+</aside>
+```
+
+**Using a layout in a view:**
+```html
+<x-layouts:app :title="page_title">
+  <slot name="header">
+    Header content...
+  </slot>
+
+  <h1>{{ page_title }}</h1>
+  <p>Main slot content...</p>
+
+  <slot name="sidebar">
+    Sidebar content...
+  </slot>
+</x-layouts:app>
+```
+
+#### Compiling Templates to Gleam
+
+Loom files are compiled automatically when running `./glimr run` whenever they're modified via the `loom-modified` hook in your `glimr.toml`. This runs the `./glimr loom:compile --path=$PATH` command.
+
+You can manually compile all templates with the CLI:
+
+```sh
+./glimr loom:compile
+```
+
+Or compile a specific file:
+
+```sh
+./glimr loom:compile --path=src/resources/views/home.loom.html
 ```
 
 ## Redirects
@@ -1215,9 +1734,7 @@ import glimr/response/redirect
 pub fn store(req: Request, ctx: Context) -> wisp.Response {
   // Process form...
 
-  redirect.build()
-  |> redirect.to("/contact/success")
-  |> redirect.go()
+  redirect.to("/contact/success")
 }
 ```
 
@@ -1229,10 +1746,8 @@ Flash messages persist data across redirects (requires session support):
 pub fn store(req: Request, ctx: Context) -> Response {
   // Process form...
 
-  redirect.build()
-  |> redirect.to("/dashboard")
+  redirect.to("/dashboard")
   |> redirect.flash([#("success", "Contact form submitted!")])
-  |> redirect.go()
 }
 ```
 
@@ -1244,9 +1759,7 @@ Redirect users back to the previous page:
 
 ```gleam
 pub fn cancel(req: Request, ctx: Context) -> Response {
-  redirect.build()
-  |> redirect.back(req)
-  |> redirect.go()
+  redirect.back(req)
 }
 ```
 
@@ -1843,7 +2356,7 @@ You can specify the pool size by setting the `DB_POOL_SIZE` env variable, and th
 
 **How it works:**
 
-When you call a query function like `user_repository.find(ctx.db.pool, id)`, it automatically:
+When you call a query function like `user_repository.find(ctx.db.main, id)`, it automatically:
 1. Checks out a connection from the pool
 2. Executes the query
 3. Returns the connection to the pool
@@ -1862,7 +2375,7 @@ import glimr/db/pool_connection.{NotFound}
 pub fn show(id: String, req: Request, ctx: Context) -> Response {
   let assert Ok(user_id) = int.parse(id)
 
-  case user_repository.find(ctx.db.pool, user_id) {
+  case user_repository.find(ctx.db.main, user_id) {
     Ok(user) -> {
       view.build()
       |> view.html("users/show.html")
@@ -1881,7 +2394,7 @@ pub fn show(id: String, req: Request, ctx: Context) -> Response {
 import data/models/user/user_repository
 
 pub fn index(req: Request, ctx: Context) -> Response {
-  case user_repository.list_all(ctx.db.pool) {
+  case user_repository.list_all(ctx.db.main) {
     Ok(users) -> {
       view.build()
       |> view.html("users/index.html")
@@ -1899,7 +2412,7 @@ In situations where you'd rather not handle error handling yourself, you can jus
 import data/models/user/user_repository
 
 pub fn index(req: Request, ctx: Context) -> Response {
-  let assert Ok(user) = user_repository.list_all(ctx.db.pool)
+  let assert Ok(user) = user_repository.list_all(ctx.db.main)
 
   view.build()
   |> view.html("users/index.html")
@@ -1933,7 +2446,7 @@ pub fn transfer(
   to_id: Int,
   amount: Int,
 ) -> Result(Nil, DbError) {
-  use conn <- db.transaction(ctx.db.pool, 3)
+  use conn <- db.transaction(ctx.db.main, 3)
 
   // Both operations use the same connection within the transaction
   use _ <- result.try(account_repository.debit_wc(conn, from_id, amount))
@@ -1959,21 +2472,17 @@ pub fn store(req: Request, ctx: Context) -> Response {
   use validated <- transfer_request.validate(req, ctx)
 
   case {
-    use conn <- db.transaction(ctx.db.pool, 3)
+    use conn <- db.transaction(ctx.db.main, 3)
     use _ <- result.try(account_repository.debit_wc(conn, validated.from_id, validated.amount))
     use _ <- result.try(account_repository.credit_wc(conn, validated.to_id, validated.amount))
     Ok(Nil)
   } {
     Ok(_) -> {
-      redirect.build()
-      |> redirect.to("/transfers/success")
-      |> redirect.go()
+      redirect.to("/transfers/success")
     }
     Error(_) -> {
-      redirect.build()
-      |> redirect.to("/transfers")
+      redirect.to("/transfers")
       |> redirect.flash([#("error", "Transfer failed")])
-      |> redirect.go()
     }
   }
 }
@@ -2475,7 +2984,7 @@ The `remember` function is the most common cache pattern - get from cache, or co
 ```gleam
 // Get user from cache, or fetch from database and cache for 1 hour
 let user = cache.remember(ctx.cache.file, "user:" <> id, 3600, fn() {
-  user_repository.find(ctx.db.pool, id)
+  user_repository.find(ctx.db.main, id)
   |> result.map(fn(u) { u.name })
 })
 ```
@@ -2519,7 +3028,9 @@ let user = cache.remember_json(
   "user:" <> id,
   3600,
   decoder,
-  fn() { user_repository.find(ctx.db.pool, id) },
+  fn() { 
+    user_repository.find(ctx.db.main, id) 
+  },
   encoder,
 )
 ```

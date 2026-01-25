@@ -23,12 +23,16 @@ pub fn name() -> String {
 /// ------------------------------------------------------------
 /// Application Port (Default: 8000)
 /// ------------------------------------------------------------
-/// 
-/// The network port the web server listens on for incoming HTTP 
-/// requests. Reads from APP_PORT, and it defaults to 8000.
+///
+/// The network port the web server listens on for incoming HTTP
+/// requests. When running via ./glimr run, uses DEV_PROXY_PORT
+/// so the dev proxy can handle the main APP_PORT.
 ///
 pub fn port() -> Int {
-  env.get_int("APP_PORT") |> result.unwrap(8000)
+  case env.get_string("_GLIMR_RUN") {
+    Ok("true") -> env.get_int("DEV_PROXY_PORT") |> result.unwrap(8001)
+    _ -> env.get_int("APP_PORT") |> result.unwrap(8000)
+  }
 }
 
 /// ------------------------------------------------------------
