@@ -312,7 +312,7 @@ pub fn routes() {
 
 ```gleam
 // src/app/http/controllers/submission_controller.gleam
-pub fn show(_req: Request, _ctx: Context, submission: String) {
+pub fn show(req: Request, ctx: Context, submission: String) {
   // ...
 }
 ```
@@ -336,13 +336,15 @@ pub fn routes(path, method, req, ctx) {
 
 #### Route Handler Setup
 
-Controller functions must accept parameters in a specific order, 1: `req`, 2: `ctx`, and finally your request parameters in the order they're defined in your route:
+Controller functions must accept `req` and `ctx` parameters. They can also accept path parameters. These parameters can be accepted in any order:
 
 ```gleam
 route.get("/posts/{post}/comments/{comment}", comment_controller.show)
 
-// comment_controller.show function must have these params in this order:
-pub fn show(req: Request, ctx: Context, post: String, comment: String) -> wisp.Response {
+// comment_controller.show
+import wisp.{type Request, type Response}
+
+pub fn show(req: Request, ctx: Context, post: String, comment: String) -> Response {
   // ...
 }
 ```

@@ -15,19 +15,29 @@ pub fn html(
   attributes attributes: List(runtime.Attribute),
 ) -> String {
   ""
-  |> runtime.append(
-    "<!doctype html>\n<html>\n  <head>\n    <meta charset=\"utf-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n\n    <!-- header scripts and meta tags -->\n    ",
-  )
-  |> runtime.append(slot_head)
-  |> runtime.append("\n\n    <title ")
-  |> runtime.append(" " <> runtime.render_attributes(attributes))
-  |> runtime.append(">")
-  |> runtime.append(slot_meta_title)
-  |> runtime.append("</title>\n  </head>\n  <body>\n    ")
-  |> runtime.append(slot)
-  |> runtime.append("\n\n    <footer l-if=\"slot.footer\">\n      ")
-  |> runtime.append(slot_footer)
-  |> runtime.append("\n    </footer>\n\n    <!-- footer scripts -->\n    ")
-  |> runtime.append(slot_footer_scripts)
-  |> runtime.append("\n  </body>\n</html>\n")
+  <> "<!doctype html>\n<html>\n  <head>\n    <meta charset=\"utf-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n\n    <!-- header scripts and meta tags -->\n    "
+  <> slot_head
+  <> "\n\n    <title "
+  <> " "
+  <> runtime.render_attributes(attributes)
+  <> ">"
+  <> slot_meta_title
+  <> "</title>\n  </head>\n  <body>\n    "
+  <> slot
+  <> "\n\n    "
+  <> case Nil {
+    _ if slot_footer != "" -> {
+      ""
+      <> "<footer"
+      <> ">"
+      <> "\n      "
+      <> slot_footer
+      <> "\n    "
+      <> "</footer>"
+    }
+    _ -> ""
+  }
+  <> "\n\n    <!-- footer scripts -->\n    "
+  <> slot_footer_scripts
+  <> "\n  </body>\n</html>\n"
 }
