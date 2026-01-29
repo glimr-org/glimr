@@ -3,13 +3,12 @@
 //// Database configuration module for defining database
 //// connections. Add your connections here and they'll be
 //// available throughout your application via the context system.
+////
 
 import dot_env/env
 import glimr/db/driver.{type Connection}
 
-/// ------------------------------------------------------------
 /// Database Connections
-/// ------------------------------------------------------------
 ///
 /// Returns all configured database connections. Each connection
 /// must have a unique name. The first connection of each driver

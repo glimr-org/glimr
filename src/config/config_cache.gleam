@@ -3,12 +3,11 @@
 //// Cache configuration module for defining your cache stores. 
 //// Add your cache stores here and they will be available 
 //// throughout your application via the context system.
+////
 
 import glimr/cache/driver.{type CacheStore}
 
-/// ------------------------------------------------------------
 /// Cache Stores
-/// ------------------------------------------------------------
 ///
 /// Returns all configured cache stores. Each store must have
 /// a unique name. Load these in ctx_cache.gleam to make them

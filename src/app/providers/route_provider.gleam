@@ -1,26 +1,16 @@
 import app/http/context/ctx.{type Context}
-import bootstrap/gen/routes/api
-import bootstrap/gen/routes/web
-import config/config_api
-import glimr/http/kernel
+import compiled/routes/api
+import compiled/routes/web
+import config/config_route
 import glimr/routing/router.{type RouteGroup}
 
 pub fn register() -> List(RouteGroup(Context)) {
-  [
-    router.RouteGroup(
-      prefix: config_api.route_prefix(),
-      middleware_group: kernel.Api,
-      routes: api.routes,
-    ),
-    // 
-    // Add your custom route groups here, before the
-    // default web group that has no prefix. The default
-    // web group below must always be last.
-    //
-    router.RouteGroup(
-      prefix: "",
-      middleware_group: kernel.Web,
-      routes: web.routes,
-    ),
-  ]
+  use name: String <- router.register(config_route.groups())
+
+  case name {
+    "api" -> api.routes
+    // Register custom route groups here before the 
+    // default "web" group below.
+    _ -> web.routes
+  }
 }

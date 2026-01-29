@@ -2,15 +2,14 @@
 //// 
 //// Application configuration module for managing environment 
 //// settings loaded from the .env file or hardcoded here
+////
 
 import dot_env/env
 import gleam/int
 import gleam/result
 import wisp
 
-/// ------------------------------------------------------------
 /// Application Name (Default: Glimr)
-/// ------------------------------------------------------------
 /// 
 /// The name that's used when displaying your app in responses 
 /// and error pages. This value is used throughout the entire 
@@ -20,9 +19,7 @@ pub fn name() -> String {
   env.get_string("APP_NAME") |> result.unwrap("Glimr")
 }
 
-/// ------------------------------------------------------------
 /// Application Port (Default: 8000)
-/// ------------------------------------------------------------
 ///
 /// The network port the web server listens on for incoming HTTP
 /// requests. When running via ./glimr run, uses DEV_PROXY_PORT
@@ -35,9 +32,7 @@ pub fn port() -> Int {
   }
 }
 
-/// ------------------------------------------------------------
 /// Application Debug Mode (Default: False)
-/// ------------------------------------------------------------
 ///
 /// Controls whether detailed error messages and stack traces are 
 /// shown. Enable in development with APP_DEBUG=true, disable in 
@@ -47,9 +42,7 @@ pub fn debug() -> Bool {
   env.get_bool("APP_DEBUG") |> result.unwrap(False)
 }
 
-/// ------------------------------------------------------------
 /// Application URL (Default: http://localhost:8000)
-/// ------------------------------------------------------------
 ///
 /// The base URL used for generating links, redirects, and absolute 
 /// URLs. Reads from APP_URL, defaults to http://localhost:8000.
@@ -59,9 +52,7 @@ pub fn url() -> String {
   |> result.unwrap("http://localhost:" <> int.to_string(port()))
 }
 
-/// ------------------------------------------------------------
 /// Application Key
-/// ------------------------------------------------------------
 ///
 /// A secret string for encrypting sessions, signing tokens, and
 /// security. Required value from APP_KEY. Application panics
@@ -73,9 +64,7 @@ pub fn key() -> String {
   key
 }
 
-/// ------------------------------------------------------------
 /// Static Directory
-/// ------------------------------------------------------------
 ///
 /// The filesystem directory where static assets (CSS, 
 /// JavaScript, images, etc.) are stored. This is served by the 

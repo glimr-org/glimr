@@ -3,6 +3,7 @@
 //// Shared bootstrap utilities used by both the HTTP application
 //// and console commands. Contains common initialization logic
 //// that needs to run before either entry point starts.
+////
 
 import dot_env
 

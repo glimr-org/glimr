@@ -1,18 +1,18 @@
+//// HTTP Kernel
+////
+//// This is the kernel for our HTTP layer. This is where we set up our 
+//// middleware groups which contain multiple middleware that we want 
+//// assigned to a specific route group. By default you have "web" and "api" 
+//// groups, but can define your own in the handle() method.
+////
+//// https://github.com/glimr-org/glimr?tab=readme-ov-file#middleware-groups
+////
+
 import app/http/context/ctx.{type Context}
 import config/config_app
 import glimr/http/error_handler
 import glimr/http/kernel.{type MiddlewareGroup}
 import wisp.{type Request, type Response}
-
-// HTTP Kernel
-//
-// https://github.com/glimr-org/glimr?tab=readme-ov-file#middleware-groups
-//
-// This is the kernel for our HTTP layer. This is where we set
-// up our middleware groups which contain multiple middleware
-// that we want assigned to a specific route group. By default
-// you have "web" and "api" groups, but can define your own
-// in the handle() method.
 
 pub fn handle(
   req: Request,
@@ -29,6 +29,9 @@ pub fn handle(
   }
 }
 
+/// Define the middleware that always runs for the
+/// web routes before or after they're resolved.
+///
 fn web_middleware(
   req: Request,
   _ctx: Context,
@@ -47,6 +50,9 @@ fn web_middleware(
   router(req)
 }
 
+/// Define the middleware that always runs for the
+/// api routes before or after they're resolved.
+///
 fn api_middleware(
   req: Request,
   _ctx: Context,

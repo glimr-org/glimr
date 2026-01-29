@@ -3,11 +3,13 @@
 //// Entry point for the console application. Initializes the
 //// environment and runs the console kernel with your registered
 //// commands and database connections.
+////
 
 import app/providers/command_provider
-import bootstrap/bootstrap
+import bootstrap/shared
 import config/config_cache
 import config/config_db
+import config/config_route
 import glimr/console/kernel as glimr_kernel
 
 /// Initializes and runs the console application. Loads
@@ -16,11 +18,12 @@ import glimr/console/kernel as glimr_kernel
 /// the console kernel with registered commands.
 ///
 pub fn init() -> Nil {
-  bootstrap.load_env_variables()
+  shared.load_env_variables()
 
   glimr_kernel.run(
     commands: command_provider.register(),
     db_connections: config_db.connections(),
     cache_stores: config_cache.stores(),
+    route_groups: config_route.groups(),
   )
 }

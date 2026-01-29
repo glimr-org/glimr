@@ -4,11 +4,12 @@
 //// environment, configures the logger, and returns a request 
 //// handler function that processes incoming HTTP requests 
 //// through the router.
+////
 
 import app/http/kernel
 import app/providers/ctx_provider
 import app/providers/route_provider
-import bootstrap/bootstrap
+import bootstrap/shared
 import glimr/routing/router
 import wisp.{type Request, type Response}
 
@@ -20,7 +21,7 @@ import wisp.{type Request, type Response}
 pub fn init() -> fn(Request) -> Response {
   wisp.configure_logger()
 
-  bootstrap.load_env_variables()
+  shared.load_env_variables()
   configure_request_handler()
 }
 
