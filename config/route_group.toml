@@ -1,0 +1,13 @@
+[groups.web]
+  prefix = ""
+  middleware = "web"
+
+[groups.api]
+  prefix = "/api"
+  middleware = "api"
+
+# Add your own custom route groups below:
+# For example:
+# [groups.admin]
+#   prefix = "/admin"
+#   middleware = "web"

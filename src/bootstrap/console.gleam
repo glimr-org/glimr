@@ -9,7 +9,6 @@ import app/providers/command_provider
 import bootstrap/shared
 import config/config_cache
 import config/config_db
-import config/config_route
 import glimr/console/kernel as glimr_kernel
 
 /// Initializes and runs the console application. Loads
@@ -24,6 +23,5 @@ pub fn init() -> Nil {
     commands: command_provider.register(),
     db_connections: config_db.connections(),
     cache_stores: config_cache.stores(),
-    route_groups: config_route.groups(),
   )
 }
