@@ -1,3 +1,8 @@
+[commands]
+  packages = [
+    "glimr"
+  ]
+
 # Define any shell commands or Glimr commands you want to run
 # when running the `./glimr build` command
 [hooks.build]
