@@ -1,3 +1,10 @@
+# Route Group Configuration
+#
+# Defines route groups for the application. Each group maps a
+# URL prefix to an output file name and middleware group. 
+# Routes are compiled into separate files based on their 
+# prefix match.
+
 [groups.web]
   prefix = ""
   middleware = "web"
