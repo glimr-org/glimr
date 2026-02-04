@@ -7,7 +7,6 @@
 
 import app/providers/command_provider
 import bootstrap/shared
-import config/config_cache
 import glimr/console/kernel as glimr_kernel
 
 /// Initializes and runs the console application. Loads
@@ -18,8 +17,5 @@ import glimr/console/kernel as glimr_kernel
 pub fn init() -> Nil {
   shared.load_env_variables()
 
-  glimr_kernel.run(
-    commands: command_provider.register(),
-    cache_stores: config_cache.stores(),
-  )
+  glimr_kernel.run(commands: command_provider.register())
 }

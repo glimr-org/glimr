@@ -1,0 +1,23 @@
+# Cache Config
+#
+# Cache configuration module for defining your cache stores. 
+# Add your cache stores here and they will be available 
+# throughout your application via the context system.
+
+[stores.main]
+  driver = "file"
+  path = "priv/storage/framework/cache/data"
+
+# Add as many cache stores as you need. Below are some examples 
+# setting up an redis, or a database store. Uncomment and 
+# change the connection name to whatever you prefer.
+
+# [stores.redis_example]
+#   driver = "redis"
+#   url = "${REDIS_URL}"
+#   pool_size = "${REDIS_POOL_SIZE}"
+
+# [stores.database_example]
+#   driver = "database"
+#   database = "main"
+#   table = "cache"
