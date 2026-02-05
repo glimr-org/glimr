@@ -132,7 +132,6 @@ Visit `http://localhost:8000` in your browser.
 ```
 ├── src/
 │   ├── glimr_app.gleam                 # Application entry point
-│   ├── glimr_console.gleam             # Console application entry point
 │   ├── app/
 │   │   ├── actions/                    # Modules for reusable business logic
 │   │   ├── console/                    # Custom console commands ran with `./glimr`
@@ -151,8 +150,6 @@ Visit `http://localhost:8000` in your browser.
 │   │       └── command_provider.gleam  # Command registration
 │   ├── bootstrap/
 │   │   ├── app.gleam                   # Application bootstrapping
-│   │   ├── console.gleam               # Console application bootstrapping
-│   │   └── shared.gleam                # Shared bootstrap functionality
 │   ├── compiled/                       # Generated gleam files (loom, routes)
 │   ├── config/                         # Configuration files
 ├── test/                               # Test files
@@ -214,8 +211,6 @@ Your `glimr.toml` file comes with some preconfigured behavior by default, feel f
 | `hooks.build.post` | After `./glimr build` completes |
 | `hooks.run.pre` | Once when `./glimr run` starts |
 | `hooks.run.reload.pre` | When any `.gleam` file changes (before restart) |
-| `hooks.run.reload.route-modified` | When route or controller files change |
-| `hooks.run.reload.loom-modified` | When loom file or loom data files change |
 | `hooks.run.reload.post-modified` | After all other reload hooks run, before the actual restart occurs |
 
 ### Glimr Commands
@@ -225,7 +220,7 @@ Hooks that start with `./glimr` run in-process for better performance:
 ```toml
 [hooks.build]
 pre = [
-  "./glimr route:compile",  # runs in-process (fast)
+  "./glimr some_command",   # runs in-process (fast)
   "npm run css:build",      # runs as shell command
 ]
 ```
@@ -240,38 +235,34 @@ Routes are defined using annotations in doc comments above your controller funct
 
 ```gleam
 // src/app/http/controllers/user_controller.gleam
+import compiled/loom/welcome
+
+/// @get "/welcome"
+///
+pub fn show() -> Response {
+  response.html(welcome.html(), 200)
+}
+
+// ...
+```
+
+You can access the `Request` and shared `Context` by just accepting them as parameters:
+
+```gleam
+// src/app/http/controllers/user_controller.gleam
 import app/http/context/ctx.{type Context}
 import wisp.{type Request, type Response}
+import compiled/loom/welcome
 
-/// @get "/users"
+/// @get "/welcome"
 ///
-pub fn index(req: Request, ctx: Context) -> Response {
-  // List all users...
+pub fn show(req: Request, ctx: Context) -> Response {
+  // Do something with `req` or `ctx`
+
+  response.html(welcome.html(), 200)
 }
 
-/// @post "/users"
-///
-pub fn store(req: Request, ctx: Context) -> Response {
-  // Create a new user...
-}
-
-/// @get "/users/:id"
-///
-pub fn show(req: Request, ctx: Context, id: String) -> Response {
-  // Show a specific user...
-}
-
-/// @put "/users/:id"
-///
-pub fn update(req: Request, ctx: Context, id: String) -> Response {
-  // Update a user...
-}
-
-/// @delete "/users/:id"
-///
-pub fn destroy(req: Request, ctx: Context, id: String) -> Response {
-  // Delete a user...
-}
+// ...
 ```
 
 Available HTTP method annotations:
@@ -286,17 +277,19 @@ Available HTTP method annotations:
 Routes are automatically compiled when using:
 
 ```bash
-# Routes compile automatically during build (configured in glimr.toml)
+# Routes compile automatically during build 
+# (configured in glimr.toml)
 ./glimr build
 
-# Routes recompile when controller files change
+# Routes recompile when controller files change 
+# (configured in glimr.toml)
 ./glimr run
 
 # Manually compile routes
-./glimr route:compile
+./glimr route_compile
 ```
 
-This compiles to `src/compiled/routes/web.gleam`:
+This compiles to a pattern matched router in `src/compiled/routes/web.gleam`:
 
 ```gleam
 import app/http/controllers/user_controller
@@ -332,12 +325,10 @@ Use `:param` syntax in your route path to capture URL segments as parameters:
 ```gleam
 /// @get "/posts/:post_id/comments/:comment_id"
 ///
-pub fn show(req: Request, ctx: Context, post_id: String, comment_id: String) -> Response {
+pub fn show(post_id: String, comment_id: String) -> Response {
   // Access post_id and comment_id directly as function parameters
 }
 ```
-
-Parameters are passed to your handler function in the order they appear in the path. Your function must accept `req` and `ctx`, plus any path parameters.
 
 ### Redirects
 
@@ -348,14 +339,14 @@ Add redirects to routes using `@redirect` (303 temporary) or `@redirect_permanen
 /// @redirect "/contact-us"
 /// @get "/contact"
 ///
-pub fn show(req: Request, ctx: Context) -> Response {
+pub fn show() -> Response {
   // Both /old-contact and /contact-us redirect here
 }
 
 /// @redirect_permanent "/legacy-api"
 /// @get "/api/v2"
 ///
-pub fn index(req: Request, ctx: Context) -> Response {
+pub fn index() -> Response {
   // /legacy-api permanently redirects here
 }
 ```
@@ -368,7 +359,7 @@ Apply middleware to individual routes using `@middleware`:
 /// @get "/dashboard"
 /// @middleware "auth"
 ///
-pub fn show(req: Request, ctx: Context) -> Response {
+pub fn show() -> Response {
   // Protected by auth middleware
 }
 
@@ -376,7 +367,7 @@ pub fn show(req: Request, ctx: Context) -> Response {
 /// @middleware "auth"
 /// @middleware "admin"
 ///
-pub fn store(req: Request, ctx: Context) -> Response {
+pub fn store() -> Response {
   // Protected by both auth and admin middleware
 }
 ```
@@ -397,13 +388,13 @@ import wisp.{type Request, type Response}
 
 /// @get "/admin/dashboard"
 ///
-pub fn dashboard(req: Request, ctx: Context) -> Response {
+pub fn dashboard() -> Response {
   // Protected by auth and admin middleware
 }
 
 /// @get "/admin/settings"
 ///
-pub fn settings(req: Request, ctx: Context) -> Response {
+pub fn settings() -> Response {
   // Also protected by auth and admin middleware
 }
 ```
@@ -415,14 +406,14 @@ You can combine group middleware with route-specific middleware:
 
 /// @get "/dashboard"
 ///
-pub fn dashboard(req: Request, ctx: Context) -> Response {
+pub fn dashboard() -> Response {
   // Only auth middleware
 }
 
 /// @get "/reports"
 /// @middleware "logging"
 ///
-pub fn reports(req: Request, ctx: Context) -> Response {
+pub fn reports() -> Response {
   // Both auth (from group) and logging middleware
 }
 ```
@@ -437,7 +428,7 @@ import app/http/validators/user_store.{type Data}
 /// @post "/users"
 /// @validator "user_store"
 ///
-pub fn store(req: Request, ctx: Context, validated: Data) -> Response {
+pub fn store(validated: Data) -> Response {
   // validated contains the validated form data
   // Validation errors automatically return 422
 
@@ -451,31 +442,19 @@ Validator names expand to `app/http/validators/{name}`. See [Form Validation](#f
 
 ### Route Groups
 
-Route groups determine which compiled file your routes end up in and which middleware stack they use. Groups are configured in `src/config/config_route.gleam`:
+Route groups determine which compiled file your routes end up in and which middleware stack they use. Groups are configured in `config/route_group.gleam`:
 
-```gleam
-// src/config/config_route.gleam
-import config/config_api
-import glimr/http/kernel
-import glimr/routing/router.{type RouteGroupConfig, RouteGroupConfig}
+```toml
+# config/route_group.toml
 
-pub fn groups() -> List(RouteGroupConfig) {
-  [
-    // API routes - routes starting with /api
-    RouteGroupConfig(
-      name: "api",
-      prefix: "/api",
-      middleware: kernel.Api,
-    ),
+[groups.web]
+  prefix = ""
+  middleware = "web"
 
-    // Web routes - catch-all (must be last)
-    RouteGroupConfig(
-      name: "web",
-      prefix: "",
-      middleware: kernel.Web,
-    ),
-  ]
-}
+[groups.api]
+  prefix = "/api"
+  middleware = "api"
+
 ```
 
 Routes are matched to groups by their URL prefix:
@@ -494,7 +473,7 @@ By default, routes with the `/api` prefix:
 
 /// @get "/api/users"
 ///
-pub fn index(req: Request, ctx: Context) -> Response {
+pub fn index() -> Response {
   // Returns JSON, errors are JSON formatted
 }
 ```
@@ -503,40 +482,35 @@ pub fn index(req: Request, ctx: Context) -> Response {
 
 To add a new route group (e.g., `/admin`):
 
-1. Add the group config in `src/config/config_route.gleam`:
+1. Add the group config in `config/route_group.toml`:
 
-```gleam
-pub fn groups() -> List(RouteGroupConfig) {
-  [
-    RouteGroupConfig(
-      name: "api",
-      prefix: "/api",
-      middleware: kernel.Api,
-    ),
-    // Add your custom group before the catch-all
-    RouteGroupConfig(
-      name: "admin",
-      prefix: "/admin",
-      middleware: kernel.Custom("admin"),
-    ),
-    RouteGroupConfig(
-      name: "web", 
-      prefix: "", 
-      middleware: kernel.Web,
-    ),
-  ]
-}
+```toml
+# config/route_group.toml
+
+[groups.web]
+  prefix = ""
+  middleware = "web"
+
+[groups.api]
+  prefix = "/api"
+  middleware = "api"
+
+# New route group "admin"
+[groups.admin]
+  prefix = "/admin"
+  middleware = "admin"
+
 ```
 
 Create the route file with this command:
 
 ```bash
 # Create a route file in compiled/routes/admin.gleam
-./glimr make:route-file admin
+./glimr make_route_file admin
 
 # Create a route file in routes/admin.gleam if you prefer to 
 # use direct pattern matching instead of compiled routing
-./glimr make:route-file admin --direct
+./glimr make_route_file admin --direct
 ```
 
 2. Register the routes file in `src/app/providers/route_provider.gleam`:
@@ -547,11 +521,11 @@ import compiled/routes/api
 import compiled/routes/web
 
 pub fn register() -> List(RouteGroup(Context)) {
-  use name: String <- router.register(config_route.groups())
+  use name <- router.register()
 
   case name {
     "api" -> api.routes
-    "admin" -> admin.routes
+    "admin" -> admin.routes // Register new "admin" route group
     _ -> web.routes
   }
 }
@@ -563,11 +537,13 @@ pub fn register() -> List(RouteGroup(Context)) {
 pub fn handle(req, ctx, middleware_group, router) -> Response {
   case middleware_group {
     kernel.Api -> api_middleware(req, ctx, router)
-    kernel.Custom("admin") -> admin_middleware(req, ctx, router)
+    kernel.Custom("admin") -> admin_middleware(req, ctx, router) // Handle "admin" group
     _ -> web_middleware(req, ctx, router)
   }
 }
 ```
+
+> **Note:** Learn more about custom middleware groups in the [Custom Middleware Groups](#creating-custom-groups) section.
 
 ### Direct Pattern Matching
 
@@ -617,29 +593,30 @@ pub fn routes(path, method, req, ctx) {
 Controllers handle HTTP requests and contain your route definitions via annotations. Create controllers in `src/app/http/controllers/`:
 
 ```bash
-./glimr make:controller user_controller
+./glimr make_controller user_controller
 ```
 
 This creates `user_controller.gleam`. Define routes using annotations above your handler functions:
 
 ```gleam
 // src/app/http/controllers/user_controller.gleam
-import app/http/context/ctx.{type Context}
 import glimr/response/response
 import glimr/response/redirect
-import wisp.{type Request, type Response}
+import app/http/validators/user_store.{type Data}
+import compiled/loom/user_show
 
-/// @get "/users/:id"
+/// @get "/users/:user
 ///
-pub fn show(req: Request, ctx: Context, id: String) -> Response {
-  response.view()
-  |> response.loom("users/show.html")
-  |> response.render()
+pub fn show(ctx: Context, user: String) -> Response {
+  // get the user...
+
+  response.html(user_show.html(user: user), 200)
 }
 
 /// @post "/users"
+/// @validator "user_store"
 ///
-pub fn store(req: Request, ctx: Context) -> Response {
+pub fn store(validated: Data) -> Response {
   // Handle POST request...
 
   redirect.back(req)
@@ -649,7 +626,7 @@ pub fn store(req: Request, ctx: Context) -> Response {
 Create resource controllers with common CRUD functions pre-defined:
 
 ```bash
-./glimr make:controller user_controller --resource
+./glimr make_controller user_controller --resource
 ```
 
 This generates a controller with `index`, `show`, `create`, `store`, `edit`, `update`, and `destroy` functions—add route annotations as needed.
@@ -661,7 +638,7 @@ Actions help keep controllers clean by extracting complex business logic into re
 Create actions in `src/app/actions/`. Use the following command:
 
 ```bash
-./glimr make:action update_submission
+./glimr make_action update_submission
 ```
 
 This creates `update_submission.gleam`. Actions follow a simple pattern - they perform work and return a Result. If you're going to perform database work within your action, it's preferable to accept a `Pool` rather than an entire `Context`, so that this action may be usable from console commands as well:
@@ -748,7 +725,7 @@ Middleware intercepts requests before they reach your controllers. Middleware ca
 Create custom middleware in `src/app/http/middleware/`. Use the following command:
 
 ```bash
-./glimr make:middleware logger
+./glimr make_middleware logger
 ```
 
 This creates `logger.gleam`. In it you can add your custom logic.
@@ -776,14 +753,14 @@ Apply middleware to individual routes using the `@middleware` annotation:
 /// @get "/dashboard"
 /// @middleware "auth"
 ///
-pub fn show(req: Request, ctx: Context) -> Response {
+pub fn show() -> Response {
   // Protected by auth middleware
 }
 ```
 
 Middleware names are bare names that expand to `app/http/middleware/{name}`.
 
-### Applying Middleware to Controllers
+### Applying Middleware to Entire Controllers
 
 Apply middleware to all routes in a controller using `// @group_middleware` at the top of the file:
 
@@ -795,7 +772,7 @@ Apply middleware to all routes in a controller using `// @group_middleware` at t
 
 /// @get "/admin/dashboard"
 ///
-pub fn dashboard(req: Request, ctx: Context) -> Response {
+pub fn dashboard() -> Response {
   // Protected by auth and admin middleware
 }
 ```
@@ -842,7 +819,7 @@ Then in your controller:
 /// @get "/dashboard"
 /// @middleware "auth"
 ///
-pub fn dashboard(_req: Request, ctx: Context) -> Response {
+pub fn dashboard(ctx: Context) -> Response {
   // Safe to assert because auth middleware guarantees this
   let assert Some(user) = ctx.user
 
@@ -925,26 +902,16 @@ The key difference: `Web` serves static files and returns HTML error pages, whil
 
 #### Assigning Groups to Routes
 
-Route groups are configured in `src/config/config_route.gleam`:
+Route groups are configured in `/config/route_group.toml`:
 
-```gleam
-import glimr/http/kernel
-import glimr/routing/router.{type RouteGroupConfig, RouteGroupConfig}
+```toml
+[groups.web]
+  prefix = ""
+  middleware = "web"
 
-pub fn groups() -> List(RouteGroupConfig) {
-  [
-    RouteGroupConfig(
-      name: "api",
-      prefix: "/api",
-      middleware: kernel.Api,
-    ),
-    RouteGroupConfig(
-      name: "web",
-      prefix: "",
-      middleware: kernel.Web,
-    ),
-  ]
-}
+[groups.api]
+  prefix = "/api"
+  middleware = "api"
 ```
 
 Routes are automatically assigned to groups based on their URL prefix. See [Route Groups](#route-groups) for details.
@@ -998,7 +965,7 @@ Glimr provides a declarative, rule-based validation system for form data. Create
 Create form validator modules in `src/app/http/validators/`. Use the following command:
 
 ```bash
-./glimr make:validator user_store
+./glimr make_validator user_store
 ```
 
 This creates `user_store.gleam`. In it you can add your custom logic.
@@ -1056,7 +1023,7 @@ import wisp.{type Request, type Response}
 /// @post "/users"
 /// @validator "user_store"
 ///
-pub fn store(req: Request, ctx: Context, validated: Data) -> Response {
+pub fn store(ctx: Context, validated: Data) -> Response {
   // Do something with your validated data
   let assert Ok(user) = user_repository.create(
     pool: ctx.db.main,
@@ -1140,7 +1107,7 @@ This approach is useful when you need conditional validation or want more contro
 Create your own validation rules for domain-specific logic using the `Custom` rule in `app/http/rules`. Use the following command:
 
 ```bash
-./glimr make:rule no_gmail
+./glimr make_rule no_gmail
 ```
 
 Add your rule's validation logic:
@@ -1190,7 +1157,7 @@ pub fn rules(form: FormData) {
 Create your own validation rules for domain-specific logic using the `FileCustom` rule in `app/http/rules`. Use the following command:
 
 ```bash
-./glimr make:rule image_dimensions --file
+./glimr make_rule image_dimensions --file
 ```
 
 Add your rule's validation logic:
@@ -1279,7 +1246,7 @@ import glimr/response/response
 
 /// @get "/"
 ///
-pub fn show(_req, _ctx) {
+pub fn show() {
   response.html(home.html(), 200)
 }
 ```
@@ -1314,7 +1281,7 @@ import glimr/response/response
 
 /// @get "/"
 ///
-pub fn show(_req, _ctx) {
+pub fn show() {
   response.html(home.html(name: "John"), 200)
 }
 ```
@@ -1784,18 +1751,18 @@ Use `<slot />` to mark where child content will be inserted. You can also use na
 
 #### Compiling Templates to Gleam
 
-Loom files are compiled automatically when running `./glimr run` whenever they're modified via the `loom-modified` hook in your `glimr.toml`. This runs the `./glimr loom:compile --path=$PATH` command.
+Loom files are compiled automatically when running `./glimr run` whenever they're modified via the `[loom] auto_compile = true` setting in your `glimr.toml`. This runs the `./glimr loom_compile --path=$PATH` command.
 
 You can manually compile all templates with the CLI:
 
 ```sh
-./glimr loom:compile
+./glimr loom_compile
 ```
 
 Or compile a specific file:
 
 ```sh
-./glimr loom:compile --path=src/resources/views/home.loom.html
+./glimr loom_compile --path=src/resources/views/home.loom.html
 ```
 
 ## Redirects
@@ -1874,7 +1841,7 @@ pub fn connections() -> List(Connection) {
 Run the following command to create a directory for your new database connection. This will contain all migrations, queries, repositories, for this database. In our previous example we set the name to "main", so the command below would create `src/data/main/`. This also creates a database file in `src/data/main/data.db`.
 
 ```bash
-./glimr setup:database main --sqlite
+./glimr setup_database main --sqlite
 ```
 
 Update your .env variables:
@@ -1924,7 +1891,7 @@ pub fn show(_req: Request, ctx: Context) -> Response {
 }
 ```
 
-You should also register the `glimr_sqlite` console commands in your `command_provider.gleam` file so you can access commands like `./glimr sqlite:migrate`:
+You should also register the `glimr_sqlite` console commands in your `command_provider.gleam` file so you can access commands like `./glimr sqlite_migrate`:
 
 ```gleam
 import app/console/kernel
@@ -2028,7 +1995,7 @@ DB_POOL_SIZE=15
 Run the following command to create a directory for your new database connection. This will contain all migrations, queries, repositories, for this database. In our previous example we set the name to "main", so the command below would create `src/data/main/`.
 
 ```bash
-./glimr setup:database main
+./glimr setup_database main
 ```
 Set up your connection in your `ctx_db.gleam`:
 
@@ -2070,7 +2037,7 @@ pub fn show(_req: Request, ctx: Context) -> Response {
 }
 ```
 
-You should also register the `glimr_postgres` console commands in your `command_provider.gleam` file so you can access commands like `./glimr postgres:migrate`:
+You should also register the `glimr_postgres` console commands in your `command_provider.gleam` file so you can access commands like `./glimr postgres_migrate`:
 
 ```gleam
 import app/console/kernel
@@ -2159,7 +2126,7 @@ Glimr provides automatic migration generation by comparing your schema definitio
 Start by creating a data model using the following command:
 
 ```bash
-./glimr make:model user
+./glimr make_model user
 ```
 
 This creates a `user/` folder inside your default database directory `src/data/main/models/`. The folder contains `user_schema.gleam` for defining your table schema, and a `queries/` folder with pre-generated CRUD queries that get compiled into fully typed gleam code. You can add custom queries to this folder as well (see [Queries](#queries) section).
@@ -2169,7 +2136,7 @@ The `make:model` command defines your default connection as the very first one i
 If you need to specify the connection folder you can always pass a `--database` flag:
 
 ```bash
-./glimr make:model user --database=analytics
+./glimr make_model user --database=analytics
 ```
 
 This creates a `user/` folder inside `src/data/analytics/models/`.
@@ -2243,16 +2210,16 @@ Run the migration generator for the specific driver:
 
 ```bash
 # for your default sqlite connection
-./glimr sqlite:gen
+./glimr sqlite_gen
 
 # for a named sqlite connection
-./glimr sqlite:gen --database=analytics
+./glimr sqlite_gen --database=analytics
 
 # for your default postgres connection
-./glimr postgres:gen
+./glimr postgres_gen
 
 # for a named postgres connection
-./glimr postgres:gen --database=analytics
+./glimr postgres_gen --database=analytics
 ```
 
 > **Note:** The default connection for a specific driver is the very first one of its kind defined in your `connections()` list in `config_db.gleam`.
@@ -2268,32 +2235,32 @@ You can also run the following command to generate migrations and also run them:
 
 ```bash
 # for your default sqlite connection
-./glimr sqlite:gen --migrate
+./glimr sqlite_gen --migrate
 
 # for a named sqlite connection
-./glimr sqlite:gen --database=analytics --migrate
+./glimr sqlite_gen --database=analytics --migrate
 
 # for your default postgres connection
-./glimr postgres:gen --migrate
+./glimr postgres_gen --migrate
 
 # for a named postgres connection
-./glimr postgres:gen --database=analytics --migrate
+./glimr postgres_gen --database=analytics --migrate
 ```
 
 Additionally, you can generate migrations/queries for a specific model or multiple models by passing the `--model` flag: 
 
 ```bash
 # for your default sqlite connection
-./glimr sqlite:gen --model=user,post
+./glimr sqlite_gen --model=user,post
 
 # for a named sqlite connection
-./glimr sqlite:gen --database=analytics --model=user,post
+./glimr sqlite_gen --database=analytics --model=user,post
 
 # for your default postgres connection
-./glimr postgres:gen --model=user,post
+./glimr postgres_gen --model=user,post
 
 # for a named postgres connection
-./glimr postgres:gen --database=analytics --model=user,post
+./glimr postgres_gen --database=analytics --model=user,post
 ```
 
 #### Renaming Columns
@@ -2312,16 +2279,16 @@ Generated migrations are plain SQL files. Run them with the following command:
 
 ```bash
 # for your default sqlite connection
-./glimr sqlite:migrate
+./glimr sqlite_migrate
 
 # for a named sqlite connection
-./glimr sqlite:migrate --database=analytics
+./glimr sqlite_migrate --database=analytics
 
 # for your default postgres connection
-./glimr postgres:migrate
+./glimr postgres_migrate
 
 # for a named postgres connection
-./glimr postgres:migrate --database=analytics
+./glimr postgres_migrate --database=analytics
 ```
 
 #### Rolling Back Migrations
@@ -2338,7 +2305,7 @@ Each model includes a `queries/` folder with pre-generated CRUD queries. These a
 
 #### Generated CRUD Queries
 
-When you create a model with the `./glimr make:model` command, the following query files are generated for you:
+When you create a model with the `./glimr make_model` command, the following query files are generated for you:
 
 ```
 src/data/models/user/queries/
@@ -2387,16 +2354,16 @@ After adding or modifying queries, run:
 
 ```bash
 # for your default sqlite connection
-./glimr sqlite:gen
+./glimr sqlite_gen
 
 # for a named sqlite connection
-./glimr sqlite:gen --database=analytics
+./glimr sqlite_gen --database=analytics
 
 # for your default postgres connection
-./glimr postgres:gen
+./glimr postgres_gen
 
 # for a named postgres connection
-./glimr postgres:gen --database=analytics
+./glimr postgres_gen --database=analytics
 ```
 
 
@@ -2859,10 +2826,10 @@ Generate and run the cache table migration:
 
 ```bash
 # Generate the migration
-./glimr sqlite:cache-table
+./glimr sqlite_cache-table
 
 # Or generate and run migrations in one step
-./glimr sqlite:cache-table --migrate
+./glimr sqlite_cache-table --migrate
 ```
 
 Use it in your controllers:
@@ -2953,10 +2920,10 @@ Generate and run the cache table migration:
 
 ```bash
 # Generate the migration
-./glimr postgres:cache-table
+./glimr postgres_cache-table
 
 # Or generate and run migrations in one step
-./glimr postgres:cache-table --migrate
+./glimr postgres_cache-table --migrate
 ```
 
 Use it in your controllers:
@@ -3153,21 +3120,20 @@ Glimr provides a console command system (Similar to Laravel's artisan) for runni
 Create a new command using the following command:
 
 ```bash
-./glimr make:command send_emails
+./glimr make_command app_send_emails
 ```
 
-This creates `src/app/console/commands/send_emails.gleam`:
+Custom commands are preferred to have a prefix like `app_` or the package name as a prefix to avoid naming collisions, but it's not required.
+
+This creates `src/app/console/commands/app_send_emails.gleam`:
 
 ```gleam
 import glimr/console/command.{type Command, type ParsedArgs}
-
-const name = "app:send-emails"
 
 const description = "Command description"
 
 pub fn command() -> Command {
   command.new()
-  |> command.name(name)
   |> command.description(description)
   |> command.handler(run)
 }
@@ -3175,6 +3141,10 @@ pub fn command() -> Command {
 fn run(args: ParsedArgs) -> Nil {
   // Your command logic here
   todo
+}
+
+pub fn main() {
+  command.run(command())
 }
 ```
 
@@ -3192,7 +3162,6 @@ import glimr/console/command.{type Command, type ParsedArgs, Argument, Flag, Opt
 
 pub fn command() -> Command {
   command.new()
-  |> command.name("app:send-emails")
   |> command.description("Send emails to users")
   |> command.args([
     Argument(name: "recipient", description: "The email recipient"),
@@ -3209,22 +3178,8 @@ fn run(args: ParsedArgs) -> Nil {
 
   // Use recipient, dry_run, and format...
 }
-```
 
-### Register Your Command
-
-You can register your commands in `src/app/console/kernel.gleam`:
-
-```gleam
-import glimr/console/command.{type Command}
-import app/console/commands/send_emails
-
-pub fn commands() -> List(Command) {
-  [
-    send_emails.command(),
-    // Add more commands here...
-  ]
-}
+// ...
 ```
 
 ### Run Your Command
@@ -3232,25 +3187,32 @@ pub fn commands() -> List(Command) {
 You can now run your newly created command the same way you run Glimr commands:
 
 ```bash
-./glimr app:send-emails
+./glimr app_send_emails
 ```
 
-Your command will also appear in the command list when running:
+### Registering Your Command
+
+For your command to appear in the command list, it needs to be compiled into your registry. Compilation occurs automatically when running `./glimr build` or `./glimr run`, but can be called manually with `./glimr command_compile`.
+
+Your command will now appear in the command list when running:
 
 ```bash
 ./glimr
+
+# or running this directly...
+./glimr command_list
 ```
 
 Just like with Glimr commands, you'll automatically be able to get help output for your custom commands by running:
 
 ```bash
-./glimr app:send-emails --help
+./glimr app_send_emails --help
 ```
 
 Run with arguments:
 
 ```bash
-./glimr app:send-emails user@example.com --dry-run --format=json
+./glimr app_send_emails user@example.com --dry-run --format=json
 ```
 
 ### Commands with Database Access
@@ -3258,7 +3220,7 @@ Run with arguments:
 For commands that need database access, use the `--sqlite` or `--postgres` flag:
 
 ```bash
-./glimr make:command seed_database --sqlite
+./glimr make_command seed_database --sqlite
 ```
 
 This creates a command with a `Pool` parameter for the driver type passed:
@@ -3268,13 +3230,10 @@ import glimr_sqlite/db/pool.{type Pool}
 import glimr/console/command.{type Command, type ParsedArgs}
 import glimr_sqlite/console/command as command_sqlite // <--- import command module from glimr_sqlite
 
-const name = "app:seed-database"
-
 const description = "Seed the database with initial data"
 
 pub fn command() -> Command {
   command.new()
-  |> command.name(name)
   |> command.description(description)
   |> command_sqlite.handler(run) // <--- uses command_sqlite rather than command for the handler
 }
@@ -3286,6 +3245,10 @@ fn run(args: ParsedArgs, pool: Pool) -> Nil { // <--- run() now accepts a Pool p
     name: "Admin",
     email: "admin@example.com",
   )
+}
+
+pub fn main() {
+  command.run(command())
 }
 ```
 
@@ -3302,33 +3265,25 @@ If a database connection isn't specified, it will to default to the first connec
 
 ```bash
 # Uses the default connection
-./glimr app:seed-database
+./glimr app_seed_database
 
 # Uses a specific connection
-./glimr app:seed-database --database=analytics
+./glimr app_seed_database --database=analytics
 ```
 
 The `--database` name's existence is automatically verified before attempting to create a connection.
 
 ### Third-Party Commands
 
-Register third-party package commands in `src/app/providers/command_provider.gleam`:
+Register packages that offer console commands in `glimr.toml`:
 
-```gleam
-import app/console/kernel
-import gleam/list
-import glimr/console/command.{type Command}
-import glimr/console/kernel as glimr_kernel
-// Import third-party commands
-import some_package/commands as package_commands
-
-pub fn register() -> List(Command) {
-  list.flatten([
-    kernel.commands(),
-    glimr_kernel.commands(),
-    package_commands.commands(),  // Third-party commands
-  ])
-}
+```toml
+[commands]
+auto_compile = true
+packages = [
+  "glimr",
+  "package_name" # <-- Register the package here 
+]
 ```
 
 This allows third party packages to provide commands for your app in the same way Glimr does, providing a seamless and unified experience.

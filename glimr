@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
 # Glimr CLI ✨
-echo ""
-gleam run --no-print-progress -m glimr_console -- "$@"
-echo ""
+
+source build/packages/glimr/priv/cli.sh
+glimr_run "$@"

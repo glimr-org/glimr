@@ -3,6 +3,7 @@
 
   packages = [
     "glimr",
+    "glimr_postgres",
   ]
 
 [routes]
@@ -17,9 +18,9 @@
 
   # Before `gleam build` logic is ran
   pre = [
-    "./glimr route:compile",
-    "./glimr loom:compile",
-    "./glimr command:compile",
+    "./glimr route_compile",
+    "./glimr loom_compile",
+    "./glimr command_compile",
   ]
 
   # After `gleam build` logic is ran
@@ -33,9 +34,9 @@
 
   # Before `gleam run` logic is ran
   pre = [
-    "./glimr route:compile",
-    "./glimr loom:compile",
-    "./glimr command:compile",
+    "./glimr route_compile",
+    "./glimr loom_compile",
+    "./glimr command_compile",
   ]
 
 # Define any shell commands or Glimr commands you want to run

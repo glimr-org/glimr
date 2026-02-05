@@ -9,7 +9,7 @@
 import app/http/kernel
 import app/providers/ctx_provider
 import app/providers/route_provider
-import bootstrap/shared
+import dot_env
 import glimr/routing/router
 import wisp.{type Request, type Response}
 
@@ -21,7 +21,7 @@ import wisp.{type Request, type Response}
 pub fn init() -> fn(Request) -> Response {
   wisp.configure_logger()
 
-  shared.load_env_variables()
+  load_env_variables()
   configure_request_handler()
 }
 
@@ -36,4 +36,16 @@ fn configure_request_handler() -> fn(Request) -> Response {
     route_provider.register(),
     kernel.handle,
   )
+}
+
+/// Loads environment variables from the .env file into the
+/// process environment. This must be called before any
+/// configuration that depends on environment variables like
+/// the database configuration can be accessed.
+///
+fn load_env_variables() -> Nil {
+  dot_env.new()
+  |> dot_env.set_path(".env")
+  |> dot_env.set_debug(False)
+  |> dot_env.load()
 }
