@@ -1,7 +1,15 @@
 [commands]
+  auto_compile = true
+
   packages = [
-    "glimr"
+    "glimr",
   ]
+
+[routes]
+  auto_compile = true
+
+[loom]
+  auto_compile = true
 
 # Define any shell commands or Glimr commands you want to run
 # when running the `./glimr build` command
@@ -11,6 +19,7 @@
   pre = [
     "./glimr route:compile",
     "./glimr loom:compile",
+    "./glimr command:compile",
   ]
 
   # After `gleam build` logic is ran
@@ -26,6 +35,7 @@
   pre = [
     "./glimr route:compile",
     "./glimr loom:compile",
+    "./glimr command:compile",
   ]
 
 # Define any shell commands or Glimr commands you want to run
@@ -36,21 +46,6 @@
   # When any .gleam or .loom.html file is modified, before
   # the app is reloaded
   pre = []
-
-  # When any .gleam file within the src/routes/ directory or the 
-  # src/app/http/controllers directory is modified. Parses
-  # $PATH variables as the file path to the modified file
-  route-modified = [
-    "./glimr route:compile --path=$PATH",
-  ]
-  
-  # When any .loom.html file within the src/resources/views 
-  # directory is modified. Parses $PATH variables as the
-  # file path to the modified file
-  loom-modified = [
-    "./glimr loom:compile --path=$PATH",
-    "./glimr route:compile",
-  ]
 
   # After all other reload hooks run, right before the 
   # actual reload occurs
