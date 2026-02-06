@@ -12,11 +12,11 @@ import app/http/controllers/api/welcome_controller as api_welcome_controller
 import gleam/http.{Get}
 import wisp
 
-pub fn routes(path, method, req, ctx) {
+pub fn routes(path, method, _req, _ctx) {
   case path {
     ["api", "welcome"] ->
       case method {
-        Get -> api_welcome_controller.show(req, ctx)
+        Get -> api_welcome_controller.show()
         _ -> wisp.method_not_allowed([Get])
       }
 

@@ -11,16 +11,15 @@
 //// https://github.com/glimr-org/glimr?tab=readme-ov-file#loom-template-engine
 ////
 
-import app/http/context/ctx.{type Context}
 import compiled/loom/welcome
 import glimr/response/response
-import wisp.{type Request, type Response}
+import wisp.{type Response}
 
 /// Welcome to Glimr ✨
 /// Build something beautiful...
 ///
 /// @get "/"
 ///
-pub fn show(_req: Request, _ctx: Context) -> Response {
+pub fn show() -> Response {
   response.html(welcome.html(), 200)
 }

@@ -11,16 +11,15 @@
 //// https://github.com/gleam-lang/json
 ////
 
-import app/http/context/ctx.{type Context}
 import gleam/json
 import glimr/response/response
-import wisp.{type Request, type Response}
+import wisp.{type Response}
 
 /// Welcome to Glimr ✨
 /// Build something beautiful...
 ///
 /// @get "/api/welcome"
 ///
-pub fn show(_req: Request, _ctx: Context) -> Response {
+pub fn show() -> Response {
   json.string("Welcome to Glimr ✨") |> response.json(200)
 }

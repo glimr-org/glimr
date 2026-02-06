@@ -4,7 +4,7 @@ import compiled/routes/web
 import glimr/routing/router.{type RouteGroup}
 
 pub fn register() -> List(RouteGroup(Context)) {
-  use name: String <- router.register()
+  use name <- router.register()
 
   case name {
     "api" -> api.routes
