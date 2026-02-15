@@ -21,5 +21,5 @@ import wisp.{type Response}
 /// @get "/"
 ///
 pub fn show() -> Response {
-  response.html(welcome.html(), 200)
+  response.html(welcome.render(), 200)
 }

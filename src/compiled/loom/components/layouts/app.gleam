@@ -7,7 +7,7 @@
 
 import glimr/loom/runtime
 
-pub fn html(
+pub fn render(
   slot slot: String,
   slot_footer slot_footer: String,
   slot_footer_scripts slot_footer_scripts: String,
@@ -16,7 +16,7 @@ pub fn html(
   attributes attributes: List(runtime.Attribute),
 ) -> String {
   ""
-  <> "<!doctype html>\n<html>\n  <head>\n    <meta charset=\"utf-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n\n    <!-- header scripts and meta tags -->\n    "
+  <> "<!doctype html>\n<html>\n  <head>\n    <meta charset=\"utf-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n\n    <!-- Loom script and stylesheet -->\n    <script defer src=\"/loom.js\"></script>\n\n    <!-- header scripts and meta tags -->\n    "
   <> slot_head
   <> "\n\n    <title "
   <> " "
@@ -26,8 +26,8 @@ pub fn html(
   <> "</title>\n  </head>\n  <body>\n    "
   <> slot
   <> "\n\n    "
-  <> case Nil {
-    _ if slot_footer != "" -> {
+  <> case slot_footer != "" {
+    True -> {
       ""
       <> "<footer"
       <> ">"
@@ -36,7 +36,7 @@ pub fn html(
       <> "\n    "
       <> "</footer>"
     }
-    _ -> ""
+    False -> ""
   }
   <> "\n\n    <!-- footer scripts -->\n    "
   <> slot_footer_scripts

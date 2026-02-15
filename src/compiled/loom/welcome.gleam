@@ -12,9 +12,9 @@ import compiled/loom/components/layouts/app as components_layouts_app
 import compiled/loom/components/logo as components_logo
 import glimr/loom/runtime
 
-pub fn html() -> String {
+pub fn render() -> String {
   ""
-  <> components_layouts_app.html(
+  <> components_layouts_app.render(
     slot_meta_title: { "" <> "Glimr ✨" },
     slot_head: {
       ""
@@ -27,22 +27,22 @@ pub fn html() -> String {
       <> "\n  "
       <> "\n\n  "
       <> "\n\n  <div class=\"flex-center position-ref full-height\">\n    <div class=\"content\">\n      "
-      <> components_logo.html(attributes: [
+      <> components_logo.render(attributes: [
         runtime.Attribute("class", "floating"),
         runtime.Attribute("width", "140"),
       ])
       <> "\n\n      <div class=\"headline\">Welcome to Glimr ✨</div>\n\n      <div class=\"subheading\">\n        The batteries-included web framework for Gleam.\n      </div>\n\n      <div class=\"links\">\n        <a\n          target=\"_blank\"\n          href=\"https://github.com/glimr-org/glimr?tab=readme-ov-file#glimr-\"\n        >\n          "
-      <> components_icons_reader.html(attributes: [
+      <> components_icons_reader.render(attributes: [
         runtime.Attribute("class", "icon"),
         runtime.Attribute("width", "15"),
       ])
       <> "\n\n          Documentation\n        </a>\n        <a target=\"_blank\" href=\"https://github.com/glimr-org/framework\">\n          "
-      <> components_icons_frame.html(attributes: [
+      <> components_icons_frame.render(attributes: [
         runtime.Attribute("class", "icon"),
         runtime.Attribute("width", "15"),
       ])
       <> "\n\n          Core Framework\n        </a>\n        <a target=\"_blank\" href=\"https://gleam.run/\">\n          "
-      <> components_icons_star.html(attributes: [
+      <> components_icons_star.render(attributes: [
         runtime.Attribute("class", "icon"),
         runtime.Attribute("width", "15"),
       ])

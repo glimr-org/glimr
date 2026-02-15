@@ -7,7 +7,7 @@
 
 import glimr/loom/runtime
 
-pub fn html(attributes attributes: List(runtime.Attribute)) -> String {
+pub fn render(attributes attributes: List(runtime.Attribute)) -> String {
   ""
   <> "<svg "
   <> " "

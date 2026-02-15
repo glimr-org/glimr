@@ -240,7 +240,7 @@ import compiled/loom/welcome
 /// @get "/welcome"
 ///
 pub fn show() -> Response {
-  response.html(welcome.html(), 200)
+  response.html(welcome.render(), 200)
 }
 
 // ...
@@ -259,7 +259,7 @@ import compiled/loom/welcome
 pub fn show(req: Request, ctx: Context) -> Response {
   // Do something with `req` or `ctx`
 
-  response.html(welcome.html(), 200)
+  response.html(welcome.render(), 200)
 }
 
 // ...
@@ -610,7 +610,7 @@ import compiled/loom/user_show
 pub fn show(ctx: Context, user: String) -> Response {
   // get the user...
 
-  response.html(user_show.html(user: user), 200)
+  response.html(user_show.render(user: user), 200)
 }
 
 /// @post "/users"
@@ -1226,18 +1226,29 @@ pub fn show(req: Request, ctx: Context) -> Response {
 
 ### Loom Template Engine
 
-You may need things like conditionals, loops, variables, etc. and that's where Loom comes in. Loom is Glimr's powerful template engine that compiles `.loom.html` files to type-safe Gleam code. It provides a familiar templating syntax while maintaining Gleam's type safety. Loom can also be used with things like [HTMX](https://htmx.org/) for extra frontend behavior.
+Loom is Glimr's template engine — `.loom.html` files that compile to type-safe Gleam code. But Loom is more than a template engine: templates with event handlers (`l-on:*`) automatically become reactive, establishing a WebSocket connection where all state and logic lives on the server. Inspired by [Phoenix LiveView](https://hexdocs.pm/phoenix_live_view), this server-driven model means you build interactive UIs without writing JavaScript.
 
-#### Usage
+Here's how it works:
 
-The simplest way to use loom, is to create a `.loom.html` file:
+1. The server renders initial HTML and sends it to the browser — the page loads instantly with full content.
+2. A WebSocket connection is established.
+3. When the user interacts (clicks a button, types in an input), a small event message is sent over the WebSocket.
+4. The server processes the event, updates its state, re-renders the template, and computes a minimal diff.
+5. Only the changed parts are sent back and patched into the DOM.
+
+No client-side state management. No full page reloads. The server is the single source of truth.
+
+#### Quick Start
+
+The simplest Loom template is just HTML:
 
 **home.loom.html**
 ```html
-<h1>Hello This is a loom file</h1>
-<p>This is a simple loom file...</p>
+<h1>Hello from Loom</h1>
+<p>This is a simple template.</p>
 ```
-This will automatically be compiled into `src/compiled/loom/home.gleam`. Each compiled loom file comes with an `html` function that returns the compiled HTML. Use it in a controller like so:
+
+This compiles to `src/compiled/loom/home.gleam` with a `render` function. Use it in a controller:
 
 ```gleam
 // src/app/http/controllers/home_controller.gleam
@@ -1247,32 +1258,288 @@ import glimr/response/response
 /// @get "/"
 ///
 pub fn show() {
-  response.html(home.html(), 200)
+  response.html(home.render(), 200)
 }
 ```
 
-> **Note:** creating/modifying/deleting `.loom.html` or `app/loom/*` files will automatically trigger the equivalent gleam file to be generated if you have the `./glimr run` command running. If you don't, you can always manually compile by running the `./glimr loom:compile` command.
+Now let's make it reactive. Here's a counter with server-driven state:
 
-#### Variables
+**counter.loom.html:**
+```html
+@props(count: Int)
 
-If your loom file needs access to variable data, create a corresponding data file in `app/loom/*` with the same name, and define a `Data` type with whatever data you need: 
+<p>Count: {{ count }}</p>
+<button l-on:click="count = count - 1">-</button>
+<button l-on:click="count = count + 1">+</button>
+```
 
 ```gleam
-// app/loom/home.gleam
-pub type Data {
-  Data(name: String)
+// src/app/http/controllers/counter_controller.gleam
+import compiled/loom/counter
+import glimr/response/response
+
+/// @get "/counter"
+///
+pub fn show() {
+  response.html(counter.render(count: 0), 200)
 }
 ```
 
-Use the variable in your `.loom.html` file:
+That's it — the `l-on:click` handlers tell the compiler this template is reactive. It automatically establishes a WebSocket connection, and clicks update `count` on the server, which re-renders and patches the DOM.
 
-**home.loom.html**
+> **Note:** Reactive templates need `<script defer src="/loom.js"></script>` in your layout's `<head>`. This ~22KB runtime handles WebSocket management, DOM patching (via morphdom), and event forwarding.
+
+> **Note:** Creating/modifying/deleting `.loom.html` files automatically triggers compilation when `./glimr run` is running. You can also manually compile with `./glimr loom_compile`.
+
+#### Reactivity
+
+A template becomes reactive when it contains `l-on:*` event handlers or `l-model` directives. No explicit opt-in is needed — the compiler detects these automatically and generates the server-side functions required for WebSocket interactivity.
+
+##### Event Handlers
+
+Event handlers are assignment expressions where the left side is the prop to update and the right side is a Gleam expression:
+
 ```html
-<h1>Hello This is a loom file</h1>
-<p>This is a simple loom file, and my name is {{ name }}!</p>
+@props(count: Int)
+@import(app/loom/counter)
+
+<p>Count: {{ count }}</p>
+
+<!-- Inline expressions -->
+<button l-on:click="count = count + 1">Increment</button>
+<button l-on:click="count = count - 1">Decrement</button>
+<button l-on:click="count = 0">Reset</button>
+
+<!-- Or call your own functions -->
+<button l-on:click="count = counter.inc(count)">Increment</button>
+<button l-on:click="count = counter.dec(count)">Decrement</button>
+<button l-on:click="count = counter.reset()">Reset</button>
 ```
 
-Now you'll be able to pass it as a labeled argument to the generated `html` function:
+The handler expression `count = count + 1` is compiled into a Gleam function that receives the current `count` value, evaluates `count + 1`, and returns the new value. The server re-renders the template with the new state and sends a diff.
+
+**Supported events:** `click`, `input`, `change`, `submit`, `keydown`, `keyup`, `focus`, `blur`.
+
+**Using helper modules:**
+
+```gleam
+// app/loom/counter.gleam
+pub fn increment(count: Int) -> Int {
+  count + 1
+}
+
+pub fn add(count: Int, amount: Int) -> Int {
+  count + amount
+}
+```
+
+```html
+@import(app/loom/counter)
+@props(count: Int, multiplier: Int)
+
+<button l-on:click="count = counter.increment(count)">+</button>
+<button l-on:click="count = counter.add(count, multiplier)">+{{ multiplier }}</button>
+```
+
+##### Special Variables
+
+Handler expressions can reference browser event data via special variables:
+
+| Variable | Description | Available in |
+|----------|-------------|--------------|
+| `$value` | Current value of input/select/textarea (`e.target.value`) | `l-on:input`, `l-on:change` |
+| `$checked` | Checkbox checked state (`e.target.checked`) | `l-on:change` |
+| `$key` | Key pressed (`e.key`) | `l-on:keydown`, `l-on:keyup` |
+
+```html
+@props(name: String, enabled: Bool, last_key: String)
+
+<input l-on:input="name = $value" />
+<input type="checkbox" l-on:change="enabled = $checked" />
+<input l-on:keydown="last_key = $key" />
+```
+
+##### Two-Way Binding (l-model)
+
+`l-model` is syntactic sugar for the common input binding pattern:
+
+```html
+@props(name: String, email: String)
+
+<!-- These are equivalent -->
+<input l-model="name" />
+<input :value="name" l-on:input="name = $value" />
+
+<!-- Works with all input types -->
+<input type="text" l-model="name" />
+<input type="email" l-model="email" />
+<textarea l-model="bio"></textarea>
+<select l-model="country">
+  <option value="us">United States</option>
+  <option value="uk">United Kingdom</option>
+</select>
+```
+
+##### Multiple Prop Updates
+
+Update multiple props at once using tuple destructuring:
+
+```html
+@import(app/loom/counter)
+@props(count: Int, total: Int)
+
+<button l-on:click="#(count, total) = counter.increment_both(count, total)">
+  Increment Both
+</button>
+```
+
+```gleam
+// app/loom/counter.gleam
+pub fn increment_both(count: Int, total: Int) -> #(Int, Int) {
+  #(count + 1, total + 1)
+}
+```
+
+##### Event Modifiers
+
+Modifiers control browser-side event behavior:
+
+```html
+<!-- Prevent default behavior -->
+<form l-on:submit.prevent="errors = form.submit(name, email)">
+
+<!-- Stop propagation -->
+<button l-on:click.stop="count = count + 1">
+
+<!-- Debouncing -->
+<input l-on:input.debounce-300="query = $value" />
+```
+
+| Modifier | Effect |
+|----------|--------|
+| `.prevent` | Calls `event.preventDefault()` |
+| `.stop` | Calls `event.stopPropagation()` |
+| `.enter` | Only fires on Enter key |
+| `.escape` | Only fires on Escape key |
+| `.debounce` | Debounces at 150ms (default) |
+| `.debounce-N` | Debounces with custom time in ms |
+
+#### Loading States
+
+Server-driven reactivity introduces a round-trip between user action and UI update. Loom provides built-in loading state management so users get immediate visual feedback.
+
+When a click or submit event is sent to the server:
+
+- The `l-loading` CSS class is added to the triggering element (style it however you want)
+- Buttons are automatically disabled to prevent double-clicks (opt out with `l-no-disable`)
+- Both are removed when the server responds
+
+##### Loading Text
+
+Swap the element's text during the round-trip:
+
+```html
+<button l-on:click="items = save(items)" l-loading-text="Saving...">
+  Save
+</button>
+```
+
+During the round-trip, the button shows "Saving..." and is disabled. When the server responds, the original text is restored.
+
+##### Loading Indicators
+
+For richer feedback (spinners, icons), use the `l-loading` attribute on child elements. Children with `l-loading` are hidden by default and shown during the loading state, while their siblings are hidden:
+
+```html
+<button l-on:click="user.save(data)">
+  <span>Save</span>
+  <span l-loading>
+    <x-spinner /> Saving...
+  </span>
+</button>
+```
+
+When the button is clicked: "Save" is hidden, the spinner with "Saving..." appears. When the server responds, it reverts.
+
+##### Remote Loading Scopes
+
+Loading indicators don't have to live inside the triggering element. Give the trigger an `id` and reference it with `l-loading="thatId"`:
+
+```html
+<button id="save-btn" l-on:click="items = save(items)">
+  <span>Save</span>
+  <span l-loading>Saving...</span>
+</button>
+
+<div l-loading="save-btn">
+  <span>Items are up to date</span>
+  <span l-loading>Saving items...</span>
+</div>
+```
+
+When the button is clicked, both elements enter loading state. `l-loading` (no value) marks an indicator child; `l-loading="someId"` marks a remote scope. Multiple remote scopes can reference the same trigger.
+
+#### SPA Navigation
+
+Loom includes built-in SPA-like navigation. Link clicks are intercepted, pages are fetched over HTTP, and the DOM is swapped — making page transitions feel instant. The WebSocket stays open across navigations; only components are recycled.
+
+Navigation is enabled automatically when `loom.js` loads. A link is intercepted when:
+
+- Left-click with no modifier keys
+- Same-origin href
+- No `target` attribute (or `target="_self"`)
+- No `download` attribute
+- HTTP/HTTPS protocol
+- No `l-no-nav` attribute on the element or any ancestor
+
+Links are prefetched on hover (65ms delay) for instant-feeling navigation. If the fetch fails for any reason, Loom falls back to a normal browser navigation.
+
+##### Opting Out
+
+Add `l-no-nav` to any link or ancestor to force a full page load:
+
+```html
+<a href="/download" l-no-nav>Download</a>
+
+<nav l-no-nav>
+  <a href="/logout">Log out</a>
+  <a href="/download">Download</a>
+</nav>
+```
+
+GET forms are also intercepted. POST/PUT/DELETE forms always submit normally.
+
+#### Template Syntax
+
+##### Props
+
+Use the `@props` directive at the top of a template to declare typed parameters:
+
+```html
+@props(name: String)
+
+<h1>Hello, {{ name }}!</h1>
+```
+
+Multiple props are comma-separated:
+
+```html
+@props(name: String, age: Int, is_admin: Bool)
+
+<p>{{ name }} is {{ age }} years old.</p>
+```
+
+For complex types like lists or custom types, use `@import` to bring them into scope:
+
+```html
+@import(app/models/user.{type User})
+@props(users: List(User), title: String)
+
+<h1>{{ title }}</h1>
+<div l-for="user in users">{{ user.name }}</div>
+```
+
+Pass props as labeled arguments to the generated `render` function:
 
 ```gleam
 // src/app/http/controllers/home_controller.gleam
@@ -1282,28 +1549,111 @@ import glimr/response/response
 /// @get "/"
 ///
 pub fn show() {
-  response.html(home.html(name: "John"), 200)
+  response.html(
+    home.render(name: "John"),
+    200,
+  )
 }
 ```
 
-##### Escaped Variables
+##### Expressions
 
-Use double curly braces to output escaped variables:
+Use double curly braces to output escaped values. You can use simple variables or full Gleam expressions:
 
 ```html
+<!-- Simple variables -->
 <h1>Hello, {{ name }}!</h1>
 <p>Your email is {{ user.email }}</p>
+
+<!-- Gleam expressions with function calls -->
+<p>{{ string.uppercase(name) }}</p>
+<p>Total: {{ int.to_string(list.length(items)) }}</p>
+<p>{{ name |> string.uppercase |> string.trim }}</p>
 ```
 
-##### Unescaped Variables
+When using function calls, make sure to import the required modules with `@import`:
+
+```html
+@import(gleam/string)
+@import(gleam/list)
+@import(gleam/int)
+
+@props(name: String, items: List(Item))
+
+<p>{{ string.uppercase(name) }} has {{ int.to_string(list.length(items)) }} items</p>
+```
 
 For unescaped (raw) HTML output, use triple curly braces:
 
 ```html
 {{{ html_content }}}
+
+{{{ string.concat(["<strong>", name, "</strong>"]) }}}
 ```
 
-#### Conditionals
+To output literal `{{` or `{{{` on the page, prefix with a backslash:
+
+```html
+<p>Use \{{ variable }} for escaped output</p>
+<p>Use \{{{ raw }}} for unescaped output</p>
+```
+
+##### Imports
+
+Use the `@import` directive to import modules into your template. Imports are needed for:
+- Custom types referenced in `@props`
+- Module functions used in expressions (`{{ }}`, `{{{ }}}`)
+- Module functions used in conditions (`l-if`, `l-else-if`)
+
+```html
+@import(app/models/user.{type User})
+@import(app/models/post.{type Post, type Category})
+@props(user: User, posts: List(Post))
+
+<h1>{{ user.name }}'s Posts</h1>
+<div l-for="post in posts">
+  <h2>{{ post.title }}</h2>
+</div>
+```
+
+Import directives must appear at the beginning of the template, before any HTML content. You can have multiple `@import` directives:
+
+```html
+@import(gleam/option.{type Option})
+@import(app/models/user.{type User})
+@props(current_user: Option(User))
+
+<template l-if="option.is_some(current_user)">
+  <p>Welcome back!</p>
+</template>
+```
+
+**Importing standard library modules for expressions:**
+
+```html
+@import(gleam/string)
+@import(gleam/list)
+@import(gleam/int)
+@props(name: String, items: List(String))
+
+<p>{{ string.uppercase(name) }}</p>
+<p l-if="list.length(items) > 0">{{ int.to_string(list.length(items)) }} items</p>
+```
+
+##### String Literals in Attributes
+
+Gleam uses double quotes for strings, but HTML attributes are already double-quoted. Use single quotes inside expression attributes — they're automatically converted to double quotes during compilation:
+
+```html
+<div l-if="name == 'Miguel'">Hey!</div>
+<button l-on:click="status = 'active'">Activate</button>
+```
+
+This applies to all expression attributes: `l-if`, `l-else-if`, `l-show`, `l-on:*`, `l-for`, `l-model`, and `:prop` bindings.
+
+#### Control Flow
+
+##### Conditionals
 
 Loom uses directive attributes for conditionals. Add `l-if` to any HTML element:
 
@@ -1327,7 +1677,23 @@ For grouping, use `{}` instead of `()` (Gleam syntax):
 <button l-if="is_admin || {is_moderator && has_permission}">Delete</button>
 ```
 
-##### Else and Else-If
+Conditions support full Gleam expressions, including function calls:
+
+```html
+@import(gleam/list)
+@import(gleam/string)
+@props(items: List(Item), name: String)
+
+<div l-if="list.length(items) > 0">
+  <p>You have {{ int.to_string(list.length(items)) }} items</p>
+</div>
+
+<p l-if="list.is_empty(items)">No items yet.</p>
+
+<div l-if="string.length(string.trim(name)) > 0">
+  Hello, {{ name }}!
+</div>
+```
 
 Use `l-else` for fallback content on the next sibling element:
 
@@ -1353,23 +1719,43 @@ You can chain as many `l-else-if` as needed, and `l-else` at the end is optional
 <x-member-dashboard l-else-if="user.role == 'member'" />
 ```
 
-##### Template Wrapper
-
-When you need to conditionally render multiple elements without a wrapper, use `<template>`:
+Expressions also work in `l-else-if`:
 
 ```html
-<template l-if="show_details">
-  <h2>Details</h2>
-  <p>{{ description }}</p>
-  <span>{{ extra_info }}</span>
-</template>
+@import(gleam/list)
+@props(items: List(Item))
+
+<p l-if="list.is_empty(items)">No items</p>
+<p l-else-if="list.length(items) == 1">One item</p>
+<p l-else-if="list.length(items) < 5">A few items</p>
+<p l-else>Many items</p>
 ```
 
-The `<template>` tag itself is not rendered - only its children appear in the output.
+##### Conditional Visibility (l-show)
+
+`l-show` hides an element without removing it from the DOM. Unlike `l-if` which removes the element entirely, `l-show` toggles `display: none`:
+
+```html
+<div l-show="count > 0">Count is positive</div>
+```
+
+When the condition is false, the element renders with `style="display: none"`. When true, no style is added.
+
+`l-show` merges with existing `:style` attributes:
+
+```html
+<div l-show="visible" :style="'color: red'">Styled and toggleable</div>
+```
+
+| | `l-if` | `l-show` |
+|---|---|---|
+| DOM behavior | Removes/adds element entirely | Toggles `display: none` |
+| Toggle cost | Higher (full subtree diff) | Lower (style change only) |
+| Use when... | Branches are rarely toggled | Elements toggle frequently |
 
 ##### Conditional Classes and Styles
 
-Use `:class` and `:style` to conditionally apply CSS classes and inline styles. This is cleaner than embedding conditionals inside attributes:
+Use `:class` and `:style` to conditionally apply CSS classes and inline styles:
 
 ```html
 <!-- Conditional classes -->
@@ -1413,7 +1799,21 @@ This is particularly useful for zebra striping or highlighting specific rows, yo
 </tr>
 ```
 
-#### Loops
+##### Template Wrapper
+
+When you need to conditionally render multiple elements without a wrapper, use `<template>`:
+
+```html
+<template l-if="show_details">
+  <h2>Details</h2>
+  <p>{{ description }}</p>
+  <span>{{ extra_info }}</span>
+</template>
+```
+
+The `<template>` tag itself is not rendered — only its children appear in the output.
+
+##### Loops
 
 Loom uses an `l-for` directive for loops. The syntax is `item in collection`:
 
@@ -1430,25 +1830,6 @@ Nested loops are supported:
   <h2>{{ category.name }}</h2>
   <p l-for="product in category.products">{{ product.name }}</p>
 </div>
-```
-
-##### Tuple Destructuring
-
-When iterating over a list of tuples, you can destructure them directly:
-
-```html
-<!-- For List(#(String, String)) -->
-<dl>
-  <template l-for="(key, value) in items">
-    <dt>{{ key }}</dt>
-    <dd>{{ value }}</dd>
-  </template>
-</dl>
-
-<!-- For List(#(String, String, Int)) -->
-<p l-for="(name, description, count) in entries">
-  {{ name }}: {{ description }} ({{ count }})
-</p>
 ```
 
 ##### Loop Variable
@@ -1507,9 +1888,28 @@ This is cleaner and more explicit than accessing parent loops through a chain li
 
 > **Note:** Adding a loop variable incurs a small performance cost (O(2n) instead of O(n)) because the list length must be computed upfront. Only add a loop variable when you need the metadata.
 
+##### Tuple Destructuring in Loops
+
+When iterating over a list of tuples, you can destructure them directly:
+
+```html
+<!-- For List(#(String, String)) -->
+<dl>
+  <template l-for="(key, value) in items">
+    <dt>{{ key }}</dt>
+    <dd>{{ value }}</dd>
+  </template>
+</dl>
+
+<!-- For List(#(String, String, Int)) -->
+<p l-for="(name, description, count) in entries">
+  {{ name }}: {{ description }} ({{ count }})
+</p>
+```
+
 #### Components
 
-Components are reusable template partials. Use the following command to create a component. Create components in `src/resources/views/components/`:
+Components are reusable template partials. Create them in `src/resources/views/components/` and reference them with the `x-` prefix:
 
 **components/alert.loom.html:**
 ```html
@@ -1519,26 +1919,27 @@ Components are reusable template partials. Use the following command to create a
 </div>
 ```
 
-Components are prefixed with `x-`:
-
 ```html
 <x-alert>
   Your changes have been saved!
 </x-alert>
 ```
 
-##### Variables in Components
+##### Props
 
-Similar to loom views, you can set variable data for components by defining a `app/loom/components/*` file with the same name:
+Use the `@props` directive in your component template to define typed props:
 
-```gleam
-// app/loom/components/alert.gleam
-pub type Data {
-  Data(dismissable: Bool, type: String)
-}
+```html
+<!-- components/alert.loom.html -->
+@props(dismissable: Bool, type: String)
+
+<div class="alert alert-{{ type }}">
+  <slot />
+  <button l-if="dismissable" class="close">&times;</button>
+</div>
 ```
 
-Now you can use the variable as a prop for the component:
+Then pass props when using the component:
 
 ```html
 <x-alert type="success" dismissable>
@@ -1550,12 +1951,12 @@ Now you can use the variable as a prop for the component:
 </x-alert>
 ```
 
-##### Passing HTML Attributes to Components
+##### HTML Attributes
 
-When you add attributes to a component that aren't defined in its `Data` type, they're treated as HTML attributes and passed through to the component's root element:
+When you add attributes to a component that aren't defined in its `@props`, they're treated as HTML attributes and passed through to the component's root element:
 
 ```html
-<!-- "type" is a Data field, "id" and "class" are HTML attributes -->
+<!-- "type" is a prop, "id" and "class" are HTML attributes -->
 <x-alert type="success" id="my-alert" class="mb-4">
   Your changes have been saved!
 </x-alert>
@@ -1575,26 +1976,6 @@ By default, HTML attributes are added to the first element. Use `@attributes` to
   <slot />
   <button @attributes class="close">&times;</button>
 </div>
-```
-
-##### Nested Components
-
-Components can be nested within other components:
-
-```html
-<x-card>
-  <x-card-header>{{ title }}</x-card-header>
-  <x-card-body>
-    {{ content }}
-  </x-card-body>
-</x-card>
-```
-
-Organize related components in subdirectories with the `x-deeply:nested:component` syntax:
-
-```html
-<x-forms:input type="email" :value="email" />
-<x-forms:button>Submit</x-forms:button>
 ```
 
 ##### Slots
@@ -1694,7 +2075,27 @@ Check if a slot has content using `slot` or `slot.name` in `l-if` conditions:
 - `slot` checks if the default slot has content
 - `slot.header` checks if the named slot "header" has content
 
-#### Layouts
+##### Nested Components
+
+Components can be nested within other components:
+
+```html
+<x-card>
+  <x-card-header>{{ title }}</x-card-header>
+  <x-card-body>
+    {{ content }}
+  </x-card-body>
+</x-card>
+```
+
+Organize related components in subdirectories with the `x-deeply:nested:component` syntax:
+
+```html
+<x-forms:input type="email" :value="email" />
+<x-forms:button>Submit</x-forms:button>
+```
+
+##### Layouts
 
 Layouts are just components that wrap your page content. Create a layout in `src/resources/views/components/layouts/`:
 
@@ -1704,6 +2105,7 @@ Layouts are just components that wrap your page content. Create a layout in `src
 <html>
 <head>
   <title>{{ title }}</title>
+  <script defer src="/loom.js"></script>
 </head>
 <body>
   <header>
@@ -1749,7 +2151,7 @@ Use `<slot />` to mark where child content will be inserted. You can also use na
 </x-layouts:app>
 ```
 
-#### Compiling Templates to Gleam
+#### Compiling Templates
 
 Loom files are compiled automatically when running `./glimr run` whenever they're modified via the `[loom] auto_compile = true` setting in your `glimr.toml`. This runs the `./glimr loom_compile --path=$PATH` command.
 
