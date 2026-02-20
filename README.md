@@ -1025,7 +1025,6 @@ import glimr_postgres/postgres
 
 pub fn load(pool: Pool) -> Session {
   postgres.start_session(pool)
-  session.empty()
 }
 ```
 
@@ -1055,7 +1054,6 @@ import glimr_sqlite/sqlite
 
 pub fn load(pool: Pool) -> Session {
   sqlite.start_session(pool)
-  session.empty()
 }
 ```
 
@@ -1076,7 +1074,6 @@ import glimr_redis/redis
 
 pub fn load(pool: Pool) -> Session {
   redis.start_session(pool)
-  session.empty()
 }
 ```
 
@@ -1093,7 +1090,6 @@ import glimr/session/session.{type Session}
 
 pub fn load(pool: Pool) -> Session {
   file.start_session(pool)
-  session.empty()
 }
 ```
 
@@ -1108,7 +1104,6 @@ import glimr/session/session.{type Session}
 
 pub fn load() -> Session {
   session.start_cookie()
-  session.empty()
 }
 ```
 
@@ -1153,7 +1148,7 @@ The session middleware runs in your kernel and enriches the Context with a live 
 
 ```gleam
 import app/http/context/ctx.{type Context, Context}
-import glimr/http/middleware/start_session
+import glimr/session/session
 import wisp.{type Request, type Response}
 
 fn web_middleware(
@@ -1166,7 +1161,7 @@ fn web_middleware(
   use <- error_handler.default_html_responses()
   use <- wisp.rescue_crashes
   use req <- wisp.handle_head(req)
-  use req, session <- start_session.run(req)
+  use req, session <- session.load(req)
 
   // Enrich context with the live session
   let ctx = Context(..ctx, session: session)

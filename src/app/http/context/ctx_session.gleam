@@ -14,10 +14,9 @@ import glimr_postgres/postgres
 
 pub fn load(pool: Pool) -> Session {
   // You can start a session with postgres, sqlite, redis, a
-  // redis equivalent store, or even a file store.
-  postgres.start_session(pool)
+  // redis equivalent store, or even a file store. Initial 
+  // session object will be empty and then it will be 
+  // initialized through our global middleware.
 
-  // Initial session object will be empty and then it will
-  // be initialized through our global middleware.
-  session.empty()
+  postgres.start_session(pool)
 }
