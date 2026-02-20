@@ -27,6 +27,18 @@ If you'd like to stay updated on Glimr's development, Follow [@migueljarias](htt
 - [Controllers](#controllers)
 - [Actions](#actions)
 - [Middleware](#middleware)
+- [Session](#session)
+  - [Configuration](#session-configuration)
+  - [Choosing a Driver](#choosing-a-driver)
+    - [PostgreSQL Driver](#postgresql-driver)
+    - [SQLite Driver](#sqlite-driver)
+    - [Redis Driver](#redis-driver)
+    - [File Driver](#file-driver)
+    - [Cookie Driver](#cookie-driver)
+  - [Kernel Middleware](#kernel-middleware)
+  - [Session API](#session-api)
+  - [Flash Messages](#flash-messages)
+  - [Session Invalidation & Regeneration](#session-invalidation--regeneration)
 - [Form Validation](#form-validation)
 - [Views & Responses](#views--responses)
 - [Loom Template Engine](#loom-template-engine)
@@ -67,7 +79,7 @@ Glimr is a fully featured web framework built for Gleam. It provides a delightfu
 - **Type Safe Routing** - Generated pattern matching routes with compile-time type safety
 - **View Builder** - Fluent API for rendering HTML and Loom Templates
 - **Loom Template Engine** - Blade-inspired templates with components, slots, and conditionals
-- **Redirect Builder** - Clean redirect API with flash message support coming soon.
+- **Redirect Builder** - Clean redirect API with flash message support
 - **Middleware System** - Composable middleware at route and group levels
 - **Middleware Groups** - Pre-configured middleware stacks for different route types (Web, API, Custom)
 - **Form Validation** - Elegant form validation layer to easily validate requests
@@ -80,6 +92,7 @@ Glimr is a fully featured web framework built for Gleam. It provides a delightfu
 - **Connection Pooling** - Efficient database connection management for PostgreSQL and SQLite
 - **Transaction Support** - Atomic operations with automatic retry on deadlock
 - **Caching** - Unified caching API with file, SQLite, and PostgreSQL backends
+- **Sessions** - Server-side sessions with flash messages, backed by PostgreSQL, SQLite, Redis, file, or cookie drivers
 - **Console Commands** - CLI task runner with database access support and argument parsing
 
 ## Installation
@@ -956,6 +969,315 @@ fn admin_middleware(req, ctx, router) -> Response {
 
 This lets you define completely different middleware stacks for different parts of your application.
 
+## Session
+
+Glimr provides a full-featured session layer with support for multiple storage backends. Sessions are backed by an OTP actor per request, giving you mutable state within Gleam's immutable paradigm. The session middleware handles the full lifecycle automatically: reading the cookie, loading data from the store, providing a live session to your controllers, then persisting changes and setting the cookie on the response.
+
+### Session Configuration
+
+Session settings live in `config/session.toml`:
+
+```toml
+# config/session.toml
+
+[session]
+  table = "sessions"
+  cookie = "glimr_session"
+  lifetime = 120
+  expire_on_close = false
+```
+
+| Setting | Description |
+|---------|-------------|
+| `table` | Database table name (used by PostgreSQL and SQLite drivers) |
+| `cookie` | Cookie name for the session ID |
+| `lifetime` | Session lifetime in minutes |
+| `expire_on_close` | If `true`, cookie expires when browser closes (no `Max-Age`) |
+
+### Choosing a Driver
+
+Session drivers are initialized in `src/app/http/context/ctx_session.gleam`. Each driver shares the same session API — you only change the setup code to switch backends.
+
+#### PostgreSQL Driver
+
+Stores sessions in a PostgreSQL table. Shares your existing database pool.
+
+```bash
+gleam add glimr_postgres pog
+```
+
+Generate the session table migration:
+
+```bash
+# Generate the migration
+./glimr postgres_session_table
+
+# Or generate and run migrations in one step
+./glimr postgres_session_table --migrate
+```
+
+Set up the driver in `ctx_session.gleam`:
+
+```gleam
+import glimr/session/session.{type Session}
+import glimr_postgres/db/pool.{type Pool}
+import glimr_postgres/postgres
+
+pub fn load(pool: Pool) -> Session {
+  postgres.start_session(pool)
+  session.empty()
+}
+```
+
+#### SQLite Driver
+
+Stores sessions in a SQLite table. Shares your existing database pool.
+
+```bash
+gleam add glimr_sqlite sqlight
+```
+
+Generate the session table migration:
+
+```bash
+./glimr sqlite_session_table
+
+# Or generate and run migrations in one step
+./glimr sqlite_session_table --migrate
+```
+
+Set up the driver in `ctx_session.gleam`:
+
+```gleam
+import glimr/session/session.{type Session}
+import glimr_sqlite/db/pool.{type Pool}
+import glimr_sqlite/sqlite
+
+pub fn load(pool: Pool) -> Session {
+  sqlite.start_session(pool)
+  session.empty()
+}
+```
+
+#### Redis Driver
+
+Stores sessions in Redis with automatic TTL-based expiration. No garbage collection needed. Also works with Valkey, KeyDB, and Dragonfly.
+
+```bash
+gleam add glimr_redis
+```
+
+Set up the driver in `ctx_session.gleam`:
+
+```gleam
+import glimr/session/session.{type Session}
+import glimr_redis/cache/pool.{type Pool}
+import glimr_redis/redis
+
+pub fn load(pool: Pool) -> Session {
+  redis.start_session(pool)
+  session.empty()
+}
+```
+
+#### File Driver
+
+Stores sessions as files on disk using the file cache pool. No database required.
+
+Set up the driver in `ctx_session.gleam`:
+
+```gleam
+import glimr/cache/file
+import glimr/cache/file/pool.{type Pool}
+import glimr/session/session.{type Session}
+
+pub fn load(pool: Pool) -> Session {
+  file.start_session(pool)
+  session.empty()
+}
+```
+
+#### Cookie Driver
+
+Stores session data directly in a signed cookie. No server-side persistence needed. Best for small payloads under ~4KB.
+
+Set up the driver in `ctx_session.gleam`:
+
+```gleam
+import glimr/session/session.{type Session}
+
+pub fn load() -> Session {
+  session.start_cookie()
+  session.empty()
+}
+```
+
+Register the session context in your `ctx_provider.gleam`:
+
+```gleam
+import app/http/context/ctx.{type Context}
+import app/http/context/ctx_cache
+import app/http/context/ctx_db
+import app/http/context/ctx_session
+
+pub fn register() -> Context {
+  let db = ctx_db.load()
+  let cache = ctx_cache.load()
+  let session = ctx_session.load(db.main)
+
+  ctx.Context(
+    cache: cache,
+    db: db,
+    session: session,
+  )
+}
+```
+
+Add the `Session` field to your Context type in `src/app/http/context/ctx.gleam`:
+
+```gleam
+import glimr/session/session.{type Session}
+
+pub type Context {
+  Context(
+    cache: CacheContext,
+    db: DbContext,
+    session: Session,
+  )
+}
+```
+
+### Kernel Middleware
+
+The session middleware runs in your kernel and enriches the Context with a live session for each request. Add it to your middleware groups in `src/app/http/kernel.gleam`:
+
+```gleam
+import app/http/context/ctx.{type Context, Context}
+import glimr/http/middleware/start_session
+import wisp.{type Request, type Response}
+
+fn web_middleware(
+  req: Request,
+  ctx: Context,
+  router: fn(Request, Context) -> Response,
+) -> Response {
+  use <- wisp.serve_static(req, under: "/static", from: config_app.static_directory())
+  use <- wisp.log_request(req)
+  use <- error_handler.default_html_responses()
+  use <- wisp.rescue_crashes
+  use req <- wisp.handle_head(req)
+  use req, session <- start_session.run(req)
+
+  // Enrich context with the live session
+  let ctx = Context(..ctx, session: session)
+
+  router(req, ctx)
+}
+```
+
+### Session API
+
+All session operations interact with the per-request OTP actor through `ctx.session`:
+
+```gleam
+import glimr/session/session
+import glimr/response/redirect
+
+/// @post "/profile"
+///
+pub fn update(req: Request, ctx: Context) -> Response {
+  // Store a value
+  session.put(ctx.session, "user_id", "123")
+
+  // Get a value
+  case session.get(ctx.session, "user_id") {
+    Ok(user_id) -> {} // use user_id
+    Error(Nil) -> {} // not in session
+  }
+
+  // Check if a key exists
+  let logged_in = session.has(ctx.session, "user_id")
+
+  // Get all session data
+  let all_data = session.all(ctx.session)
+
+  // Remove a key
+  session.forget(ctx.session, "user_id")
+
+  // Get the session ID
+  let id = session.id(ctx.session)
+
+  // Redirect back successfully
+  redirect.back(req, 200)
+}
+```
+
+### Flash Messages
+
+Flash messages are one-shot values: set during this request, available only on the next request, then automatically cleared. Ideal for success/error messages after redirects.
+
+```gleam
+import app/http/context/ctx.{type Context}
+import glimr/session/session
+
+/// @post "/login"
+///
+pub fn login(ctx: Context) -> Response {
+  // Set flash messages for the next request
+  session.flash(ctx.session, "success", "Welcome back!")
+
+  redirect.to("/dashboard")
+}
+
+/// @get "/dashboard"
+///
+pub fn dashboard(req: Request, ctx: Context) -> Response {
+  response.html(dashboard.render(flash_msg), 200)
+}
+```
+And then in your loom file
+
+```html
+@import(glimr/session/session)
+@import(app/http/context/ctx.{type Context})
+@props(ctx: Context)
+
+...
+
+<div l-if="session.has_flash(ctx.session, 'message')">
+  {{ session.get_flash(ctx.session, "message") }}
+</div>
+
+...
+```
+
+### Session Invalidation & Regeneration
+
+```gleam
+import glimr/session/session
+
+/// @post "/logout"
+///
+pub fn logout(req: Request, ctx: Context) -> Response {
+  // Destroy all session data and issue a new session ID
+  session.invalidate(ctx.session)
+
+  redirect.to("/login")
+}
+
+/// @post "/login"
+///
+pub fn login(req: Request, ctx: Context) -> Response {
+  // After authentication, regenerate the session ID to prevent
+  // session fixation attacks. Keeps existing data, new ID only.
+  session.regenerate(ctx.session)
+
+  session.put(ctx.session, "user_id", user.id)
+
+  redirect.to("/dashboard")
+}
+```
+
 ## Form Validation
 
 Glimr provides a declarative, rule-based validation system for form data. Create form validator modules to define validation rules.
@@ -1043,8 +1365,6 @@ The `@validator` annotation:
 - Automatically runs validation before your handler
 - Adds the validator's `Data` type as a parameter to your function
 - If validation fails, returns a 422 response automatically
-
-> **Note:** Flash messaging isn't supported yet, as session support hasn't been implemented.
 
 > **Note:** Currently, validation errors just show up in a basic view. Eventually, web routes will redirect back with the errors, and API routes will return a 422 JSON response.
 
@@ -2185,18 +2505,16 @@ pub fn store(req: Request, ctx: Context) -> wisp.Response {
 
 ### Redirects with Flash Messages
 
-Flash messages persist data across redirects (requires session support):
+Flash messages persist data across redirects using the [session flash API](#flash-messages):
 
 ```gleam
 pub fn store(req: Request, ctx: Context) -> Response {
   // Process form...
+  session.flash(ctx.session, "success", "Contact form submitted!")
 
   redirect.to("/dashboard")
-  |> redirect.flash([#("success", "Contact form submitted!")])
 }
 ```
-
-> **Note:** Flash messaging isn't supported yet, as session support hasn't been implemented.
 
 ### Redirect Back
 
@@ -3228,10 +3546,10 @@ Generate and run the cache table migration:
 
 ```bash
 # Generate the migration
-./glimr sqlite_cache-table
+./glimr sqlite_cache_table
 
 # Or generate and run migrations in one step
-./glimr sqlite_cache-table --migrate
+./glimr sqlite_cache_table --migrate
 ```
 
 Use it in your controllers:
@@ -3322,10 +3640,10 @@ Generate and run the cache table migration:
 
 ```bash
 # Generate the migration
-./glimr postgres_cache-table
+./glimr postgres_cache_table
 
 # Or generate and run migrations in one step
-./glimr postgres_cache-table --migrate
+./glimr postgres_cache_table --migrate
 ```
 
 Use it in your controllers:

@@ -2,5 +2,16 @@
 
 # Glimr CLI ✨
 
-source build/packages/glimr/priv/cli.sh
+if [ -f "build/packages/glimr/priv/cli.sh" ]; then
+  source build/packages/glimr/priv/cli.sh
+elif [ -f "../framework/priv/cli.sh" ]; then
+  source ../framework/priv/cli.sh
+else
+  echo ""
+  echo -e "\033[31mCould not find Glimr CLI. Run 'gleam build' first.\033[0m"
+  echo ""
+  exit 1
+fi
+
+
 glimr_run "$@"

@@ -1,24 +1,25 @@
 //// HTTP Kernel
 ////
-//// This is the kernel for our HTTP layer. This is where we set up our 
-//// middleware groups which contain multiple middleware that we want 
-//// assigned to a specific route group. By default you have "web" and "api" 
+//// This is the kernel for our HTTP layer. This is where we set up our
+//// middleware groups which contain multiple middleware that we want
+//// assigned to a specific route group. By default you have "web" and "api"
 //// groups, but can define your own in the handle() method.
 ////
 //// https://github.com/glimr-org/glimr?tab=readme-ov-file#middleware-groups
 ////
 
-import app/http/context/ctx.{type Context}
+import app/http/context/ctx.{type Context, Context}
 import config/config_app
 import glimr/http/error_handler
 import glimr/http/kernel.{type MiddlewareGroup}
+import glimr/session/session
 import wisp.{type Request, type Response}
 
 pub fn handle(
   req: Request,
   ctx: Context,
   middleware_group: MiddlewareGroup,
-  router: fn(Request) -> Response,
+  router: fn(Request, Context) -> Response,
 ) -> Response {
   let req = wisp.method_override(req)
 
@@ -34,8 +35,8 @@ pub fn handle(
 ///
 fn web_middleware(
   req: Request,
-  _ctx: Context,
-  router: fn(Request) -> Response,
+  ctx: Context,
+  router: fn(Request, Context) -> Response,
 ) -> Response {
   use <- wisp.serve_static(
     req,
@@ -46,8 +47,12 @@ fn web_middleware(
   use <- error_handler.default_html_responses()
   use <- wisp.rescue_crashes
   use req <- wisp.handle_head(req)
+  use req, session <- session.load(req)
 
-  router(req)
+  // Modify the context with our new session
+  let ctx = Context(..ctx, session: session)
+
+  router(req, ctx)
 }
 
 /// Define the middleware that always runs for the
@@ -55,13 +60,17 @@ fn web_middleware(
 ///
 fn api_middleware(
   req: Request,
-  _ctx: Context,
-  router: fn(Request) -> Response,
+  ctx: Context,
+  router: fn(Request, Context) -> Response,
 ) -> Response {
   use <- wisp.log_request(req)
   use <- error_handler.default_json_responses()
   use <- wisp.rescue_crashes
   use req <- wisp.handle_head(req)
+  use req, session <- session.load(req)
 
-  router(req)
+  // Modify the context with our new session
+  let ctx = Context(..ctx, session: session)
+
+  router(req, ctx)
 }

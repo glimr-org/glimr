@@ -7,7 +7,6 @@ erl_crash.dump
 .env
 .env.backup
 .env.production
-glimr_l
 /.fleet
 /.idea
 /.nova

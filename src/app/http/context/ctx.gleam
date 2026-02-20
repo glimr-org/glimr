@@ -9,11 +9,13 @@
 
 import app/http/context/ctx_cache.{type CacheContext}
 import app/http/context/ctx_db.{type DbContext}
+import glimr/session/session.{type Session}
 
 pub type Context {
   Context(
     cache: CacheContext,
     db: DbContext,
+    session: Session,
     // ...
   )
 }
