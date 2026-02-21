@@ -4,6 +4,7 @@
   packages = [
     "glimr",
     "glimr_postgres",
+    "glimr_auth",
   ]
 
 [routes]

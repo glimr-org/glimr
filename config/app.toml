@@ -1,0 +1,10 @@
+# App Config
+#
+# General application settings for your Glimr project.
+# These values are used by the framework to configure
+# core behaviour like static file serving.
+
+[static]
+  # The directory from which static assets (CSS, JS,
+  # images, etc.) are served. Relative to the project root.
+  directory = "/static"
