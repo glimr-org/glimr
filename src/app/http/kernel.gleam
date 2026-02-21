@@ -1,9 +1,10 @@
 //// HTTP Kernel
 ////
-//// This is the kernel for our HTTP layer. This is where we set up our
-//// middleware groups which contain multiple middleware that we want
-//// assigned to a specific route group. By default you have "web" and "api"
-//// groups, but can define your own in the handle() method.
+//// This is the kernel for our HTTP layer. This is where we set 
+//// up our middleware groups which contain multiple middleware 
+//// that we want assigned to a specific route group. By default 
+//// you have "web" and "api" groups, but can define your own in 
+//// the handle() method.
 ////
 //// https://github.com/glimr-org/glimr?tab=readme-ov-file#middleware-groups
 ////
@@ -13,6 +14,7 @@ import config/config_app
 import glimr/http/error_handler
 import glimr/http/kernel.{type MiddlewareGroup}
 import glimr/session/session
+import glimr_auth/auth
 import wisp.{type Request, type Response}
 
 pub fn handle(
@@ -49,8 +51,7 @@ fn web_middleware(
   use req <- wisp.handle_head(req)
   use req, session <- session.load(req)
 
-  // Modify the context with our new session
-  let ctx = Context(..ctx, session: session)
+  let ctx = Context(..ctx, session: session, user: auth.resolve_user(session))
 
   router(req, ctx)
 }
@@ -69,8 +70,7 @@ fn api_middleware(
   use req <- wisp.handle_head(req)
   use req, session <- session.load(req)
 
-  // Modify the context with our new session
-  let ctx = Context(..ctx, session: session)
+  let ctx = Context(..ctx, session: session, user: auth.resolve_user(session))
 
   router(req, ctx)
 }

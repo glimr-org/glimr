@@ -2,6 +2,7 @@ import app/http/context/ctx.{type Context}
 import app/http/context/ctx_cache
 import app/http/context/ctx_db
 import app/http/context/ctx_session
+import gleam/option
 
 pub fn register() -> Context {
   let db = ctx_db.load()
@@ -12,6 +13,7 @@ pub fn register() -> Context {
     cache: cache,
     db: db,
     session: session,
+    user: option.None,
     // ...
   )
 }

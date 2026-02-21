@@ -9,6 +9,7 @@
 
 import app/http/context/ctx_cache.{type CacheContext}
 import app/http/context/ctx_db.{type DbContext}
+import gleam/option.{type Option}
 import glimr/session/session.{type Session}
 
 pub type Context {
@@ -16,6 +17,6 @@ pub type Context {
     cache: CacheContext,
     db: DbContext,
     session: Session,
-    // ...
+    user: Option(String),
   )
 }
