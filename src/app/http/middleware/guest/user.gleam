@@ -4,14 +4,12 @@ import glimr/http/kernel.{type Next}
 import glimr/response/redirect
 import wisp.{type Request, type Response}
 
-/// Where to redirect users who visit a protected route
-/// while they are unauthenticated.
-///
-const guest_redirect = "/login"
+/// Where to redirect authenticated users.
+const auth_redirect = "/dashboard"
 
 pub fn run(req: Request, ctx: Context, next: Next(Context)) -> Response {
   case ctx.user {
-    option.Some(_) -> next(req, ctx)
-    option.None -> redirect.to(guest_redirect)
+    option.None -> next(req, ctx)
+    option.Some(_) -> redirect.to(auth_redirect)
   }
 }

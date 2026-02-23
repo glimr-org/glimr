@@ -10,13 +10,13 @@
 ////
 
 import app/http/context/ctx.{type Context}
-import app/http/middleware/load_auth
+import app/http/middleware/expects_html
+import app/http/middleware/expects_json
 import app/http/middleware/load_session
+import app/http/middleware/load_user
 import glimr/http/kernel.{type MiddlewareGroup}
 import glimr/http/middleware
 import glimr/http/middleware/handle_head
-import glimr/http/middleware/html_errors
-import glimr/http/middleware/json_errors
 import glimr/http/middleware/log_request
 import glimr/http/middleware/method_override
 import glimr/http/middleware/rescue_crashes
@@ -32,13 +32,13 @@ pub fn handle(
   case middleware_group {
     kernel.Api -> {
       [
+        expects_json.run,
         method_override.run,
         log_request.run,
-        json_errors.run,
         rescue_crashes.run,
         handle_head.run,
         load_session.run,
-        load_auth.run,
+        load_user.run,
         // ...
       ]
       |> middleware.apply(req, ctx, router)
@@ -49,14 +49,14 @@ pub fn handle(
     //
     kernel.Web | _ -> {
       [
+        expects_html.run,
         serve_static.run,
         method_override.run,
         log_request.run,
-        html_errors.run,
         rescue_crashes.run,
         handle_head.run,
         load_session.run,
-        load_auth.run,
+        load_user.run,
         // ...
       ]
       |> middleware.apply(req, ctx, router)

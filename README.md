@@ -1227,7 +1227,7 @@ pub fn login(ctx: Context) -> Response {
 /// @get "/dashboard"
 ///
 pub fn dashboard(req: Request, ctx: Context) -> Response {
-  response.html(dashboard.render(flash_msg), 200)
+  response.html(dashboard.render(ctx), 200)
 }
 ```
 And then in your loom file
@@ -1275,7 +1275,7 @@ pub fn login(req: Request, ctx: Context) -> Response {
 
 ## Form Validation
 
-Glimr provides a declarative, rule-based validation system for form data. Create form validator modules to define validation rules.
+Glimr provides a declarative, rule-based validation system for form data. Validation errors are handled automatically based on your route's response format — HTML routes flash errors into the session and redirect back, while API routes return a structured JSON response.
 
 ### Creating Form Validators
 
@@ -1289,39 +1289,106 @@ This creates `user_store.gleam`. In it you can add your custom logic.
 
 ```gleam
 // src/app/http/validators/user_store.gleam
-import glimr/forms/validator.{Email, MaxLength, MinLength, Required, FileRequired}
-import wisp.{type FormData, type UploadedFile}
+import app/http/context/ctx.{type Context}
+import glimr/forms/validator.{type FormData, type Rule}
+import wisp.{type Request, type Response, type UploadedFile}
 
-// Define the shape of the data returned after validation
+/// Define the shape of the data returned after validation
+///
 pub type Data {
-  Data(name: String, email: String, avatar: UploadedFile)
-}
-
-// Define your form's validation rules
-pub fn rules(form: FormData) {
-  [
-    validator.for(form, "name", [Required, MinLength(2)]),
-    validator.for(form, "email", [Required, Email, MaxLength(255)]),
-    validator.for_file(form, "avatar", [FileRequired, FileMaxSize(5000)]),
-  ]
-}
-
-// Set the form data returned after validation
-pub fn data(form: FormData) -> Data {
   Data(
-    name: form.get(form, "name"),
-    email: form.get(form, "email"),
-    avatar: form.get_file(form, "avatar"),
+    name: String,
+    email: String,
+    avatar: UploadedFile,
   )
 }
 
-// Add "before" or "after" validation logic if necessary, here
+/// Define your form's validation rules
+///
+fn rules() -> List(Rule(Context)) {
+  [
+    validator.for("name", [
+      validator.Required,
+      validator.MinLength(2),
+    ]),
+    validator.for("email", [
+      validator.Required,
+      validator.Email,
+      validator.MaxLength(255),
+    ]),
+    validator.for_file("avatar", [
+      validator.FileRequired,
+      validator.FileMaxSize(5000),
+    ]),
+  ]
+}
+
+/// Set the form data returned after validation. This is also
+/// where you can transform validated input data before it
+/// reaches your controller.
+///
+fn data(data: FormData) -> Data {
+  Data(
+    name: data.get("name"),
+    email: data.get("email"),
+    avatar: data.get_file("avatar"),
+  )
+}
+
+/// Run your validation rules. This is your entry point, you
+/// don't usually have to adjust anything in this function, but
+/// you can if you want to add any custom logic before/after
+/// validation.
+///
 pub fn validate(req: Request, ctx: Context, next: fn(Data) -> Response) {
-  // Add before validation logic here...
-  use validated <- validator.run(req, ctx, rules, data)
-  // Add after validation logic here...
+  use validated <- validator.run(
+    req,
+    ctx,
+    ctx.response_format,
+    ctx.session,
+    rules,
+    data,
+  )
 
   next(validated)
+}
+```
+
+The `data()` function is also where you can transform validated input before it reaches your controller — normalize values, sanitize strings, or derive new fields:
+
+```gleam
+fn data(data: FormData) -> Data {
+  Data(
+    name: data.get("name") |> string.trim(),
+    email: data.get("email") |> string.lowercase(),
+    avatar: data.get_file("avatar"),
+  )
+}
+```
+
+### Validation Error Handling
+
+When validation fails, Glimr automatically handles errors based on your route's response format (set by the `expects_html` or `expects_json` middleware in your kernel):
+
+**HTML routes** — flashes the first error for each field into the session as `errors.<field_name>` and redirects back. Your templates can then display these errors next to the relevant inputs:
+
+```html
+@import(app/http/context/ctx)
+@import(glimr/session/session)
+@props(ctx: ctx.Context)
+
+<input type="text" name="email" />
+<span class="error">{{ session.get_flash(ctx.session, "errors.email") }}</span>
+```
+
+**API routes** — returns a `422 Unprocessable Entity` response with a structured JSON body:
+
+```json
+{
+  "errors": {
+    "email": ["Email is required", "Email must be a valid email address"],
+    "name": ["Name is required"]
+  }
 }
 ```
 
@@ -1341,7 +1408,6 @@ import wisp.{type Request, type Response}
 /// @validator "user_store"
 ///
 pub fn store(ctx: Context, validated: Data) -> Response {
-  // Do something with your validated data
   let assert Ok(user) = user_repository.create(
     pool: ctx.db.main,
     name: validated.name,
@@ -1349,9 +1415,8 @@ pub fn store(ctx: Context, validated: Data) -> Response {
     avatar: validated.avatar.path,
   )
 
-  // Redirect back with success message
+  session.flash(ctx.session, "message", "User created successfully!")
   redirect.back(req)
-  |> response.flash([#("message", "User created successfully!")])
 }
 ```
 
@@ -1359,9 +1424,7 @@ The `@validator` annotation:
 - Uses the bare validator name (e.g., `"user_store"` resolves to `app/http/validators/user_store`)
 - Automatically runs validation before your handler
 - Adds the validator's `Data` type as a parameter to your function
-- If validation fails, returns a 422 response automatically
-
-> **Note:** Currently, validation errors just show up in a basic view. Eventually, web routes will redirect back with the errors, and API routes will return a 422 JSON response.
+- If validation fails, errors are handled automatically (flash + redirect for HTML, JSON for API)
 
 #### Applying Validation Programmatically
 
@@ -1375,10 +1438,8 @@ import app/repositories/user_repository
 /// @post "/users"
 ///
 pub fn store(req: Request, ctx: Context) -> Response {
-  // Form validation errors are handled automatically
   use validated <- user_store.validate(req, ctx)
 
-  // Do something with your validated data
   let assert Ok(user) = user_repository.create(
     pool: ctx.db.main,
     name: validated.name,
@@ -1386,9 +1447,8 @@ pub fn store(req: Request, ctx: Context) -> Response {
     avatar: validated.avatar.path,
   )
 
-  // Redirect back with success message
+  session.flash(ctx.session, "message", "User created successfully!")
   redirect.back(req)
-  |> response.flash([#("message", "User created successfully!")])
 }
 ```
 
@@ -1397,25 +1457,39 @@ This approach is useful when you need conditional validation or want more contro
 ### Available Validation Rules
 
 **Text & String Rules:**
-- **Required** - Field must have a value
-- **Email** - Field must be a valid email address
-- **MinLength(Int)** - Field must be at least n characters
-- **MaxLength(Int)** - Field must be at most n characters
-- **Url** - Field must be a valid URL
+- **Required** — Field must have a value
+- **Email** — Field must be a valid email address
+- **MinLength(Int)** — Field must be at least n characters
+- **MaxLength(Int)** — Field must be at most n characters
+- **Url** — Field must be a valid URL
+- **Confirmed(String)** — Field must match the value of the specified confirmation field
+- **Regex(String)** — Field must match the provided regex pattern
+- **RequiredIf(String, String)** — Field is required when another field equals a specific value
+- **RequiredUnless(String, String)** — Field is required unless another field equals a specific value
+- **In(List(String))** — Field must be one of the provided options
+- **NotIn(List(String))** — Field must not be any of the provided options
+- **Alpha** — Field must contain only letters
+- **AlphaNumeric** — Field must contain only letters and digits
+- **StartsWith(String)** — Field must start with the given prefix
+- **EndsWith(String)** — Field must end with the given suffix
+- **Date** — Field must be a valid date (YYYY-MM-DD)
+- **Uuid** — Field must be a valid UUID
+- **Ip** — Field must be a valid IP address (IPv4 or IPv6)
 
 **Numeric Rules:**
-- **Numeric** - Field must be numeric
-- **Min(Int)** - Numeric field must be at least n
-- **Max(Int)** - Numeric field must be at most n
-- **Digits(Int)** - Field must have exactly n digits
-- **MinDigits(Int)** - Field must have at least n digits
-- **MaxDigits(Int)** - Field must have at most n digits
+- **Numeric** — Field must be numeric
+- **Min(Int)** — Numeric field must be at least n
+- **Max(Int)** — Numeric field must be at most n
+- **Between(Int, Int)** — Numeric field must be within the given range (inclusive)
+- **Digits(Int)** — Field must have exactly n digits
+- **MinDigits(Int)** — Field must have at least n digits
+- **MaxDigits(Int)** — Field must have at most n digits
 
 **File Upload Rules:**
-- **FileRequired** - File field must have a file uploaded
-- **FileMinSize(Int)** - File must be at least n KB
-- **FileMaxSize(Int)** - File must be at most n KB
-- **FileExtension(List(String))** - File must have one of the allowed extensions (e.g., `["jpg", "png"]`)
+- **FileRequired** — File field must have a file uploaded
+- **FileMinSize(Int)** — File must be at least n KB
+- **FileMaxSize(Int)** — File must be at most n KB
+- **FileExtension(List(String))** — File must have one of the allowed extensions (e.g., `["jpg", "png"]`)
 
 ### Custom Validation Rules
 
@@ -1431,45 +1505,79 @@ Add your rule's validation logic:
 // app/http/rules/no_gmail.gleam
 import app/http/context/ctx.{type Context}
 import gleam/string
+import glimr/forms/validator.{type FormData}
 
-pub fn run(value: String, _ctx: Context) -> Result(Nil, String) {
+pub fn run(field: String, value: String, _data: FormData, _ctx: Context) -> Result(Nil, String) {
   case string.contains(value, "gmail") {
     False -> Ok(Nil)
-    True -> Error("cannot be a Gmail address")
+    True -> Error(field <> " cannot be a Gmail address")
   }
 }
 ```
 
-Use your custom rule in your request:
+Custom rules receive the full form data, so you can access other field values when you need cross-field validation:
+
+```gleam
+// app/http/rules/after_start_date.gleam
+import app/http/context/ctx.{type Context}
+import glimr/forms/validator.{type FormData}
+
+pub fn run(field: String, value: String, data: FormData, _ctx: Context) -> Result(Nil, String) {
+  case value > data.get("start_date") {
+    True -> Ok(Nil)
+    False -> Error(field <> " must be after the start date")
+  }
+}
+```
+
+```gleam
+// app/http/validators/event_validator.gleam
+import app/http/rules/after_start_date
+import glimr/forms/validator.{Custom, Required}
+
+fn rules() {
+  [
+    validator.for("start_date", [Required]),
+    validator.for("end_date", [
+      Required,
+      Custom(after_start_date.run),
+    ]),
+  ]
+}
+```
+
+Use your custom rule in your validator:
 
 ```gleam
 // app/http/validators/login_validator.gleam
+import app/http/rules/no_gmail
 import glimr/forms/validator.{Custom, MinLength, MaxLength, Required}
-import app/http/rules/no_gmail.{run as username_available}
 
-pub fn rules(form: FormData) {
+fn rules() {
   [
-    validator.for(form, "email", [
+    validator.for("email", [
       Required,
       MinLength(3),
       MaxLength(255),
-      Custom(no_gmail), // <----- custom rule!
+      Custom(no_gmail.run),
     ]),
 
-    validator.for(form, "password", [Required]),
+    validator.for("password", [Required]),
   ]
 }
-
 ```
 
-**Custom validation function structure:**
-- Take a `String` value as input
+**Custom validation function signature:**
+- `fn(String, FormData, ctx) -> Result(Nil, String)`
+- First argument is the field's value
+- Second argument is the form data — use `data.get("other_field")` to access other fields
+- Third argument is your app context for database lookups, config, etc.
 - Return `Ok(Nil)` if validation passes
 - Return `Error(message)` with an error message if validation fails
 
 ### Custom File Validation Rules
 
-Create your own validation rules for domain-specific logic using the `FileCustom` rule in `app/http/rules`. Use the following command:
+Create custom file validation rules using the `FileCustom` rule in `app/http/rules`. Use the following command:
 
 ```bash
 ./glimr make_rule image_dimensions --file
@@ -1479,37 +1587,60 @@ Add your rule's validation logic:
 
 ```gleam
 // app/http/rules/image_dimensions.gleam
+import app/http/context/ctx.{type Context}
+import glimr/forms/validator.{type FormData}
 import wisp.{type UploadedFile}
 
-pub fn run(file: UploadedFile) -> Result(Nil, String) {
+pub fn run(field: String, file: UploadedFile, _data: FormData, _ctx: Context) -> Result(Nil, String) {
   case get_image_dimensions(file.path) {
     Ok(#(width, height)) if width >= 100 && height >= 100 -> Ok(Nil)
-    Ok(_) -> Error("must be at least 100x100 pixels")
-    Error(_) -> Error("could not read image dimensions")
+    Ok(_) -> Error(field <> " must be at least 100x100 pixels")
+    Error(_) -> Error(field <> " could not read image dimensions")
   }
 }
 ```
 
-Use your custom rule in your request:
+Like string custom rules, file custom rules also receive the full form data for cross-field validation:
+
+```gleam
+// app/http/rules/image_dimensions.gleam
+import app/http/context/ctx.{type Context}
+import glimr/forms/validator.{type FormData}
+import wisp.{type UploadedFile}
+
+pub fn run(field: String, file: UploadedFile, data: FormData, _ctx: Context) -> Result(Nil, String) {
+  // Use form data to conditionally validate
+  case data.get("type") {
+    "profile" -> validate_square(file)
+    "banner" -> validate_wide(file)
+    _ -> Ok(Nil)
+  }
+}
+```
+
+Use your custom rule in your validator:
 
 ```gleam
 // app/http/validators/avatar_upload.gleam
+import app/http/rules/image_dimensions
 import glimr/forms/validator.{FileCustom, FileRequired, FileMaxSize}
-import app/http/rules/image_dimensions.{run as image_dimensions}
 
-pub fn rules(form: FormData) {
+fn rules() {
   [
-    validator.for_file(form, "avatar", [
+    validator.for_file("avatar", [
       FileRequired,
       FileMaxSize(2048),
-      FileCustom(image_dimensions), // <-----
+      FileCustom(image_dimensions.run),
     ]),
   ]
 }
 ```
 
-**Custom file validation function structure:**
-- Take an `UploadedFile` as input
+**Custom file validation function signature:**
+- `fn(UploadedFile, FormData, ctx) -> Result(Nil, String)`
+- First argument is the uploaded file
+- Second argument is the form data — use `data.get("other_field")` to access other fields
+- Third argument is your app context
 - Return `Ok(Nil)` if validation passes
 - Return `Error(message)` with an error message if validation fails
 
@@ -3058,7 +3189,7 @@ The file name prefix determines whether the query returns a single row or multip
 
 **Examples:**
 - `find.sql` → returns `Result(User, Nil)`
-- `find_by_email.sql` → returns `Result(User, Nil)`
+- `by_email.sql` → returns `Result(User, Nil)`
 - `list_all.sql` → returns `List(User)`
 - `list_active.sql` → returns `List(User)`
 - `list_by_role.sql` → returns `List(User)`
@@ -3239,8 +3370,8 @@ pub fn store(req: Request, ctx: Context) -> Response {
       redirect.to("/transfers/success")
     }
     Error(_) -> {
+      session.flash(ctx.session, "error", "Transfer failed")
       redirect.to("/transfers")
-      |> redirect.flash([#("error", "Transfer failed")])
     }
   }
 }
