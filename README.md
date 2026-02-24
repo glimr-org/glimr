@@ -1003,7 +1003,7 @@ Session drivers are initialized in `src/app/http/context/ctx_session.gleam`. Eac
 Stores sessions in a PostgreSQL table. Shares your existing database pool.
 
 ```bash
-gleam add glimr_postgres pog
+gleam add glimr_postgres
 ```
 
 Generate the session table migration:
@@ -1019,8 +1019,8 @@ Generate the session table migration:
 Set up the driver in `ctx_session.gleam`:
 
 ```gleam
+import glimr/db/pool_connection.{type Pool}
 import glimr/session/session.{type Session}
-import glimr_postgres/db/pool.{type Pool}
 import glimr_postgres/postgres
 
 pub fn load(pool: Pool) -> Session {
@@ -1033,7 +1033,7 @@ pub fn load(pool: Pool) -> Session {
 Stores sessions in a SQLite table. Shares your existing database pool.
 
 ```bash
-gleam add glimr_sqlite sqlight
+gleam add glimr_sqlite
 ```
 
 Generate the session table migration:
@@ -1048,8 +1048,8 @@ Generate the session table migration:
 Set up the driver in `ctx_session.gleam`:
 
 ```gleam
+import glimr/db/pool_connection.{type Pool}
 import glimr/session/session.{type Session}
-import glimr_sqlite/db/pool.{type Pool}
 import glimr_sqlite/sqlite
 
 pub fn load(pool: Pool) -> Session {
@@ -2654,34 +2654,25 @@ pub fn cancel(req: Request, ctx: Context) -> Response {
 
 ## Database
 
-Currently supports sqlite via the [glimr-org/sqlite](https://github.com/glimr-org/sqlite) package (built with `lpil/sqlight`) and postgres via the [glimr-org/postgres](https://github.com/glimr-org/postgres) package (built with `lpil/pog`).
+Currently supports sqlite via the [glimr-org/sqlite](https://github.com/glimr-org/sqlite) package (built with `lpil/sqlight`) and postgres via the [glimr-org/postgres](https://github.com/glimr-org/postgres) package (built with `lpil/pog`). Both drivers return a unified `pool_connection.Pool` type from the core framework, so your application code is driver-agnostic — queries, transactions, and connection management all use the same API regardless of the underlying database.
 
 ### Setup
 
 #### SQLite
 
-Install the `glimr_sqlite` and `sqlight` packages:
+Install the `glimr_sqlite` package:
 
 ```bash
-gleam add sqlight glimr_sqlite
+gleam add glimr_sqlite
 ```
 
-In your `config_db.gleam` file, set up an sqlite connection in the `connections()` list:
+Configure a SQLite connection in `config/database.toml`:
 
-```gleam
-import dot_env/env
-import glimr/db/driver.{type Connection}
-
-pub fn connections() -> List(Connection) {
-  [
-    driver.SqliteConnection(
-      name: "main",
-      database: env.get_string("DB_DATABASE"),
-      pool_size: env.get_int("DB_POOL_SIZE"),
-    ),
-    // ...
-  ]
-}
+```toml
+[connections.main]
+  driver = "sqlite"
+  database = "${DB_DATABASE}"
+  pool_size = "${DB_POOL_SIZE}"
 ```
 
 Run the following command to create a directory for your new database connection. This will contain all migrations, queries, repositories, for this database. In our previous example we set the name to "main", so the command below would create `src/data/main/`. This also creates a database file in `src/data/main/data.db`.
@@ -2700,22 +2691,19 @@ DB_POOL_SIZE=15
 Set up your connection in your `ctx_db.gleam`:
 
 ```gleam
-import config/config_db
-import glimr_sqlite/db/pool.{type Pool as SqlitePool}
+import glimr/db/pool_connection.{type Pool}
 import glimr_sqlite/sqlite
 
 pub type DbContext {
   DbContext(
-    main: SqlitePool, // <--- Add to context
+    main: Pool, // <--- Add to context
     // ...
   )
 }
 
 pub fn load() -> DbContext {
-  let connections = config_db.connections()
-
   DbContext(
-    main: sqlite.start("main", connections), // <--- Load by name
+    main: sqlite.start("main"), // <--- Load by name
     // ...
   )
 }
@@ -2724,8 +2712,11 @@ pub fn load() -> DbContext {
 And then finally, use `ctx.db.main` in your controllers:
 
 ```gleam
-pub fn show(_req: Request, ctx: Context) -> Response {
-  case user_repository.find(ctx.db.main, user_id) {
+/// @get "/users/:user_id"
+pub fn show(_req: Request, ctx: Context, user_id: String) -> Response {
+  let assert Ok(user_id) = int.parse(user_id)
+
+  case user.find(ctx.db.main, user_id) {
     Ok(user) -> {
       view.build()
       |> view.html("users/show.html")
@@ -2737,21 +2728,16 @@ pub fn show(_req: Request, ctx: Context) -> Response {
 }
 ```
 
-You should also register the `glimr_sqlite` console commands in your `command_provider.gleam` file so you can access commands like `./glimr sqlite_migrate`:
+You should also register the `glimr_sqlite` console commands in your `glimr.toml` file so you can access commands like `./glimr sqlite_migrate`:
 
-```gleam
-import app/console/kernel
-import gleam/list
-import glimr/console/command.{type Command}
-import glimr_sqlite/console/kernel as kernel_sqlite
+```toml
+[commands]
+  auto_compile = true
 
-pub fn register() -> List(Command) {
-  list.flatten([
-    kernel.commands(),
-    kernel_sqlite.commands(), // <--- Register sqlite commands
-    // ...
-  ])
-}
+  packages = [
+    "glimr",
+    "glimr_sqlite", # add it here...
+  ]
 ```
  
 ##### SQLite with :memory:
@@ -2774,32 +2760,23 @@ DB_PATH="file::memory:?cache=shared"
 
 #### PostgreSQL
 
-Install the `glimr_postgres` and `pog` packages:
+Install the `glimr_postgres` package:
 
 ```bash
-gleam add pog glimr_postgres
+gleam add glimr_postgres
 ```
 
-In your `config_db.gleam` file, set up a postgres connection in the `connections()` list:
+Configure a PostgreSQL connection in `config/database.toml`:
 
-```gleam
-import dot_env/env
-import glimr/db/driver.{type Connection}
-
-pub fn connections() -> List(Connection) {
-  [
-    driver.PostgresConnection(
-      name: "main",
-      host: env.get_string("DB_HOST"),
-      port: env.get_int("DB_PORT"),
-      database: env.get_string("DB_DATABASE"),
-      username: env.get_string("DB_USERNAME"),
-      password: env.get_string("DB_PASSWORD"),
-      pool_size: env.get_int("DB_POOL_SIZE"),
-    )
-    // ...
-  ]
-}
+```toml
+[connections.main]
+  driver = "postgres"
+  host = "${DB_HOST}"
+  port = "${DB_PORT}"
+  database = "${DB_DATABASE}"
+  username = "${DB_USERNAME}"
+  password = "${DB_PASSWORD}"
+  pool_size = "${DB_POOL_SIZE}"
 ```
 
 Update your .env variables:
@@ -2813,22 +2790,13 @@ DB_PASSWORD=[db_password]
 DB_POOL_SIZE=15
 ```
 
-If you'd rather use a `DB_URL` for your postgres connection, set up your `config_db.gleam` like this:
+If you'd rather use a `DB_URL` for your postgres connection, use the `postgres_url` driver instead:
 
-```gleam
-import dot_env/env
-import glimr/db/driver.{type Connection}
-
-pub fn connections() -> List(Connection) {
-  [
-    driver.PostgresUriConnection(
-      name: "main",
-      url: env.get_string("DB_URL"),
-      pool_size: env.get_int("DB_POOL_SIZE"),
-    )
-    // ...
-  ]
-}
+```toml
+[connections.main]
+  driver = "postgres_url"
+  url = "${DB_URL}"
+  pool_size = "${DB_POOL_SIZE}"
 ```
 
 Update your .env variables:
@@ -2846,22 +2814,19 @@ Run the following command to create a directory for your new database connection
 Set up your connection in your `ctx_db.gleam`:
 
 ```gleam
-import config/config_db
-import glimr_postgres/db/pool.{type Pool as PostgresPool}
+import glimr/db/pool_connection.{type Pool}
 import glimr_postgres/postgres
 
 pub type DbContext {
   DbContext(
-    main: PostgresPool, // <--- Add to context
+    main: Pool, // <--- Add to context
     // ...
   )
 }
 
 pub fn load() -> DbContext {
-  let connections = config_db.connections()
-
   DbContext(
-    main: postgres.start("main", connections), // <--- Load by name
+    main: postgres.start("main"), // <--- Load by name
     // ...
   )
 }
@@ -2870,8 +2835,11 @@ pub fn load() -> DbContext {
 And then finally, use `ctx.db.main` in your controllers:
 
 ```gleam
-pub fn show(_req: Request, ctx: Context) -> Response {
-  case user_repository.find(ctx.db.main, user_id) {
+/// @get "/users/:user_id"
+pub fn show(_req: Request, ctx: Context, user_id: String) -> Response {
+  let assert Ok(user_id) = int.parse(user_id)
+
+  case user.find(ctx.db.main, user_id) {
     Ok(user) -> {
       view.build()
       |> view.html("users/show.html")
@@ -2883,71 +2851,53 @@ pub fn show(_req: Request, ctx: Context) -> Response {
 }
 ```
 
-You should also register the `glimr_postgres` console commands in your `command_provider.gleam` file so you can access commands like `./glimr postgres_migrate`:
+You should also register the `glimr_postgres` console commands in your `glimr.toml` file so you can access commands like `./glimr postgres_migrate`:
 
-```gleam
-import app/console/kernel
-import gleam/list
-import glimr/console/command.{type Command}
-import glimr_postgres/console/kernel as kernel_postgres
+```toml
+[commands]
+  auto_compile = true
 
-pub fn register() -> List(Command) {
-  list.flatten([
-    kernel.commands(),
-    kernel_postgres.commands(), // <--- Register postgres commands
-    // ...
-  ])
-}
+  packages = [
+    "glimr",
+    "glimr_postgres", # add it here...
+  ]
 ```
 
-### Multiple Database Connections
+### Multiple Databases
 
-Glimr supports multiple database connections at the same time, even with different drivers! Just add them to the `connections()` list in `config_db.gleam`:
+Glimr supports multiple database connections at the same time, even with different drivers! Just add them to `config/database.toml`:
 
-```gleam
-import dot_env/env
-import glimr/db/driver.{type Connection}
+```toml
+[connections.main]
+  driver = "postgres_url"
+  url = "${DB_URL}"
+  pool_size = "${DB_POOL_SIZE}"
 
-pub fn connections() -> List(Connection) {
-  [
-    driver.PostgresUriConnection(
-      name: "main",
-      url: env.get_string("DB_URL"),
-      pool_size: env.get_int("DB_POOL_SIZE"),
-    ),
-    driver.SqliteConnection(
-      name: "analytics",
-      database: env.get_string("DB_ANALYTICS_DATABASE"),
-      pool_size: env.get_int("DB_ANALYTICS_POOL_SIZE"),
-    )
-    // ...
-  ]
-}
+[connections.analytics]
+  driver = "sqlite"
+  database = "${DB_ANALYTICS_DATABASE}"
+  pool_size = "${DB_ANALYTICS_POOL_SIZE}"
 ```
 
 You can then set up these connections in your `ctx_db.gleam`:
 
 ```gleam
-import config/config_db
-import glimr_sqlite/db/pool.{type Pool as SqlitePool}
-import glimr_postgres/db/pool.{type Pool as PostgresPool}
+import glimr/db/pool_connection.{type Pool}
 import glimr_sqlite/sqlite
 import glimr_postgres/postgres
 
 pub type DbContext {
   DbContext(
-    main: PostgresPool,
-    analytics: SqlitePool,
+    main: Pool,
+    analytics: Pool,
     // ...
   )
 }
 
 pub fn load() -> DbContext {
-  let connections = config_db.connections()
-
   DbContext(
-    main: postgres.start("main", connections),
-    analytics: sqlite.start("analytics", connections),
+    main: postgres.start("main"),
+    analytics: sqlite.start("analytics"),
     // ...
   )
 }
@@ -2977,7 +2927,7 @@ Start by creating a data model using the following command:
 
 This creates a `user/` folder inside your default database directory `src/data/main/models/`. The folder contains `user_schema.gleam` for defining your table schema, and a `queries/` folder with pre-generated CRUD queries that get compiled into fully typed gleam code. You can add custom queries to this folder as well (see [Queries](#queries) section).
 
-The `make:model` command defines your default connection as the very first one in your `connections()` list in `config_db.gleam`. All other commands that accept the `--database` flag define it as the first of it's driver type instead.
+The `make:model` command defines your default connection as the very first one in your `config/database.toml`. All other commands that accept the `--database` flag define it as the first of its driver type instead.
 
 If you need to specify the connection folder you can always pass a `--database` flag:
 
@@ -3068,7 +3018,7 @@ Run the migration generator for the specific driver:
 ./glimr postgres_gen --database=analytics
 ```
 
-> **Note:** The default connection for a specific driver is the very first one of its kind defined in your `connections()` list in `config_db.gleam`.
+> **Note:** The default connection for a specific driver is the very first one of its kind defined in your `config/database.toml`.
 
 This will:
 1. Scan schema files in `src/data/{connection_name}/models/`
@@ -3241,7 +3191,7 @@ pub fn list_active_wc(conn) -> Result(List(User), DbError)
 
 Glimr manages a pool of database connections to efficiently handle concurrent requests. The pool is initialized in your context in `ctx_provider.gleam`.
 
-You can specify the pool size by setting the `DB_POOL_SIZE` env variable, and the config value for your connection in `config_db.gleam`. It defaults to 15.
+You can specify the pool size by setting the `DB_POOL_SIZE` env variable, and the config value for your connection in `config/database.toml`. It defaults to 15.
 
 **How it works:**
 
@@ -3319,15 +3269,10 @@ For operations that must succeed or fail together, use transactions. They automa
 - Return the connection to the pool
 - Retry on deadlock (with configurable retry count)
 
-Transactions are provided by the driver packages (`glimr_sqlite` or `glimr_postgres`):
+Transactions are provided by the core `pool_connection` module and work with any database driver:
 
 ```gleam
-// For SQLite
-import glimr_sqlite/db/db
 import glimr/db/pool_connection.{type DbError}
-
-// For PostgreSQL
-// import glimr_postgres/db/db
 
 pub fn transfer(
   ctx: Context,
@@ -3335,7 +3280,7 @@ pub fn transfer(
   to_id: Int,
   amount: Int,
 ) -> Result(Nil, DbError) {
-  use conn <- db.transaction(ctx.db.main, 3)
+  use conn <- pool_connection.transaction(ctx.db.main, 3)
 
   // Both operations use the same connection within the transaction
   use _ <- result.try(account_repository.debit_wc(conn, from_id, amount))
@@ -3353,15 +3298,13 @@ Retries use exponential backoff to reduce contention.
 **Using transactions in controllers:**
 
 ```gleam
-// Use the appropriate driver package
-import glimr_sqlite/db/db       // for SQLite
-// import glimr_postgres/db/db  // for PostgreSQL
+import glimr/db/pool_connection
 
 pub fn store(req: Request, ctx: Context) -> Response {
   use validated <- transfer_request.validate(req, ctx)
 
   case {
-    use conn <- db.transaction(ctx.db.main, 3)
+    use conn <- pool_connection.transaction(ctx.db.main, 3)
     use _ <- result.try(account_repository.debit_wc(conn, validated.from_id, validated.amount))
     use _ <- result.try(account_repository.credit_wc(conn, validated.to_id, validated.amount))
     Ok(Nil)
@@ -3603,10 +3546,10 @@ The SQLite database store caches values in a database table, ideal when you alre
 
 **Setup:**
 
-Ensure you have `glimr_sqlite` and `sqlight` installed:
+Ensure you have `glimr_sqlite` installed:
 
 ```bash
-gleam add glimr_sqlite sqlight
+gleam add glimr_sqlite
 ```
 
 Set up the store in `config_cache.gleam`:
@@ -3630,9 +3573,9 @@ Set up the cache in your `ctx_cache.gleam`:
 
 ```gleam
 import config/config_cache
+import glimr/db/pool_connection.{type Pool}
 import glimr_sqlite/sqlite
 import glimr_sqlite/cache/pool.{type Pool as SqliteCachePool}
-import glimr_sqlite/db/pool.{type Pool as SqlitePool}
 
 pub type CacheContext {
   CacheContext(
@@ -3640,7 +3583,7 @@ pub type CacheContext {
   )
 }
 
-pub fn load(db_pool: SqlitePool) -> CacheContext {
+pub fn load(db_pool: Pool) -> CacheContext {
   let stores = config_cache.stores()
 
   CacheContext(
@@ -3698,10 +3641,10 @@ The PostgreSQL database store caches values in a database table, ideal when you 
 
 **Setup:**
 
-Ensure you have `glimr_postgres` and `pog` installed:
+Ensure you have `glimr_postgres` installed:
 
 ```bash
-gleam add glimr_postgres pog
+gleam add glimr_postgres
 ```
 
 Set up the store in `config_cache.gleam`:
@@ -3725,9 +3668,9 @@ Set up the cache in your `ctx_cache.gleam`:
 
 ```gleam
 import config/config_cache
+import glimr/db/pool_connection.{type Pool}
 import glimr_postgres/postgres
 import glimr_postgres/cache/pool.{type Pool as PostgresCachePool}
-import glimr_postgres/db/pool.{type Pool as PostgresPool}
 
 pub type CacheContext {
   CacheContext(
@@ -3735,7 +3678,7 @@ pub type CacheContext {
   )
 }
 
-pub fn load(db_pool: PostgresPool) -> CacheContext {
+pub fn load(db_pool: Pool) -> CacheContext {
   let stores = config_cache.stores()
 
   CacheContext(
@@ -3974,7 +3917,7 @@ Custom commands are preferred to have a prefix like `app_` or the package name a
 This creates `src/app/console/commands/app_send_emails.gleam`:
 
 ```gleam
-import glimr/console/command.{type Command, type ParsedArgs}
+import glimr/console/command.{type Command, type Args}
 
 const description = "Command description"
 
@@ -3984,7 +3927,7 @@ pub fn command() -> Command {
   |> command.handler(run)
 }
 
-fn run(args: ParsedArgs) -> Nil {
+fn run(args: Args) -> Nil {
   // Your command logic here
   todo
 }
@@ -4004,7 +3947,7 @@ Commands can accept three types of inputs:
 
 ```gleam
 import gleam/result
-import glimr/console/command.{type Command, type ParsedArgs, Argument, Flag, Option}
+import glimr/console/command.{type Command, type Args, Argument, Flag, Option}
 
 pub fn command() -> Command {
   command.new()
@@ -4017,7 +3960,7 @@ pub fn command() -> Command {
   |> command.handler(run)
 }
 
-fn run(args: ParsedArgs) -> Nil {
+fn run(args: Args) -> Nil {
   let recipient = command.get_arg(args, "recipient")
   let dry_run = command.has_flag(args, "dry-run")
   let format = command.get_option(args, "format")
@@ -4063,28 +4006,27 @@ Run with arguments:
 
 ### Commands with Database Access
 
-For commands that need database access, use the `--sqlite` or `--postgres` flag:
+For commands that need database access, use the `--db` flag:
 
 ```bash
-./glimr make_command seed_database --sqlite
+./glimr make_command seed_database --db
 ```
 
-This creates a command with a `Pool` parameter for the driver type passed:
+This creates a command with a `Pool` parameter:
 
 ```gleam
-import glimr_sqlite/db/pool.{type Pool}
-import glimr/console/command.{type Command, type ParsedArgs}
-import glimr_sqlite/console/command as command_sqlite // <--- import command module from glimr_sqlite
+import glimr/console/command.{type Command, type Args}
+import glimr/db/pool_connection.{type Pool}
 
 const description = "Seed the database with initial data"
 
 pub fn command() -> Command {
   command.new()
   |> command.description(description)
-  |> command_sqlite.handler(run) // <--- uses command_sqlite rather than command for the handler
+  |> command.db_handler(run) // <--- uses db_handler rather than handler
 }
 
-fn run(args: ParsedArgs, pool: Pool) -> Nil { // <--- run() now accepts a Pool parameter
+fn run(args: Args, pool: Pool) -> Nil { // <--- run() now accepts a Pool parameter
   // Use the pool for database operations
   let assert Ok(_) = user_repository.create(
     pool: pool,
@@ -4103,11 +4045,45 @@ The framework automatically:
 2. Passes the pool to your handler
 3. Stops the pool when your command completes
 
+### Commands with Database Connection Name Only
+
+If your command needs to know which database connection to use but doesn't need a pool (e.g., for generating files based on the connection name), you can add `command.db_option()` to your args directly:
+
+```gleam
+import glimr/console/command.{type Command, type Args, Argument}
+
+const description = "Generate files for a database"
+
+pub fn command() -> Command {
+  command.new()
+  |> command.description(description)
+  |> command.args([
+    Argument(name: "name", description: "The name of the resource"),
+    command.db_option(),
+  ])
+  |> command.handler(run)
+}
+
+fn run(args: Args) -> Nil {
+  let name = command.get_arg(args, "name")
+  let connection = command.get_option(args, "database")
+
+  // Use the connection name for file paths, etc.
+  // ...
+}
+
+pub fn main() {
+  command.run(command())
+}
+```
+
+This gives your command a `--database` option with the same default resolution and validation as `db_handler`, but without starting a pool.
+
 ### Multiple Database Connections
 
-All commands that need a database connection automatically accept a `--database` option for you to pass the name of the database connection you need access to specified in your `config_db.gleam`. 
+All commands that need a database connection automatically accept a `--database` option for you to pass the name of the database connection you need access to as defined in your `config/database.toml`.
 
-If a database connection isn't specified, it will to default to the first connection of it's type in the `connections()` list in `config_db.gleam`.
+If a database connection isn't specified, it will default to the first connection in `config/database.toml`.
 
 ```bash
 # Uses the default connection

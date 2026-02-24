@@ -7,12 +7,12 @@
 //// https://github.com/glimr-org/glimr?tab=readme-ov-file#database
 ////
 
-import glimr_postgres/db/pool.{type Pool as PostgresPool}
+import glimr/db/pool_connection.{type Pool}
 import glimr_postgres/postgres
 
 pub type DbContext {
   DbContext(
-    main: PostgresPool,
+    main: Pool,
     // ...
   )
 }
