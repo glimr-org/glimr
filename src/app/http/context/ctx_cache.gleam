@@ -7,12 +7,12 @@
 //// https://github.com/glimr-org/glimr?tab=readme-ov-file#cache
 ////
 
+import glimr/cache/cache.{type CachePool}
 import glimr/cache/file
-import glimr/cache/file/pool.{type Pool as FilePool}
 
 pub type CacheContext {
   CacheContext(
-    main: FilePool,
+    main: CachePool,
     // ...
   )
 }

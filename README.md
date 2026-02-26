@@ -41,6 +41,7 @@ If you'd like to stay updated on Glimr's development, Follow [@migueljarias](htt
   - [Session Invalidation & Regeneration](#session-invalidation--regeneration)
 - [Form Validation](#form-validation)
 - [Views & Responses](#views--responses)
+- [Error Pages](#error-pages)
 - [Loom Template Engine](#loom-template-engine)
 - [Database](#database)
   - [Setup](#setup)
@@ -60,6 +61,7 @@ If you'd like to stay updated on Glimr's development, Follow [@migueljarias](htt
 - [Console Commands](#console-commands)
   - [Creating Commands](#creating-commands)
   - [Commands with Database Access](#commands-with-database-access)
+  - [Commands with Cache Access](#commands-with-cache-access)
   - [Third-Party Commands](#third-party-commands)
 - [Configuration](#configuration)
 - [Context System](#context-system)
@@ -1670,6 +1672,48 @@ pub fn show(req: Request, ctx: Context) -> Response {
 }
 ```
 
+## Error Pages
+
+Glimr automatically renders error pages for any HTTP error status (400, 404, 500, etc.). When a response has a 400+ status code, Glimr intercepts it and renders a clean error page instead of returning a blank response.
+
+For **HTML requests**, Glimr looks for a custom error template at `src/resources/views/errors/{status}.html` (e.g. `errors/404.html`). If no custom template exists, a built-in generic error page is rendered. 
+
+For **JSON requests**, a `{"error": "Not Found"}` response is returned automatically.
+
+This works for all error responses.
+
+### Custom Error Pages
+
+To override the default error page for a specific status code, create an HTML file in your views directory:
+
+```
+src/resources/views/errors/
+├── 404.html    <- custom "not found" page
+├── 500.html    <- custom "server error" page
+└── 403.html    <- custom "forbidden" page
+```
+
+Any status code you don't provide a custom page for will use the built-in default.
+
+### `fail.with()`
+
+You can trigger an error response from anywhere in a request handler using `fail.with()`:
+
+```gleam
+import glimr/fail
+
+pub fn show(id: String, req: Request, ctx: Context) -> Response {
+  let user = case get_user(id) {
+    Ok(user) -> user
+    Error(_) -> fail.with(404)  // stops execution, renders 404 error page
+  }
+
+  // ...
+}
+```
+
+`fail.with()` raises an internal exception that is caught by the `rescue_crashes` middleware. The request is halted and the appropriate error page is rendered. This is the same mechanism that the `_or_fail` [database query variants](#queries) use under the hood.
+
 ### Loom Template Engine
 
 Loom is Glimr's template engine — `.loom.html` files that compile to type-safe Gleam code. But Loom is more than a template engine: templates with event handlers (`l-on:*`) automatically become reactive, establishing a WebSocket connection where all state and logic lives on the server. Inspired by [Phoenix LiveView](https://hexdocs.pm/phoenix_live_view), this server-driven model means you build interactive UIs without writing JavaScript.
@@ -2728,18 +2772,6 @@ pub fn show(_req: Request, ctx: Context, user_id: String) -> Response {
 }
 ```
 
-You should also register the `glimr_sqlite` console commands in your `glimr.toml` file so you can access commands like `./glimr sqlite_migrate`:
-
-```toml
-[commands]
-  auto_compile = true
-
-  packages = [
-    "glimr",
-    "glimr_sqlite", # add it here...
-  ]
-```
- 
 ##### SQLite with :memory:
 
 For development or testing, you can use an in-memory SQLite database. Update your `.env` file:
@@ -2849,18 +2881,6 @@ pub fn show(_req: Request, ctx: Context, user_id: String) -> Response {
     Error(NotFound) -> wisp.not_found()
     Error(_) -> wisp.internal_server_error()
 }
-```
-
-You should also register the `glimr_postgres` console commands in your `glimr.toml` file so you can access commands like `./glimr postgres_migrate`:
-
-```toml
-[commands]
-  auto_compile = true
-
-  packages = [
-    "glimr",
-    "glimr_postgres", # add it here...
-  ]
 ```
 
 ### Multiple Databases
@@ -3002,23 +3022,15 @@ string("deleted_at") |> nullable() |> default_null()
 
 #### Generating Migrations
 
-Run the migration generator for the specific driver:
+Run the migration generator:
 
 ```bash
-# for your default sqlite connection
-./glimr sqlite_gen
+# for your default connection
+./glimr db_gen
 
-# for a named sqlite connection
-./glimr sqlite_gen --database=analytics
-
-# for your default postgres connection
-./glimr postgres_gen
-
-# for a named postgres connection
-./glimr postgres_gen --database=analytics
+# for a named connection
+./glimr db_gen --database=analytics
 ```
-
-> **Note:** The default connection for a specific driver is the very first one of its kind defined in your `config/database.toml`.
 
 This will:
 1. Scan schema files in `src/data/{connection_name}/models/`
@@ -3030,33 +3042,21 @@ This will:
 You can also run the following command to generate migrations and also run them:
 
 ```bash
-# for your default sqlite connection
-./glimr sqlite_gen --migrate
+# for your default connection
+./glimr db_gen --migrate
 
-# for a named sqlite connection
-./glimr sqlite_gen --database=analytics --migrate
-
-# for your default postgres connection
-./glimr postgres_gen --migrate
-
-# for a named postgres connection
-./glimr postgres_gen --database=analytics --migrate
+# for a named connection
+./glimr db_gen --database=analytics --migrate
 ```
 
-Additionally, you can generate migrations/queries for a specific model or multiple models by passing the `--model` flag: 
+Additionally, you can generate migrations/queries for a specific model or multiple models by passing the `--model` flag:
 
 ```bash
-# for your default sqlite connection
-./glimr sqlite_gen --model=user,post
+# for your default connection
+./glimr db_gen --model=user,post
 
-# for a named sqlite connection
-./glimr sqlite_gen --database=analytics --model=user,post
-
-# for your default postgres connection
-./glimr postgres_gen --model=user,post
-
-# for a named postgres connection
-./glimr postgres_gen --database=analytics --model=user,post
+# for a named connection
+./glimr db_gen --database=analytics --model=user,post
 ```
 
 #### Renaming Columns
@@ -3074,17 +3074,11 @@ This generates `ALTER TABLE ... RENAME COLUMN` instead of drop/add. The `schema.
 Generated migrations are plain SQL files. Run them with the following command:
 
 ```bash
-# for your default sqlite connection
-./glimr sqlite_migrate
+# for your default connection
+./glimr migrate
 
-# for a named sqlite connection
-./glimr sqlite_migrate --database=analytics
-
-# for your default postgres connection
-./glimr postgres_migrate
-
-# for a named postgres connection
-./glimr postgres_migrate --database=analytics
+# for a named connection
+./glimr migrate --database=analytics
 ```
 
 #### Rolling Back Migrations
@@ -3093,7 +3087,7 @@ Glimr takes a forward-only approach to migrations. Instead of rollbacks, simply 
 
 #### Dropping Tables
 
-To drop a database table, simply delete the model from the `src/data/{connection}/models/` folder. For example, if your model is called `user` in your main connection, delete the `src/data/main/models/user/` folder. Finally, regenerate migrations and rerun them.
+To drop a database table, simply delete the model from the `src/data/{connection}/models/` folder. For example, if your model is called `user` in your main connection, delete the `src/data/main/models/user/` folder. Finally, regenerate migrations and rerun them. This will create a new migration to drop the table.
 
 ### Queries
 
@@ -3108,7 +3102,7 @@ src/data/models/user/queries/
 ├── create.sql
 ├── delete.sql
 ├── find.sql
-├── list_all.sql
+├── list.sql
 └── update.sql
 ```
 
@@ -3119,7 +3113,7 @@ You can modify these queries to fit your needs or delete any you don't need.
 Add new `.sql` files to the `queries/` folder for custom queries:
 
 ```sql
--- src/data/models/user/queries/find_by_email.sql
+-- src/data/models/user/queries/by_email.sql
 SELECT * FROM users WHERE email = $1;
 ```
 
@@ -3134,57 +3128,63 @@ The file name prefix determines whether the query returns a single row or multip
 
 | Prefix | Returns | Gleam Return Type |
 |--------|---------|-------------------|
-| `list_*` | Multiple rows | `List(User)` |
-| Anything else | Single row | `Result(User, Nil)` |
+| `list` or `list_*` | Multiple rows | `Result(List(User), DbError)` |
+| Anything else | Single row | `Result(User, DbError)` |
 
 **Examples:**
-- `find.sql` → returns `Result(User, Nil)`
-- `by_email.sql` → returns `Result(User, Nil)`
-- `list_all.sql` → returns `List(User)`
-- `list_active.sql` → returns `List(User)`
-- `list_by_role.sql` → returns `List(User)`
+- `find.sql` → returns `Result(User, DbError)`
+- `by_email.sql` → returns `Result(User, DbError)`
+- `list.sql` → returns `Result(List(User), DbError)`
+- `list_active.sql` → returns `Result(List(User), DbError)`
+- `list_by_role.sql` → returns `Result(List(User), DbError)`
 
 #### Generating the Repository
 
 After adding or modifying queries, run:
 
 ```bash
-# for your default sqlite connection
-./glimr sqlite_gen
+# for your default connection
+./glimr db_gen
 
-# for a named sqlite connection
-./glimr sqlite_gen --database=analytics
-
-# for your default postgres connection
-./glimr postgres_gen
-
-# for a named postgres connection
-./glimr postgres_gen --database=analytics
+# for a named connection
+./glimr db_gen --database=analytics
 ```
 
+This generates a fully-typed repository file with Gleam functions for each query. Every query generates **four functions**:
 
+| Function | Accepts | Returns | Use Case |
+|----------|---------|---------|----------|
+| `find(pool, id)` | Pool | `Result(User, DbError)` | Standard queries with error handling |
+| `find_wc(conn, id)` | Connection | `Result(User, DbError)` | Inside transactions |
+| `find_or_fail(pool, id)` | Pool | `User` | HTTP handlers — fails with appropriate status on error |
+| `find_or_fail_wc(conn, id)` | Connection | `User` | Transactions in HTTP handlers |
 
-This generates a fully-typed repository file with Gleam functions for each query. Every query generates **two functions**:
+The `_or_fail` variants unwrap the result automatically. On error, they halt the request and render the appropriate [error page](#error-pages) — 404 for not found, 503 for connection issues, 500 for everything else. This is the most convenient option for HTTP handlers where you'd otherwise just convert the error to a status code anyway.
 
-| Function | Accepts | Use Case |
-|----------|---------|----------|
-| `find(pool, id)` | Pool | Normal queries - auto-manages connection |
-| `find_wc(conn, id)` | Connection | Transactions - uses existing connection |
+If the request is expecting a json response, it will instead return the appropriate  error message as json.
 
 ```gleam
-// src/data/models/user/user_repository.gleam (auto-generated)
+// src/data/models/user/gen/user.gleam (auto-generated)
 
-// Main functions - accept Pool, auto checkout/checkin connection
+// Default functions - return Result for explicit error handling
 pub fn find(pool, id) -> Result(User, DbError)
-pub fn find_by_email(pool, email) -> Result(User, DbError)
-pub fn list_all(pool) -> Result(List(User), DbError)
-pub fn list_active(pool) -> Result(List(User), DbError)
+pub fn by_email(pool, email) -> Result(User, DbError)
+pub fn list(pool) -> Result(List(User), DbError)
 
 // With-connection variants - for use inside transactions
 pub fn find_wc(conn, id) -> Result(User, DbError)
-pub fn find_by_email_wc(conn, email) -> Result(User, DbError)
-pub fn list_all_wc(conn) -> Result(List(User), DbError)
-pub fn list_active_wc(conn) -> Result(List(User), DbError)
+pub fn by_email_wc(conn, email) -> Result(User, DbError)
+pub fn list_wc(conn) -> Result(List(User), DbError)
+
+// Or-fail variants - unwrap result or halt with HTTP status
+pub fn find_or_fail(pool, id) -> User
+pub fn by_email_or_fail(pool, email) -> User
+pub fn list_or_fail(pool) -> List(User)
+
+// Or-fail with-connection variants
+pub fn find_or_fail_wc(conn, id) -> User
+pub fn by_email_or_fail_wc(conn, email) -> User
+pub fn list_or_fail_wc(conn) -> List(User)
 ```
 
 #### Connection Pooling
@@ -3195,7 +3195,7 @@ You can specify the pool size by setting the `DB_POOL_SIZE` env variable, and th
 
 **How it works:**
 
-When you call a query function like `user_repository.find(ctx.db.main, id)`, it automatically:
+When you call a query function like `user.find(ctx.db.main, id)`, it automatically:
 1. Checks out a connection from the pool
 2. Executes the query
 3. Returns the connection to the pool
@@ -3205,16 +3205,47 @@ This means each query holds a connection only for the duration of the query itse
 
 #### Using Queries in Controllers
 
-Query functions return `Result` types, giving you full control over error handling:
+The `_or_fail` variants are the most convenient for HTTP handlers — they return values directly and automatically render the appropriate [error page](#error-pages) on failure:
 
 ```gleam
-import data/models/user/user_repository
+import data/models/user/gen/user
+
+pub fn show(id: String, req: Request, ctx: Context) -> Response {
+  let assert Ok(user_id) = int.parse(id)
+  let user = user.find_or_fail(ctx.db.main, user_id)
+
+  view.build()
+  |> view.html("users/show.html")
+  |> view.data([#("user", user.name)])
+  |> view.render()
+}
+```
+
+**List queries:**
+
+```gleam
+import data/models/user/gen/user
+
+pub fn index(req: Request, ctx: Context) -> Response {
+  let users = user.list_or_fail(ctx.db.main)
+
+  view.build()
+  |> view.html("users/index.html")
+  |> view.data([#("count", int.to_string(list.length(users)))])
+  |> view.render()
+}
+```
+
+When you need explicit error handling (e.g. showing a custom error page, or in background jobs), use the default variants which return `Result`:
+
+```gleam
+import data/models/user/gen/user
 import glimr/db/pool_connection.{NotFound}
 
 pub fn show(id: String, req: Request, ctx: Context) -> Response {
   let assert Ok(user_id) = int.parse(id)
 
-  case user_repository.find(ctx.db.main, user_id) {
+  case user.find(ctx.db.main, user_id) {
     Ok(user) -> {
       view.build()
       |> view.html("users/show.html")
@@ -3224,39 +3255,6 @@ pub fn show(id: String, req: Request, ctx: Context) -> Response {
     Error(NotFound) -> wisp.not_found()
     Error(_) -> wisp.internal_server_error()
   }
-}
-```
-
-**List queries:**
-
-```gleam
-import data/models/user/user_repository
-
-pub fn index(req: Request, ctx: Context) -> Response {
-  case user_repository.list_all(ctx.db.main) {
-    Ok(users) -> {
-      view.build()
-      |> view.html("users/index.html")
-      |> view.data([#("count", int.to_string(list.length(users)))])
-      |> view.render()
-    }
-    Error(_) -> wisp.internal_server_error()
-  }
-}
-```
-
-In situations where you'd rather not handle error handling yourself, you can just `let assert Ok()`. This will display a 500 error page if an error occurs. Note, 404 errors won't be properly handled this way. Only do this if a 404 error isn't possible, like in a `create`, or `list_all` for example.
-
-```gleam
-import data/models/user/user_repository
-
-pub fn index(req: Request, ctx: Context) -> Response {
-  let assert Ok(user) = user_repository.list_all(ctx.db.main)
-
-  view.build()
-  |> view.html("users/index.html")
-  |> view.data([#("count", int.to_string(list.length(users)))])
-  |> view.render()
 }
 ```
 
@@ -3328,34 +3326,25 @@ Glimr provides a unified caching API with support for multiple storage backends:
 
 ### Store Types
 
-Cache stores are configured in `src/config/config_cache.gleam`. There are three store types:
+Cache stores are configured in `config/cache.toml`. There are three store types:
 
-```gleam
-import glimr/cache/driver.{type CacheStore, FileStore, DatabaseStore, RedisStore}
+```toml
+# File-based cache - stores entries as files on disk
+[stores.file]
+  driver = "file"
+  path = "priv/storage/framework/cache/data"
 
-pub fn stores() -> List(CacheStore) {
-  [
-    // File-based cache - stores entries as files on disk
-    FileStore(
-      name: "file", 
-      path: "priv/storage/framework/cache/data",
-    ),
+# Database-backed cache - uses your existing database
+[stores.database]
+  driver = "database"
+  database = "main"
+  table = "cache"
 
-    // Database-backed cache - uses your existing database
-    DatabaseStore(
-      name: "database",
-      database: "main",
-      table: "cache",
-    ),
-
-    // Redis cache - stores entries in Redis or compatible kv store
-    RedisStore(
-      name: "redis",
-      url: env.get_string("REDIS_URL"),
-      pool_size: env.get_int("REDIS_POOL_SIZE"),
-    ),
-  ]
-}
+# Redis cache - stores entries in Redis or compatible kv store
+[stores.redis]
+  driver = "redis"
+  url = "${REDIS_URL}"
+  pool_size = "${REDIS_POOL_SIZE}"
 ```
 
 ### File Store
@@ -3366,40 +3355,29 @@ The file store caches values as files on disk using a SHA256 hash-based director
 
 The file cache is included with the core `glimr` package. No additional dependencies needed.
 
-Set up the store in `config_cache.gleam`:
+Set up the store in `config/cache.toml`:
 
-```gleam
-import glimr/cache/driver.{FileStore}
-
-pub fn stores() -> List(CacheStore) {
-  [
-    FileStore(
-      name: "file", 
-      path: "priv/storage/framework/cache/data",
-    ),
-    // ...
-  ]
-}
+```toml
+[stores.main]
+  driver = "file"
+  path = "priv/storage/framework/cache/data"
 ```
 
 Set up the cache in your `ctx_cache.gleam`:
 
 ```gleam
-import config/config_cache
+import glimr/cache/cache.{type CachePool}
 import glimr/cache/file
-import glimr/cache/file/pool.{type Pool as FilePool}
 
 pub type CacheContext {
   CacheContext(
-    file: FilePool,
+    main: CachePool,
   )
 }
 
 pub fn load() -> CacheContext {
-  let stores = config_cache.stores()
-
   CacheContext(
-    file: file.start("file", stores),
+    main: file.start("main"),
   )
 }
 ```
@@ -3421,10 +3399,10 @@ pub fn register() -> Context {
 Use it in your controllers:
 
 ```gleam
-import glimr/cache/file/cache
+import glimr/cache/cache
 
 pub fn show(req: Request, ctx: Context) -> Response {
-  case cache.get(ctx.cache.file, "user:123") {
+  case cache.get(ctx.cache.main, "user:123") {
     Ok(value) -> // use cached value
     Error(cache.NotFound) -> // cache miss, compute value
     Error(_) -> wisp.internal_server_error()
@@ -3444,25 +3422,16 @@ Install `glimr_redis`:
 gleam add glimr_redis
 ```
 
-Set up the store in `config_cache.gleam`:
+Set up the store in `config/cache.toml`:
 
-```gleam
-import dot_env/env
-import glimr/cache/driver.{RedisStore}
-
-pub fn stores() -> List(CacheStore) {
-  [
-    RedisStore(
-      name: "redis",
-      url: env.get_string("REDIS_URL"),
-      pool_size: env.get_int("REDIS_POOL_SIZE"),
-    ),
-    // ...
-  ]
-}
+```toml
+[stores.main]
+  driver = "redis"
+  url = "${REDIS_URL}"
+  pool_size = "${REDIS_POOL_SIZE}"
 ```
 
-Update your `.env` variables:
+Set your `.env` variables:
 
 ```env
 REDIS_URL=redis://localhost:6379
@@ -3472,21 +3441,18 @@ REDIS_POOL_SIZE=10
 Set up the cache in your `ctx_cache.gleam`:
 
 ```gleam
-import config/config_cache
+import glimr/cache/cache.{type CachePool}
 import glimr_redis/redis
-import glimr_redis/cache/pool.{type Pool as RedisCachePool}
 
 pub type CacheContext {
   CacheContext(
-    redis: RedisCachePool,
+    main: CachePool,
   )
 }
 
 pub fn load() -> CacheContext {
-  let stores = config_cache.stores()
-
   CacheContext(
-    redis: redis.start("redis", stores),
+    main: redis.start("main"),
   )
 }
 ```
@@ -3508,10 +3474,10 @@ pub fn register() -> Context {
 Use it in your controllers:
 
 ```gleam
-import glimr_redis/cache/cache as redis_cache
+import glimr/cache/cache
 
 pub fn show(req: Request, ctx: Context) -> Response {
-  case redis_cache.get(ctx.cache.redis, "user:123") {
+  case cache.get(ctx.cache.main, "user:123") {
     Ok(value) -> // use cached value
     Error(cache.NotFound) -> // cache miss
     Error(_) -> wisp.internal_server_error()
@@ -3527,18 +3493,7 @@ The Redis driver works with any Redis-compatible server:
 - **[KeyDB](https://docs.keydb.dev/)** - Multi-threaded Redis fork with higher throughput
 - **[Dragonfly](https://dragonflydb.io/)** - Modern in-memory datastore with Redis compatibility
 
-Just point `REDIS_URL` to your alternative server:
-
-```env
-# Valkey
-REDIS_URL=redis://localhost:6379
-
-# KeyDB
-REDIS_URL=redis://localhost:6379
-
-# Dragonfly
-REDIS_URL=redis://localhost:6379
-```
+All of these use port 6379 by default, so no configuration changes are needed — just point `REDIS_URL` at your server.
 
 ### Database Store (SQLite)
 
@@ -3552,43 +3507,31 @@ Ensure you have `glimr_sqlite` installed:
 gleam add glimr_sqlite
 ```
 
-Set up the store in `config_cache.gleam`:
+Set up the store in `config/cache.toml`:
 
-```gleam
-import glimr/cache/driver.{DatabaseStore}
-
-pub fn stores() -> List(CacheStore) {
-  [
-    DatabaseStore(
-      name: "database",
-      database: "main",
-      table: "cache"
-    ),
-    // ...
-  ]
-}
+```toml
+[stores.database]
+  driver = "database"
+  database = "main"
+  table = "cache"
 ```
 
 Set up the cache in your `ctx_cache.gleam`:
 
 ```gleam
-import config/config_cache
+import glimr/cache/cache.{type CachePool}
 import glimr/db/pool_connection.{type Pool}
 import glimr_sqlite/sqlite
-import glimr_sqlite/cache/pool.{type Pool as SqliteCachePool}
 
 pub type CacheContext {
   CacheContext(
-    database: SqliteCachePool,
+    main: CachePool,
   )
 }
 
 pub fn load(db_pool: Pool) -> CacheContext {
-  let stores = config_cache.stores()
-
   CacheContext(
-    database: sqlite.start_cache(db_pool, "database", stores)
-    // ...
+    main: sqlite.start_cache(db_pool, "database"),
   )
 }
 ```
@@ -3615,19 +3558,19 @@ Generate and run the cache table migration:
 
 ```bash
 # Generate the migration
-./glimr sqlite_cache_table
+./glimr cache_table
 
 # Or generate and run migrations in one step
-./glimr sqlite_cache_table --migrate
+./glimr cache_table --migrate
 ```
 
 Use it in your controllers:
 
 ```gleam
-import glimr_sqlite/cache/cache
+import glimr/cache/cache
 
 pub fn show(req: Request, ctx: Context) -> Response {
-  case cache.get(ctx.cache.database, "user:123") {
+  case cache.get(ctx.cache.main, "user:123") {
     Ok(value) -> // use cached value
     Error(cache.NotFound) -> // cache miss
     Error(_) -> wisp.internal_server_error()
@@ -3647,42 +3590,31 @@ Ensure you have `glimr_postgres` installed:
 gleam add glimr_postgres
 ```
 
-Set up the store in `config_cache.gleam`:
+Set up the store in `config/cache.toml`:
 
-```gleam
-import glimr/cache/driver.{DatabaseStore}
-
-pub fn stores() -> List(CacheStore) {
-  [
-    DatabaseStore(
-      name: "database",
-      database: "main",
-      table: "cache",
-    ),
-    // ...
-  ]
-}
+```toml
+[stores.database]
+  driver = "database"
+  database = "main"
+  table = "cache"
 ```
 
 Set up the cache in your `ctx_cache.gleam`:
 
 ```gleam
-import config/config_cache
+import glimr/cache/cache.{type CachePool}
 import glimr/db/pool_connection.{type Pool}
 import glimr_postgres/postgres
-import glimr_postgres/cache/pool.{type Pool as PostgresCachePool}
 
 pub type CacheContext {
   CacheContext(
-    database: PostgresCachePool,
+    main: CachePool,
   )
 }
 
 pub fn load(db_pool: Pool) -> CacheContext {
-  let stores = config_cache.stores()
-
   CacheContext(
-    database: postgres.start_cache(db_pool, "database", stores)
+    main: postgres.start_cache(db_pool, "database"),
   )
 }
 ```
@@ -3709,19 +3641,19 @@ Generate and run the cache table migration:
 
 ```bash
 # Generate the migration
-./glimr postgres_cache_table
+./glimr cache_table
 
 # Or generate and run migrations in one step
-./glimr postgres_cache_table --migrate
+./glimr cache_table --migrate
 ```
 
 Use it in your controllers:
 
 ```gleam
-import glimr_postgres/cache/cache as pg_cache
+import glimr/cache/cache
 
 pub fn show(req: Request, ctx: Context) -> Response {
-  case pg_cache.get(ctx.cache.database, "user:123") {
+  case cache.get(ctx.cache.main, "user:123") {
     Ok(value) -> // use cached value
     Error(cache.NotFound) -> // cache miss
     Error(_) -> wisp.internal_server_error()
@@ -3731,21 +3663,13 @@ pub fn show(req: Request, ctx: Context) -> Response {
 
 ### Using the Cache
 
-All cache drivers share the same API. Import the appropriate cache module for your backend:
+All cache backends share the same unified API through a single import:
 
 ```gleam
-// For file cache
-import glimr/cache/file/cache
-
-// For SQLite cache
-import glimr_sqlite/cache/cache
-
-// For PostgreSQL cache
-import glimr_postgres/cache/cache
-
-// For Redis cache
-import glimr_redis/cache/cache
+import glimr/cache/cache
 ```
+
+The `CachePool` type returned by all backends (`file.start`, `redis.start`, `postgres.start_cache`, `sqlite.start_cache`) is driver-agnostic — you use the same `cache.get`, `cache.put`, etc. regardless of which backend is active.
 
 ### Cache Operations
 
@@ -3774,97 +3698,142 @@ All cache drivers support these operations:
 | `put_json_forever(pool, key, value, encoder)` | Store JSON permanently |
 | `remember_json(pool, key, ttl, decoder, fn, encoder)` | Get or compute JSON |
 
-**Database-only operations:**
+**Database-only operations** (via `glimr/cache/database`):
 
 | Operation | Description |
 |-----------|-------------|
-| `create_table(pool)` | Create the cache table |
-| `cleanup_expired(pool)` | Remove expired entries |
+| `create_table(db_pool, table)` | Create the cache table |
+| `cleanup_expired(db_pool, table)` | Remove expired entries |
 
 #### Basic Usage
 
 ```gleam
-import glimr/cache/file/cache
+import glimr/cache/cache
 
 // Store a value for 1 hour (3600 seconds)
-cache.put(ctx.cache.file, "user:123:name", "Alice", 3600)
+cache.put(ctx.cache.main, "user:123:name", "Alice", 3600)
 
 // Get a value
-case cache.get(ctx.cache.file, "user:123:name") {
+case cache.get(ctx.cache.main, "user:123:name") {
   Ok(name) -> io.println("Hello, " <> name)
   Error(cache.NotFound) -> io.println("Cache miss")
   Error(_) -> io.println("Cache error")
 }
 
 // Store permanently
-cache.put_forever(ctx.cache.file, "config:site_name", "My App")
+cache.put_forever(ctx.cache.main, "config:site_name", "My App")
 
 // Delete a value
-cache.forget(ctx.cache.file, "user:123:name")
+cache.forget(ctx.cache.main, "user:123:name")
 
 // Check existence
-case cache.has(ctx.cache.file, "user:123:name") {
+case cache.has(ctx.cache.main, "user:123:name") {
   True -> io.println("Cached")
   False -> io.println("Not cached")
 }
 ```
 
-#### Remember Pattern
-
-The `remember` function is the most common cache pattern - get from cache, or compute and store if missing:
-
-```gleam
-// Get user from cache, or fetch from database and cache for 1 hour
-let user = cache.remember(ctx.cache.file, "user:" <> id, 3600, fn() {
-  user_repository.find(ctx.db.main, id)
-  |> result.map(fn(u) { u.name })
-})
-```
-
 #### JSON Caching
 
-For structured data, use the JSON operations:
+The cache stores strings, so to cache structured data you need to provide an encoder and decoder. Generated models include `encoder()` and `decoder()` functions for JSON out of the box:
+
+```gleam
+// Store JSON — uses the generated encoder/decoder
+cache.put_json(ctx.cache.main, "user:123", user, user.encoder(), 3600)
+
+// Retrieve JSON
+case cache.get_json(ctx.cache.main, "user:123", user.decoder()) {
+  Ok(user) -> {} // use user
+  Error(cache.NotFound) -> {} // cache miss
+  Error(cache.SerializationError(_)) -> {} // invalid JSON
+  Error(_) -> {} // other error
+}
+```
+
+For non-generated types, you can write encoder and decoder functions by hand:
 
 ```gleam
 import gleam/dynamic/decode
 import gleam/json
 
-// Define encoder and decoder
-let encoder = fn(user: User) {
+let my_encoder = fn(item: MyType) {
   json.object([
-    #("id", json.int(user.id)),
-    #("name", json.string(user.name)),
+    #("id", json.int(item.id)),
+    #("name", json.string(item.name)),
   ])
 }
 
-let decoder = {
+let my_decoder = {
   use id <- decode.field("id", decode.int)
   use name <- decode.field("name", decode.string)
-  decode.success(User(id: id, name: name))
+  decode.success(MyType(id: id, name: name))
+}
+```
+
+#### Remember Pattern
+
+The remember pattern gets a value from cache, or computes and stores it if missing. The compute callback is only called on a cache miss — its return value gets cached and returned directly.
+
+Use `remember` for string values:
+
+```gleam
+let cache_key = "user:" <> id <> ":name"
+
+// Remember a string value for 1 hour
+let name = {
+  use <- cache.remember(ctx.cache.main, cache_key, 3600)
+  user.find_or_fail(ctx.db.main, id).name
 }
 
-// Store JSON
-cache.put_json(ctx.cache.file, "user:123", user, encoder, 3600)
+// Remember forever (only cleared by forget or flush)
+let name = {
+  use <- cache.remember_forever(ctx.cache.main, cache_key)
+  user.find_or_fail(ctx.db.main, id).name
+}
+```
 
-// Retrieve JSON
-case cache.get_json(ctx.cache.file, "user:123", decoder) {
-  Ok(user) -> // use user
-  Error(cache.NotFound) -> // cache miss
-  Error(cache.SerializationError(_)) -> // invalid JSON
-  Error(_) -> // other error
+Use `remember_json` for structured data — the compute callback goes last so you can use `use <-` syntax:
+
+```gleam
+// Remember a JSON object for 1 hour
+let user = {
+  use <- cache.remember_json(
+    ctx.cache.main,
+    "user:" <> id,
+    3600,
+    user.decoder(),
+    user.encoder(),
+  )
+
+  user.find_or_fail(ctx.db.main, id)
 }
 
-// Remember pattern with JSON
-let user = cache.remember_json(
-  ctx.cache.file,
-  "user:" <> id,
-  3600,
-  decoder,
-  fn() { 
-    user_repository.find(ctx.db.main, id) 
-  },
-  encoder,
-)
+// Remember a JSON object forever
+let user = {
+  use <- cache.remember_json_forever(
+    ctx.cache.main,
+    "user:" <> id,
+    user.decoder(),
+    user.encoder(),
+  )
+
+  user.find_or_fail(ctx.db.main, id)
+}
+
+// Handle errors yourself inside the callback
+let user = {
+  use <- cache.remember_json(
+    ctx.cache.main,
+    "user:" <> id,
+    3600,
+    user.decoder(),
+    user.encoder(),
+  )
+  case user.find(ctx.db.main, id) {
+    Ok(user) -> user
+    Error(_) -> User(name: "Guest", email: "")
+  }
+}
 ```
 
 #### Increment/Decrement
@@ -3873,11 +3842,11 @@ For counters and rate limiting:
 
 ```gleam
 // Increment page view counter
-let assert Ok(views) = cache.increment(ctx.cache.file, "page:home:views", 1)
+let assert Ok(views) = cache.increment(ctx.cache.main, "page:home:views", 1)
 
 // Rate limiting example
 let rate_key = "rate:" <> user_id <> ":" <> current_minute()
-case cache.increment(ctx.cache.file, rate_key, 1) {
+case cache.increment(ctx.cache.main, rate_key, 1) {
   Ok(count) if count > 100 -> Error("Rate limit exceeded")
   Ok(_) -> Ok("Allowed")
   Error(_) -> Ok("Allowed") // fail open
@@ -3889,14 +3858,13 @@ case cache.increment(ctx.cache.file, rate_key, 1) {
 All cache operations return `Result(value, CacheError)`:
 
 ```gleam
-import glimr/cache/cache.{type CacheError, NotFound, SerializationError, ConnectionError, ComputeError}
+import glimr/cache/cache.{type CacheError, NotFound, SerializationError, ConnectionError}
 
 case cache.get(pool, key) {
   Ok(value) -> // success
   Error(NotFound) -> // key doesn't exist or expired
   Error(SerializationError(msg)) -> // JSON decode/encode failed
   Error(ConnectionError(msg)) -> // storage backend error
-  Error(ComputeError(msg)) -> // remember callback failed
 }
 ```
 
@@ -4095,17 +4063,74 @@ If a database connection isn't specified, it will default to the first connectio
 
 The `--database` name's existence is automatically verified before attempting to create a connection.
 
+### Commands with Cache Access
+
+For commands that need cache access, use `cache_handler` instead of `handler`:
+
+```gleam
+import glimr/console/command.{type Command, type Args}
+import glimr/cache/cache.{type CachePool}
+
+const description = "Warm up the cache"
+
+pub fn command() -> Command {
+  command.new()
+  |> command.description(description)
+  |> command.cache_handler(run)
+}
+
+fn run(args: Args, pool: CachePool) -> Nil {
+  // Use the pool for cache operations
+  cache.put(pool, "status", "warmed", 3600)
+}
+
+pub fn main() {
+  command.run(command())
+}
+```
+
+The framework automatically:
+1. Starts a cache pool for the configured store before your command runs
+2. Passes the pool to your handler
+3. Stops the pool when your command completes
+
+Commands with cache access accept a `--cache` option to specify which store to use. If not specified, it defaults to the first store in `config/cache.toml`.
+
+```bash
+# Uses the default store
+./glimr app_warm_cache
+
+# Uses a specific store
+./glimr app_warm_cache --cache=sessions
+```
+
+If your command needs the store name without a pool, add `command.cache_option()` to your args directly:
+
+```gleam
+pub fn command() -> Command {
+  command.new()
+  |> command.description(description)
+  |> command.args([command.cache_option()])
+  |> command.handler(run)
+}
+
+fn run(args: Args) -> Nil {
+  let store = command.get_option(args, "cache")
+  // ...
+}
+```
+
 ### Third-Party Commands
 
 Register packages that offer console commands in `glimr.toml`:
 
 ```toml
 [commands]
-auto_compile = true
-packages = [
-  "glimr",
-  "package_name" # <-- Register the package here 
-]
+  auto_compile = true
+  packages = [
+    "glimr",
+    "package_name" # <-- Register the package here 
+  ]
 ```
 
 This allows third party packages to provide commands for your app in the same way Glimr does, providing a seamless and unified experience.
