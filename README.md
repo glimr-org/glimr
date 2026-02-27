@@ -662,7 +662,7 @@ This creates `update_submission.gleam`. Actions follow a simple pattern - they p
 // src/app/actions/update_submission.gleam
 import app/http/requests/contact_store_request.{type Data}
 import data/models/submission/gen/submission_repository.{type CreateRow}
-import glimr/db/pool_connection.{type DbError}
+import glimr/db/db.{type DbError}
 import glimr/utils/unix_timestamp
 import glimr/db/pool.{type Pool}
 
@@ -687,7 +687,7 @@ Use actions in controllers with `case` for error handling:
 // src/app/http/controllers/contact_controller.gleam
 import app/http/actions/create_submission
 import app/http/validators/contact_store.{type Data}
-import glimr/db/pool_connection.{NotFound}
+import glimr/db/db.{NotFound}
 
 /// @put "/submissions/:submission"
 /// @validator "contact_store"
@@ -1158,12 +1158,12 @@ Add the fields to your Context type in `src/app/http/context/ctx.gleam`:
 
 ```gleam
 import glimr/cache/cache.{type CachePool}
-import glimr/db/pool_connection.{type Pool}
+import glimr/db/db.{type DbPool}
 import glimr/session/session.{type Session}
 
 pub type Context {
   Context(
-    db: Pool,
+    db: DbPool,
     cache: CachePool,
     session: Session,
   )
@@ -2724,7 +2724,7 @@ pub fn cancel(req: Request, ctx: Context) -> Response {
 
 ## Database
 
-Currently supports sqlite via the [glimr-org/sqlite](https://github.com/glimr-org/sqlite) package (built with `lpil/sqlight`) and postgres via the [glimr-org/postgres](https://github.com/glimr-org/postgres) package (built with `lpil/pog`). Both drivers return a unified `pool_connection.Pool` type from the core framework, so your application code is driver-agnostic — queries, transactions, and connection management all use the same API regardless of the underlying database.
+Currently supports sqlite via the [glimr-org/sqlite](https://github.com/glimr-org/sqlite) package (built with `lpil/sqlight`) and postgres via the [glimr-org/postgres](https://github.com/glimr-org/postgres) package (built with `lpil/pog`). Both drivers return a unified `db.DbPool` type from the core framework, so your application code is driver-agnostic — queries, transactions, and connection management all use the same API regardless of the underlying database.
 
 ### Setup
 
@@ -2761,11 +2761,11 @@ DB_POOL_SIZE=15
 Add the pool to your context in `src/app/http/context/ctx.gleam`:
 
 ```gleam
-import glimr/db/pool_connection.{type Pool}
+import glimr/db/db.{type DbPool}
 
 pub type Context {
   Context(
-    db: Pool,
+    db: DbPool,
     // ...
   )
 }
@@ -2877,11 +2877,11 @@ Run the following command to create a directory for your new database connection
 Add the pool to your context in `src/app/http/context/ctx.gleam`:
 
 ```gleam
-import glimr/db/pool_connection.{type Pool}
+import glimr/db/db.{type DbPool}
 
 pub type Context {
   Context(
-    db: Pool,
+    db: DbPool,
     // ...
   )
 }
@@ -2938,12 +2938,12 @@ Glimr supports multiple database connections at the same time, even with differe
 Add each pool as a flat field on your context:
 
 ```gleam
-import glimr/db/pool_connection.{type Pool}
+import glimr/db/db.{type DbPool}
 
 pub type Context {
   Context(
-    db: Pool,
-    db_analytics: Pool,
+    db: DbPool,
+    db_analytics: DbPool,
     // ...
   )
 }
@@ -3281,7 +3281,7 @@ When you need explicit error handling (e.g. showing a custom error page, or in b
 
 ```gleam
 import data/models/user/gen/user
-import glimr/db/pool_connection.{NotFound}
+import glimr/db/db.{NotFound}
 
 pub fn show(id: String, req: Request, ctx: Context) -> Response {
   let assert Ok(user_id) = int.parse(id)
@@ -3308,10 +3308,10 @@ For operations that must succeed or fail together, use transactions. They automa
 - Return the connection to the pool
 - Retry on deadlock (with configurable retry count)
 
-Transactions are provided by the core `pool_connection` module and work with any database driver:
+Transactions are provided by the core `db` module and work with any database driver:
 
 ```gleam
-import glimr/db/pool_connection.{type DbError}
+import glimr/db/db.{type DbError}
 
 pub fn transfer(
   ctx: Context,
@@ -3319,7 +3319,7 @@ pub fn transfer(
   to_id: Int,
   amount: Int,
 ) -> Result(Nil, DbError) {
-  use conn <- pool_connection.transaction(ctx.db, 3)
+  use conn <- db.transaction(ctx.db, 3)
 
   // Both operations use the same connection within the transaction
   use _ <- result.try(account_repository.debit_wc(conn, from_id, amount))
@@ -3337,13 +3337,13 @@ Retries use exponential backoff to reduce contention.
 **Using transactions in controllers:**
 
 ```gleam
-import glimr/db/pool_connection
+import glimr/db/db
 
 pub fn store(req: Request, ctx: Context) -> Response {
   use validated <- transfer_request.validate(req, ctx)
 
   case {
-    use conn <- pool_connection.transaction(ctx.db, 3)
+    use conn <- db.transaction(ctx.db, 3)
     use _ <- result.try(account_repository.debit_wc(conn, validated.from_id, validated.amount))
     use _ <- result.try(account_repository.credit_wc(conn, validated.to_id, validated.amount))
     Ok(Nil)
@@ -4079,12 +4079,12 @@ The context system provides type-safe dependency injection. Define your context 
 
 ```gleam
 import glimr/cache/cache.{type CachePool}
-import glimr/db/pool_connection.{type Pool}
+import glimr/db/db.{type DbPool}
 import glimr/session/session.{type Session}
 
 pub type Context {
   Context(
-    db: Pool,
+    db: DbPool,
     cache: CachePool,
     session: Session,
     // Add your own fields here
