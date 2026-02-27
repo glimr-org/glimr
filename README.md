@@ -695,7 +695,7 @@ import glimr/db/pool_connection.{NotFound}
 pub fn update(req: Request, ctx: Context, submission: String, validated: Data) -> Response {
   let assert Ok(submission_id) = int.parse(submission_id)
 
-  case update_submission.run(ctx.db.main, submission_id, validated) {
+  case update_submission.run(ctx.db, submission_id, validated) {
     Ok(submission) -> {
       redirect.to("/contact/updated")
     }
@@ -718,7 +718,7 @@ import app/http/validators/user_store.{type Data}
 ///
 pub fn store(req: Request, ctx: Context, validated: Data) -> Response {
   case {
-    use user <- result.try(create_user.run(ctx.db.main, validated))
+    use user <- result.try(create_user.run(ctx.db, validated))
     use _ <- result.try(send_welcome_email.run(ctx.notif, user))
     use _ <- result.try(notify_admin.run(ctx.notif, user))
     Ok(user)
@@ -935,13 +935,19 @@ Routes are automatically assigned to groups based on their URL prefix. See [Rout
 
 Add a custom middleware group using `kernel.Custom("name")`:
 
-```gleam
-// src/config/config_route.gleam
-RouteGroupConfig(
-  name: "admin",
-  prefix: "/admin",
-  middleware: kernel.Custom("admin"),
-),
+```toml
+# /config/route_group.toml
+[groups.web]
+  prefix = ""
+  middleware = "web"
+
+[groups.api]
+  prefix = "/api"
+  middleware = "api"
+
+[groups.admin]
+  prefix = "/admin"
+  middleware = "admin"
 ```
 
 Then handle it in `src/app/http/kernel.gleam`:
@@ -998,7 +1004,7 @@ Session settings live in `config/session.toml`:
 
 ### Choosing a Driver
 
-Session drivers are initialized in `src/app/http/context/ctx_session.gleam`. Each driver shares the same session API — you only change the setup code to switch backends.
+Session drivers are initialized directly in your `ctx_provider.gleam`. Each driver shares the same session API — you only change the start call to switch backends.
 
 #### PostgreSQL Driver
 
@@ -1012,21 +1018,29 @@ Generate the session table migration:
 
 ```bash
 # Generate the migration
-./glimr postgres_session_table
+./glimr make_session_table
 
 # Or generate and run migrations in one step
-./glimr postgres_session_table --migrate
+./glimr make_session_table --migrate
 ```
 
-Set up the driver in `ctx_session.gleam`:
+Start the session in `ctx_provider.gleam`:
 
 ```gleam
-import glimr/db/pool_connection.{type Pool}
-import glimr/session/session.{type Session}
+import app/http/context/ctx.{type Context}
+import glimr_redis/redis
 import glimr_postgres/postgres
 
-pub fn load(pool: Pool) -> Session {
-  postgres.start_session(pool)
+pub fn register() -> Context {
+  let db = postgres.start("main")
+  let cache = redis.start("main")
+  let session = postgres.start_session(db)
+
+  ctx.Context(
+    db: db,
+    cache: cache,
+    session: session,
+  )
 }
 ```
 
@@ -1041,21 +1055,29 @@ gleam add glimr_sqlite
 Generate the session table migration:
 
 ```bash
-./glimr sqlite_session_table
+./glimr make_session_table
 
 # Or generate and run migrations in one step
-./glimr sqlite_session_table --migrate
+./glimr make_session_table --migrate
 ```
 
-Set up the driver in `ctx_session.gleam`:
+Start the session in `ctx_provider.gleam`:
 
 ```gleam
-import glimr/db/pool_connection.{type Pool}
-import glimr/session/session.{type Session}
+import app/http/context/ctx.{type Context}
+import glimr_redis/redis
 import glimr_sqlite/sqlite
 
-pub fn load(pool: Pool) -> Session {
-  sqlite.start_session(pool)
+pub fn register() -> Context {
+  let db = sqlite.start("main")
+  let cache = redis.start("main")
+  let session = sqlite.start_session(db)
+
+  ctx.Context(
+    db: db,
+    cache: cache,
+    session: session,
+  )
 }
 ```
 
@@ -1067,15 +1089,23 @@ Stores sessions in Redis with automatic TTL-based expiration. No garbage collect
 gleam add glimr_redis
 ```
 
-Set up the driver in `ctx_session.gleam`:
+Start the session in `ctx_provider.gleam`:
 
 ```gleam
-import glimr/session/session.{type Session}
-import glimr_redis/cache/pool.{type Pool}
+import app/http/context/ctx.{type Context}
 import glimr_redis/redis
+import glimr_postgres/postgres
 
-pub fn load(pool: Pool) -> Session {
-  redis.start_session(pool)
+pub fn register() -> Context {
+  let db = postgres.start("main")
+  let cache = redis.start("main")
+  let session = redis.start_session(cache)
+
+  ctx.Context(
+    db: db,
+    cache: cache,
+    session: session,
+  )
 }
 ```
 
@@ -1083,15 +1113,23 @@ pub fn load(pool: Pool) -> Session {
 
 Stores sessions as files on disk using the file cache pool. No database required.
 
-Set up the driver in `ctx_session.gleam`:
+Start the session in `ctx_provider.gleam`:
 
 ```gleam
+import app/http/context/ctx.{type Context}
 import glimr/cache/file
-import glimr/cache/file/pool.{type Pool}
-import glimr/session/session.{type Session}
+import glimr_postgres/postgres
 
-pub fn load(pool: Pool) -> Session {
-  file.start_session(pool)
+pub fn register() -> Context {
+  let db = postgres.start("main")
+  let cache = file.start("main")
+  let session = file.start_session(cache)
+
+  ctx.Context(
+    db: db,
+    cache: cache,
+    session: session,
+  )
 }
 ```
 
@@ -1099,46 +1137,34 @@ pub fn load(pool: Pool) -> Session {
 
 Stores session data directly in a signed cookie. No server-side persistence needed. Best for small payloads under ~4KB.
 
-Set up the driver in `ctx_session.gleam`:
-
-```gleam
-import glimr/session/session.{type Session}
-
-pub fn load() -> Session {
-  session.start_cookie()
-}
-```
-
-Register the session context in your `ctx_provider.gleam`:
+Start the session in your `ctx_provider.gleam`:
 
 ```gleam
 import app/http/context/ctx.{type Context}
-import app/http/context/ctx_cache
-import app/http/context/ctx_db
-import app/http/context/ctx_session
+import glimr/session/session
+import glimr_redis/redis
+import glimr_postgres/postgres
 
 pub fn register() -> Context {
-  let db = ctx_db.load()
-  let cache = ctx_cache.load()
-  let session = ctx_session.load(db.main)
-
   ctx.Context(
-    cache: cache,
-    db: db,
-    session: session,
+    db: postgres.start("main"),
+    cache: redis.start("main"),
+    session: session.start_cookie(), // <--
   )
 }
 ```
 
-Add the `Session` field to your Context type in `src/app/http/context/ctx.gleam`:
+Add the fields to your Context type in `src/app/http/context/ctx.gleam`:
 
 ```gleam
+import glimr/cache/cache.{type CachePool}
+import glimr/db/pool_connection.{type Pool}
 import glimr/session/session.{type Session}
 
 pub type Context {
   Context(
-    cache: CacheContext,
-    db: DbContext,
+    db: Pool,
+    cache: CachePool,
     session: Session,
   )
 }
@@ -1411,7 +1437,7 @@ import wisp.{type Request, type Response}
 ///
 pub fn store(ctx: Context, validated: Data) -> Response {
   let assert Ok(user) = user_repository.create(
-    pool: ctx.db.main,
+    pool: ctx.db,
     name: validated.name,
     email: validated.email,
     avatar: validated.avatar.path,
@@ -1443,7 +1469,7 @@ pub fn store(req: Request, ctx: Context) -> Response {
   use validated <- user_store.validate(req, ctx)
 
   let assert Ok(user) = user_repository.create(
-    pool: ctx.db.main,
+    pool: ctx.db,
     name: validated.name,
     email: validated.email,
     avatar: validated.avatar.path,
@@ -2732,35 +2758,40 @@ DB_DATABASE=src/data/main/data.db
 DB_POOL_SIZE=15
 ```
 
-Set up your connection in your `ctx_db.gleam`:
+Add the pool to your context in `src/app/http/context/ctx.gleam`:
 
 ```gleam
 import glimr/db/pool_connection.{type Pool}
-import glimr_sqlite/sqlite
 
-pub type DbContext {
-  DbContext(
-    main: Pool, // <--- Add to context
-    // ...
-  )
-}
-
-pub fn load() -> DbContext {
-  DbContext(
-    main: sqlite.start("main"), // <--- Load by name
+pub type Context {
+  Context(
+    db: Pool,
     // ...
   )
 }
 ```
 
-And then finally, use `ctx.db.main` in your controllers:
+Start the pool in your `ctx_provider.gleam`:
+
+```gleam
+import glimr_sqlite/sqlite
+
+pub fn register() -> Context {
+  ctx.Context(
+    db: sqlite.start("main"),
+    // ...
+  )
+}
+```
+
+Use `ctx.db` in your controllers:
 
 ```gleam
 /// @get "/users/:user_id"
 pub fn show(_req: Request, ctx: Context, user_id: String) -> Response {
   let assert Ok(user_id) = int.parse(user_id)
 
-  case user.find(ctx.db.main, user_id) {
+  case user.find(ctx.db, user_id) {
     Ok(user) -> {
       view.build()
       |> view.html("users/show.html")
@@ -2843,35 +2874,40 @@ Run the following command to create a directory for your new database connection
 ```bash
 ./glimr setup_database main
 ```
-Set up your connection in your `ctx_db.gleam`:
+Add the pool to your context in `src/app/http/context/ctx.gleam`:
 
 ```gleam
 import glimr/db/pool_connection.{type Pool}
-import glimr_postgres/postgres
 
-pub type DbContext {
-  DbContext(
-    main: Pool, // <--- Add to context
-    // ...
-  )
-}
-
-pub fn load() -> DbContext {
-  DbContext(
-    main: postgres.start("main"), // <--- Load by name
+pub type Context {
+  Context(
+    db: Pool,
     // ...
   )
 }
 ```
 
-And then finally, use `ctx.db.main` in your controllers:
+Start the pool in your `ctx_provider.gleam`:
+
+```gleam
+import glimr_postgres/postgres
+
+pub fn register() -> Context {
+  ctx.Context(
+    db: postgres.start("main"),
+    // ...
+  )
+}
+```
+
+Use `ctx.db` in your controllers:
 
 ```gleam
 /// @get "/users/:user_id"
 pub fn show(_req: Request, ctx: Context, user_id: String) -> Response {
   let assert Ok(user_id) = int.parse(user_id)
 
-  case user.find(ctx.db.main, user_id) {
+  case user.find(ctx.db, user_id) {
     Ok(user) -> {
       view.build()
       |> view.html("users/show.html")
@@ -2899,38 +2935,43 @@ Glimr supports multiple database connections at the same time, even with differe
   pool_size = "${DB_ANALYTICS_POOL_SIZE}"
 ```
 
-You can then set up these connections in your `ctx_db.gleam`:
+Add each pool as a flat field on your context:
 
 ```gleam
 import glimr/db/pool_connection.{type Pool}
-import glimr_sqlite/sqlite
-import glimr_postgres/postgres
 
-pub type DbContext {
-  DbContext(
-    main: Pool,
-    analytics: Pool,
-    // ...
-  )
-}
-
-pub fn load() -> DbContext {
-  DbContext(
-    main: postgres.start("main"),
-    analytics: sqlite.start("analytics"),
+pub type Context {
+  Context(
+    db: Pool,
+    db_analytics: Pool,
     // ...
   )
 }
 ```
 
-And use them like so:
+Start them in your `ctx_provider.gleam`:
+
+```gleam
+import glimr_postgres/postgres
+import glimr_sqlite/sqlite
+
+pub fn register() -> Context {
+  ctx.Context(
+    db: postgres.start("main"),
+    db_analytics: sqlite.start("analytics"),
+    // ...
+  )
+}
+```
+
+Use them in your controllers:
 
 ```gleam
 // your "main" postgres connection pool
-ctx.db.main 
+ctx.db
 
 // your "analytics" sqlite connection pool
-ctx.db.analytics 
+ctx.db_analytics
 ```
 
 ### Migrations
@@ -3195,7 +3236,7 @@ You can specify the pool size by setting the `DB_POOL_SIZE` env variable, and th
 
 **How it works:**
 
-When you call a query function like `user.find(ctx.db.main, id)`, it automatically:
+When you call a query function like `user.find(ctx.db, id)`, it automatically:
 1. Checks out a connection from the pool
 2. Executes the query
 3. Returns the connection to the pool
@@ -3212,7 +3253,7 @@ import data/models/user/gen/user
 
 pub fn show(id: String, req: Request, ctx: Context) -> Response {
   let assert Ok(user_id) = int.parse(id)
-  let user = user.find_or_fail(ctx.db.main, user_id)
+  let user = user.find_or_fail(ctx.db, user_id)
 
   view.build()
   |> view.html("users/show.html")
@@ -3227,7 +3268,7 @@ pub fn show(id: String, req: Request, ctx: Context) -> Response {
 import data/models/user/gen/user
 
 pub fn index(req: Request, ctx: Context) -> Response {
-  let users = user.list_or_fail(ctx.db.main)
+  let users = user.list_or_fail(ctx.db)
 
   view.build()
   |> view.html("users/index.html")
@@ -3245,7 +3286,7 @@ import glimr/db/pool_connection.{NotFound}
 pub fn show(id: String, req: Request, ctx: Context) -> Response {
   let assert Ok(user_id) = int.parse(id)
 
-  case user.find(ctx.db.main, user_id) {
+  case user.find(ctx.db, user_id) {
     Ok(user) -> {
       view.build()
       |> view.html("users/show.html")
@@ -3278,7 +3319,7 @@ pub fn transfer(
   to_id: Int,
   amount: Int,
 ) -> Result(Nil, DbError) {
-  use conn <- pool_connection.transaction(ctx.db.main, 3)
+  use conn <- pool_connection.transaction(ctx.db, 3)
 
   // Both operations use the same connection within the transaction
   use _ <- result.try(account_repository.debit_wc(conn, from_id, amount))
@@ -3302,7 +3343,7 @@ pub fn store(req: Request, ctx: Context) -> Response {
   use validated <- transfer_request.validate(req, ctx)
 
   case {
-    use conn <- pool_connection.transaction(ctx.db.main, 3)
+    use conn <- pool_connection.transaction(ctx.db, 3)
     use _ <- result.try(account_repository.debit_wc(conn, validated.from_id, validated.amount))
     use _ <- result.try(account_repository.credit_wc(conn, validated.to_id, validated.amount))
     Ok(Nil)
@@ -3363,35 +3404,15 @@ Set up the store in `config/cache.toml`:
   path = "priv/storage/framework/cache/data"
 ```
 
-Set up the cache in your `ctx_cache.gleam`:
+Start the cache in your `ctx_provider.gleam`:
 
 ```gleam
-import glimr/cache/cache.{type CachePool}
 import glimr/cache/file
-
-pub type CacheContext {
-  CacheContext(
-    main: CachePool,
-  )
-}
-
-pub fn load() -> CacheContext {
-  CacheContext(
-    main: file.start("main"),
-  )
-}
-```
-
-Register the cache context in your `ctx_provider.gleam`:
-
-```gleam
-import app/http/context/ctx.{type Context}
-import app/http/context/ctx_cache
 
 pub fn register() -> Context {
   ctx.Context(
+    cache: file.start("main"),
     // ...
-    cache: ctx_cache.load(),
   )
 }
 ```
@@ -3402,7 +3423,7 @@ Use it in your controllers:
 import glimr/cache/cache
 
 pub fn show(req: Request, ctx: Context) -> Response {
-  case cache.get(ctx.cache.main, "user:123") {
+  case cache.get(ctx.cache, "user:123") {
     Ok(value) -> // use cached value
     Error(cache.NotFound) -> // cache miss, compute value
     Error(_) -> wisp.internal_server_error()
@@ -3438,35 +3459,15 @@ REDIS_URL=redis://localhost:6379
 REDIS_POOL_SIZE=10
 ```
 
-Set up the cache in your `ctx_cache.gleam`:
+Start the cache in your `ctx_provider.gleam`:
 
 ```gleam
-import glimr/cache/cache.{type CachePool}
 import glimr_redis/redis
-
-pub type CacheContext {
-  CacheContext(
-    main: CachePool,
-  )
-}
-
-pub fn load() -> CacheContext {
-  CacheContext(
-    main: redis.start("main"),
-  )
-}
-```
-
-Register the cache context in your `ctx_provider.gleam`:
-
-```gleam
-import app/http/context/ctx.{type Context}
-import app/http/context/ctx_cache
 
 pub fn register() -> Context {
   ctx.Context(
+    cache: redis.start("main"),
     // ...
-    cache: ctx_cache.load(),
   )
 }
 ```
@@ -3477,7 +3478,7 @@ Use it in your controllers:
 import glimr/cache/cache
 
 pub fn show(req: Request, ctx: Context) -> Response {
-  case cache.get(ctx.cache.main, "user:123") {
+  case cache.get(ctx.cache, "user:123") {
     Ok(value) -> // use cached value
     Error(cache.NotFound) -> // cache miss
     Error(_) -> wisp.internal_server_error()
@@ -3516,40 +3517,18 @@ Set up the store in `config/cache.toml`:
   table = "cache"
 ```
 
-Set up the cache in your `ctx_cache.gleam`:
+Start the cache in your `ctx_provider.gleam`:
 
 ```gleam
-import glimr/cache/cache.{type CachePool}
-import glimr/db/pool_connection.{type Pool}
 import glimr_sqlite/sqlite
 
-pub type CacheContext {
-  CacheContext(
-    main: CachePool,
-  )
-}
-
-pub fn load(db_pool: Pool) -> CacheContext {
-  CacheContext(
-    main: sqlite.start_cache(db_pool, "database"),
-  )
-}
-```
-
-Register the cache context in your `ctx_provider.gleam`:
-
-```gleam
-import app/http/context/ctx.{type Context}
-import app/http/context/ctx_cache
-import app/http/context/ctx_db
-
 pub fn register() -> Context {
-  let db = ctx_db.load()
+  let db = sqlite.start("main")
 
   ctx.Context(
-    // ...
     db: db,
-    cache: ctx_cache.load(db.main),
+    cache: sqlite.start_cache(db, "database"),
+    // ...
   )
 }
 ```
@@ -3558,10 +3537,10 @@ Generate and run the cache table migration:
 
 ```bash
 # Generate the migration
-./glimr cache_table
+./glimr make_cache_table
 
 # Or generate and run migrations in one step
-./glimr cache_table --migrate
+./glimr make_cache_table --migrate
 ```
 
 Use it in your controllers:
@@ -3570,7 +3549,7 @@ Use it in your controllers:
 import glimr/cache/cache
 
 pub fn show(req: Request, ctx: Context) -> Response {
-  case cache.get(ctx.cache.main, "user:123") {
+  case cache.get(ctx.cache, "user:123") {
     Ok(value) -> // use cached value
     Error(cache.NotFound) -> // cache miss
     Error(_) -> wisp.internal_server_error()
@@ -3599,40 +3578,18 @@ Set up the store in `config/cache.toml`:
   table = "cache"
 ```
 
-Set up the cache in your `ctx_cache.gleam`:
+Start the cache in your `ctx_provider.gleam`:
 
 ```gleam
-import glimr/cache/cache.{type CachePool}
-import glimr/db/pool_connection.{type Pool}
 import glimr_postgres/postgres
 
-pub type CacheContext {
-  CacheContext(
-    main: CachePool,
-  )
-}
-
-pub fn load(db_pool: Pool) -> CacheContext {
-  CacheContext(
-    main: postgres.start_cache(db_pool, "database"),
-  )
-}
-```
-
-Register the cache context in your `ctx_provider.gleam`:
-
-```gleam
-import app/http/context/ctx.{type Context}
-import app/http/context/ctx_cache
-import app/http/context/ctx_db
-
 pub fn register() -> Context {
-  let db = ctx_db.load()
+  let db = postgres.start("main")
 
   ctx.Context(
-    // ...
     db: db,
-    cache: ctx_cache.load(db.main),
+    cache: postgres.start_cache(db, "database"),
+    // ...
   )
 }
 ```
@@ -3641,10 +3598,10 @@ Generate and run the cache table migration:
 
 ```bash
 # Generate the migration
-./glimr cache_table
+./glimr make_cache_table
 
 # Or generate and run migrations in one step
-./glimr cache_table --migrate
+./glimr make_cache_table --migrate
 ```
 
 Use it in your controllers:
@@ -3653,7 +3610,7 @@ Use it in your controllers:
 import glimr/cache/cache
 
 pub fn show(req: Request, ctx: Context) -> Response {
-  case cache.get(ctx.cache.main, "user:123") {
+  case cache.get(ctx.cache, "user:123") {
     Ok(value) -> // use cached value
     Error(cache.NotFound) -> // cache miss
     Error(_) -> wisp.internal_server_error()
@@ -3711,23 +3668,23 @@ All cache drivers support these operations:
 import glimr/cache/cache
 
 // Store a value for 1 hour (3600 seconds)
-cache.put(ctx.cache.main, "user:123:name", "Alice", 3600)
+cache.put(ctx.cache, "user:123:name", "Alice", 3600)
 
 // Get a value
-case cache.get(ctx.cache.main, "user:123:name") {
+case cache.get(ctx.cache, "user:123:name") {
   Ok(name) -> io.println("Hello, " <> name)
   Error(cache.NotFound) -> io.println("Cache miss")
   Error(_) -> io.println("Cache error")
 }
 
 // Store permanently
-cache.put_forever(ctx.cache.main, "config:site_name", "My App")
+cache.put_forever(ctx.cache, "config:site_name", "My App")
 
 // Delete a value
-cache.forget(ctx.cache.main, "user:123:name")
+cache.forget(ctx.cache, "user:123:name")
 
 // Check existence
-case cache.has(ctx.cache.main, "user:123:name") {
+case cache.has(ctx.cache, "user:123:name") {
   True -> io.println("Cached")
   False -> io.println("Not cached")
 }
@@ -3739,10 +3696,10 @@ The cache stores strings, so to cache structured data you need to provide an enc
 
 ```gleam
 // Store JSON — uses the generated encoder/decoder
-cache.put_json(ctx.cache.main, "user:123", user, user.encoder(), 3600)
+cache.put_json(ctx.cache, "user:123", user, user.encoder(), 3600)
 
 // Retrieve JSON
-case cache.get_json(ctx.cache.main, "user:123", user.decoder()) {
+case cache.get_json(ctx.cache, "user:123", user.decoder()) {
   Ok(user) -> {} // use user
   Error(cache.NotFound) -> {} // cache miss
   Error(cache.SerializationError(_)) -> {} // invalid JSON
@@ -3781,14 +3738,14 @@ let cache_key = "user:" <> id <> ":name"
 
 // Remember a string value for 1 hour
 let name = {
-  use <- cache.remember(ctx.cache.main, cache_key, 3600)
-  user.find_or_fail(ctx.db.main, id).name
+  use <- cache.remember(ctx.cache, cache_key, 3600)
+  user.find_or_fail(ctx.db, id).name
 }
 
 // Remember forever (only cleared by forget or flush)
 let name = {
-  use <- cache.remember_forever(ctx.cache.main, cache_key)
-  user.find_or_fail(ctx.db.main, id).name
+  use <- cache.remember_forever(ctx.cache, cache_key)
+  user.find_or_fail(ctx.db, id).name
 }
 ```
 
@@ -3798,38 +3755,38 @@ Use `remember_json` for structured data — the compute callback goes last so yo
 // Remember a JSON object for 1 hour
 let user = {
   use <- cache.remember_json(
-    ctx.cache.main,
+    ctx.cache,
     "user:" <> id,
     3600,
     user.decoder(),
     user.encoder(),
   )
 
-  user.find_or_fail(ctx.db.main, id)
+  user.find_or_fail(ctx.db, id)
 }
 
 // Remember a JSON object forever
 let user = {
   use <- cache.remember_json_forever(
-    ctx.cache.main,
+    ctx.cache,
     "user:" <> id,
     user.decoder(),
     user.encoder(),
   )
 
-  user.find_or_fail(ctx.db.main, id)
+  user.find_or_fail(ctx.db, id)
 }
 
 // Handle errors yourself inside the callback
 let user = {
   use <- cache.remember_json(
-    ctx.cache.main,
+    ctx.cache,
     "user:" <> id,
     3600,
     user.decoder(),
     user.encoder(),
   )
-  case user.find(ctx.db.main, id) {
+  case user.find(ctx.db, id) {
     Ok(user) -> user
     Error(_) -> User(name: "Guest", email: "")
   }
@@ -3842,11 +3799,11 @@ For counters and rate limiting:
 
 ```gleam
 // Increment page view counter
-let assert Ok(views) = cache.increment(ctx.cache.main, "page:home:views", 1)
+let assert Ok(views) = cache.increment(ctx.cache, "page:home:views", 1)
 
 // Rate limiting example
 let rate_key = "rate:" <> user_id <> ":" <> current_minute()
-case cache.increment(ctx.cache.main, rate_key, 1) {
+case cache.increment(ctx.cache, rate_key, 1) {
   Ok(count) if count > 100 -> Error("Rate limit exceeded")
   Ok(_) -> Ok("Allowed")
   Error(_) -> Ok("Allowed") // fail open
@@ -3974,70 +3931,35 @@ Run with arguments:
 
 ### Commands with Database Access
 
-For commands that need database access, use the `--db` flag:
+For commands that need database access, pass a driver option with the connection name:
 
 ```bash
-./glimr make_command seed_database --db
+# PostgreSQL
+./glimr make_command seed_database --db-postgres=main
+
+# SQLite
+./glimr make_command seed_database --db-sqlite=main
 ```
 
-This creates a command with a `Pool` parameter:
+This generates a command that starts the pool explicitly:
 
 ```gleam
 import glimr/console/command.{type Command, type Args}
-import glimr/db/pool_connection.{type Pool}
+import glimr_postgres/postgres
 
-const description = "Seed the database with initial data"
-
-pub fn command() -> Command {
-  command.new()
-  |> command.description(description)
-  |> command.db_handler(run) // <--- uses db_handler rather than handler
-}
-
-fn run(args: Args, pool: Pool) -> Nil { // <--- run() now accepts a Pool parameter
-  // Use the pool for database operations
-  let assert Ok(_) = user_repository.create(
-    pool: pool,
-    name: "Admin",
-    email: "admin@example.com",
-  )
-}
-
-pub fn main() {
-  command.run(command())
-}
-```
-
-The framework automatically:
-1. Starts a database pool with 1 connection before your command runs
-2. Passes the pool to your handler
-3. Stops the pool when your command completes
-
-### Commands with Database Connection Name Only
-
-If your command needs to know which database connection to use but doesn't need a pool (e.g., for generating files based on the connection name), you can add `command.db_option()` to your args directly:
-
-```gleam
-import glimr/console/command.{type Command, type Args, Argument}
-
-const description = "Generate files for a database"
+const description = "Command description"
 
 pub fn command() -> Command {
   command.new()
   |> command.description(description)
-  |> command.args([
-    Argument(name: "name", description: "The name of the resource"),
-    command.db_option(),
-  ])
   |> command.handler(run)
 }
 
-fn run(args: Args) -> Nil {
-  let name = command.get_arg(args, "name")
-  let connection = command.get_option(args, "database")
+fn run(_args: Args) -> Nil {
+  let pool = postgres.start("main")
 
-  // Use the connection name for file paths, etc.
-  // ...
+  // Your command logic here
+  todo
 }
 
 pub fn main() {
@@ -4045,43 +3967,45 @@ pub fn main() {
 }
 ```
 
-This gives your command a `--database` option with the same default resolution and validation as `db_handler`, but without starting a pool.
-
-### Multiple Database Connections
-
-All commands that need a database connection automatically accept a `--database` option for you to pass the name of the database connection you need access to as defined in your `config/database.toml`.
-
-If a database connection isn't specified, it will default to the first connection in `config/database.toml`.
-
-```bash
-# Uses the default connection
-./glimr app_seed_database
-
-# Uses a specific connection
-./glimr app_seed_database --database=analytics
-```
-
-The `--database` name's existence is automatically verified before attempting to create a connection.
+The connection name (e.g. `"main"`) matches a connection defined in `config/database.toml`.
 
 ### Commands with Cache Access
 
-For commands that need cache access, use `cache_handler` instead of `handler`:
+For commands that need cache access, pass a cache driver option with the store name:
+
+```bash
+# Redis
+./glimr make_command warm_cache --cache-redis=main
+
+# File
+./glimr make_command warm_cache --cache-file=main
+
+# PostgreSQL-backed cache
+./glimr make_command warm_cache --cache-postgres=main
+
+# SQLite-backed cache
+./glimr make_command warm_cache --cache-sqlite=main
+```
+
+For example, `--cache-redis=main` generates:
 
 ```gleam
 import glimr/console/command.{type Command, type Args}
-import glimr/cache/cache.{type CachePool}
+import glimr_redis/redis
 
-const description = "Warm up the cache"
+const description = "Command description"
 
 pub fn command() -> Command {
   command.new()
   |> command.description(description)
-  |> command.cache_handler(run)
+  |> command.handler(run)
 }
 
-fn run(args: Args, pool: CachePool) -> Nil {
-  // Use the pool for cache operations
-  cache.put(pool, "status", "warmed", 3600)
+fn run(_args: Args) -> Nil {
+  let pool = redis.start("main")
+
+  // Your command logic here
+  todo
 }
 
 pub fn main() {
@@ -4089,36 +4013,32 @@ pub fn main() {
 }
 ```
 
-The framework automatically:
-1. Starts a cache pool for the configured store before your command runs
-2. Passes the pool to your handler
-3. Stops the pool when your command completes
-
-Commands with cache access accept a `--cache` option to specify which store to use. If not specified, it defaults to the first store in `config/cache.toml`.
-
-```bash
-# Uses the default store
-./glimr app_warm_cache
-
-# Uses a specific store
-./glimr app_warm_cache --cache=sessions
-```
-
-If your command needs the store name without a pool, add `command.cache_option()` to your args directly:
+Database-backed cache stubs (`--cache-postgres`, `--cache-sqlite`) also start a database pool for the cache table:
 
 ```gleam
-pub fn command() -> Command {
-  command.new()
-  |> command.description(description)
-  |> command.args([command.cache_option()])
-  |> command.handler(run)
-}
+fn run(_args: Args) -> Nil {
+  // Update "main" below if your database connection has a different name
+  let db_pool = postgres.start("main")
+  let pool = postgres.start_cache(db_pool, "main")
 
-fn run(args: Args) -> Nil {
-  let store = command.get_option(args, "cache")
-  // ...
+  // Your command logic here
+  todo
 }
 ```
+
+The store name (e.g. `"main"`) matches a store defined in `config/cache.toml`. Only one driver option can be used per command.
+
+### Driver-Agnostic Commands
+
+The `db_handler`, `cache_handler`, and `cache_db_handler` functions in `command.gleam` exist for framework and third-party package commands that must work with any driver. These use `--database` and `--cache` options for runtime driver selection:
+
+```gleam
+// Used by framework/third-party commands — not for user commands
+command.new()
+|> command.db_handler(fn(args, pool) { ... })
+```
+
+User commands should prefer explicit driver starts (via `make_command --db-postgres=main` etc.) so the driver dependency is visible at compile time.
 
 ### Third-Party Commands
 
@@ -4155,28 +4075,37 @@ Add your own configuration files in `src/config/`.
 
 ## Context System
 
-The context system provides type-safe dependency injection. Define your context in `src/app/http/context/`:
+The context system provides type-safe dependency injection. Define your context in `src/app/http/context/ctx.gleam`:
 
 ```gleam
-// src/app/http/context/ctx.gleam
+import glimr/cache/cache.{type CachePool}
+import glimr/db/pool_connection.{type Pool}
+import glimr/session/session.{type Session}
+
 pub type Context {
   Context(
-    app: Context,
-    // Add your own contexts here
-    // database: DatabaseContext,
-    // cache: CacheContext,
+    db: Pool,
+    cache: CachePool,
+    session: Session,
+    // Add your own fields here
   )
 }
 ```
 
-Register contexts in the provider:
+Start everything in the provider (`src/app/providers/ctx_provider.gleam`):
 
 ```gleam
-// src/app/providers/ctx_provider.gleam
+import app/http/context/ctx.{type Context}
+import glimr/cache/file
+import glimr_postgres/postgres
+
 pub fn register() -> Context {
+  let db = postgres.start("main")
+
   ctx.Context(
-    app: ctx.load(),
-    // Initialize your contexts here
+    db: db,
+    cache: file.start("main"),
+    session: postgres.start_session(db),
   )
 }
 ```
@@ -4185,8 +4114,10 @@ Access context in controllers:
 
 ```gleam
 pub fn show(req: Request, ctx: Context) -> Response {
-  let static_dir = ctx.app.static_directory
-  // Use context...
+  case user.find(ctx.db, user_id) {
+    Ok(user) -> // ...
+    Error(_) -> wisp.not_found()
+  }
 }
 ```
 

@@ -13,9 +13,7 @@ pub fn run(req: Request, ctx: Context, next: Next(Context)) -> Response {
   let user =
     auth.id(ctx.session, session_key)
     |> result.try(int.parse)
-    |> result.try(fn(id) {
-      user.find(pool: ctx.db.main, id: id) |> result.replace_error(Nil)
-    })
+    |> result.try(fn(id) { user.find(ctx.db, id) |> result.replace_error(Nil) })
     |> option.from_result
 
   let ctx = ctx.Context(..ctx, user: user)

@@ -1,14 +1,13 @@
 import app/http/context/ctx.{type Context}
-import app/http/context/ctx_cache
-import app/http/context/ctx_db
-import app/http/context/ctx_session
 import gleam/option
+import glimr/cache/file
 import glimr/response/response
+import glimr_postgres/postgres
 
 pub fn register() -> Context {
-  let db = ctx_db.load()
-  let cache = ctx_cache.load()
-  let session = ctx_session.load(db.main)
+  let db = postgres.start("main")
+  let cache = file.start("main")
+  let session = postgres.start_session(db)
 
   ctx.Context(
     response_format: response.HTML,
