@@ -1726,7 +1726,7 @@ Any status code you don't provide a custom page for will use the built-in defaul
 You can trigger an error response from anywhere in a request handler using `fail.with()`:
 
 ```gleam
-import glimr/fail
+import glimr/http/fail
 
 pub fn show(id: String, req: Request, ctx: Context) -> Response {
   let user = case get_user(id) {
