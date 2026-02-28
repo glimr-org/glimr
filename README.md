@@ -3004,7 +3004,8 @@ Define the user schema for your migrations:
 // src/data/models/user/user_schema.gleam
 import glimr/db/schema.{
   table, id, string, text, boolean, uuid, foreign, index, indexes, unique,
-  nullable, default_bool, default_string, auto_uuid, unix_timestamps,
+  nullable, default_bool, default_string, auto_uuid, unix_timestamps, array,
+  default_empty_array,
 }
 
 pub const name = "users"
@@ -3048,6 +3049,19 @@ pub fn define() {
 | `timestamps()` | Creates `created_at` and `updated_at` | | |
 | `unix_timestamps()` | Creates `created_at` and `updated_at` as integers | | |
 
+##### Array Columns
+
+Any column type can be wrapped with the `array()` modifier to create an array column:
+
+| Example | PostgreSQL | SQLite | Gleam Type |
+|---------|------------|--------|------------|
+| `string("tags") \|> array()` | `VARCHAR(255)[]` | `TEXT` (JSON) | `List(String)` |
+| `int("scores") \|> array()` | `INTEGER[]` | `TEXT` (JSON) | `List(Int)` |
+| `int("matrix") \|> array() \|> array()` | `INTEGER[][]` | `TEXT` (JSON) | `List(List(Int))` |
+| `float("coords") \|> array() \|> nullable()` | `DOUBLE PRECISION[]` | `TEXT` (JSON) | `Option(List(Float))` |
+
+Array columns use native PostgreSQL arrays and are transparently stored as JSON in SQLite. The generated decoders handle both formats automatically.
+
 #### Column Modifiers
 
 ```gleam
@@ -3063,6 +3077,11 @@ timestamp("published_at") |> default_now()
 unix_timestamp("created_at") |> default_unix_now()
 uuid("external_id") |> auto_uuid()
 string("deleted_at") |> nullable() |> default_null()
+
+// Array columns
+string("tags") |> array()
+int("scores") |> array() |> array()  // nested: List(List(Int))
+string("tags") |> array() |> default_empty_array()
 ```
 
 | Modifier | Description |
@@ -3076,6 +3095,8 @@ string("deleted_at") |> nullable() |> default_null()
 | `\|> default_unix_now()` | Default to current Unix timestamp |
 | `\|> auto_uuid()` | Default to auto-generated UUID |
 | `\|> default_null()` | Default to NULL (use with `nullable()`) |
+| `\|> default_empty_array()` | Default to empty array (`'{}'` in Postgres, `'[]'` in SQLite) |
+| `\|> array()` | Wrap column type as an array (chainable for nesting) |
 | `\|> rename_from("old_name")` | Track column rename for migrations |
 
 #### Indexes
