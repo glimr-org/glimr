@@ -1117,13 +1117,13 @@ Start the session in `ctx_provider.gleam`:
 
 ```gleam
 import app/http/context/ctx.{type Context}
-import glimr/cache/file
+import glimr/cache/file_cache
 import glimr_postgres/postgres
 
 pub fn register() -> Context {
   let db = postgres.start("main")
-  let cache = file.start("main")
-  let session = file.start_session(cache)
+  let cache = file_cache.start("main")
+  let session = file_cache.start_session(cache)
 
   ctx.Context(
     db: db,
@@ -3407,11 +3407,11 @@ Set up the store in `config/cache.toml`:
 Start the cache in your `ctx_provider.gleam`:
 
 ```gleam
-import glimr/cache/file
+import glimr/cache/file_cache
 
 pub fn register() -> Context {
   ctx.Context(
-    cache: file.start("main"),
+    cache: file_cache.start("main"),
     // ...
   )
 }
@@ -3626,7 +3626,7 @@ All cache backends share the same unified API through a single import:
 import glimr/cache/cache
 ```
 
-The `CachePool` type returned by all backends (`file.start`, `redis.start`, `postgres.start_cache`, `sqlite.start_cache`) is driver-agnostic — you use the same `cache.get`, `cache.put`, etc. regardless of which backend is active.
+The `CachePool` type returned by all backends (`file_cache.start`, `redis.start`, `postgres.start_cache`, `sqlite.start_cache`) is driver-agnostic — you use the same `cache.get`, `cache.put`, etc. regardless of which backend is active.
 
 ### Cache Operations
 
@@ -4096,7 +4096,7 @@ Start everything in the provider (`src/app/providers/ctx_provider.gleam`):
 
 ```gleam
 import app/http/context/ctx.{type Context}
-import glimr/cache/file
+import glimr/cache/file_cache
 import glimr_postgres/postgres
 
 pub fn register() -> Context {
@@ -4104,7 +4104,7 @@ pub fn register() -> Context {
 
   ctx.Context(
     db: db,
-    cache: file.start("main"),
+    cache: file_cache.start("main"),
     session: postgres.start_session(db),
   )
 }
