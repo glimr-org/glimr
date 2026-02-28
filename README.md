@@ -3003,7 +3003,7 @@ Define the user schema for your migrations:
 ```gleam
 // src/data/models/user/user_schema.gleam
 import glimr/db/schema.{
-  table, id, string, text, boolean, uuid, foreign,
+  table, id, string, text, boolean, uuid, foreign, index, indexes, unique,
   nullable, default_bool, default_string, auto_uuid, unix_timestamps,
 }
 
@@ -3019,6 +3019,10 @@ pub fn define() {
     boolean("is_admin") |> default_bool(False),
     string("role") |> default_string("user"),
     unix_timestamps(),
+  ])
+  |> indexes([
+    unique(["email"]),
+    index(["name", "role"]),
   ])
 }
 ```
@@ -3061,6 +3065,52 @@ uuid("external_id") |> auto_uuid()
 string("deleted_at") |> nullable() |> default_null()
 ```
 
+| Modifier | Description |
+|----------|-------------|
+| `\|> nullable()` | Allow NULL values (default is NOT NULL) |
+| `\|> default_bool(True)` | Set a boolean default value |
+| `\|> default_string("value")` | Set a string default value |
+| `\|> default_int(0)` | Set an integer default value |
+| `\|> default_float(0.0)` | Set a float default value |
+| `\|> default_now()` | Default to current timestamp |
+| `\|> default_unix_now()` | Default to current Unix timestamp |
+| `\|> auto_uuid()` | Default to auto-generated UUID |
+| `\|> default_null()` | Default to NULL (use with `nullable()`) |
+| `\|> rename_from("old_name")` | Track column rename for migrations |
+
+#### Indexes
+
+Define indexes by piping `indexes()` onto your table definition:
+
+```gleam
+import glimr/db/schema.{table, id, string, index, indexes, unique, named}
+
+table(name, [
+  id(),
+  string("email"),
+  string("first_name"),
+  string("last_name"),
+])
+|> indexes([
+  unique(["email"]),
+  index(["first_name", "last_name"]),
+  index(["email"]) |> named("idx_users_email_lookup"),
+])
+```
+
+| Function | Description |
+|----------|-------------|
+| `index(["col"])` | Regular index on a single column |
+| `index(["col1", "col2"])` | Composite index on multiple columns |
+| `unique(["col"])` | Unique index on a single column |
+| `unique(["col1", "col2"])` | Composite unique index |
+
+#### Index Modifiers
+
+| Modifier | Description |
+|----------|-------------|
+| `\|> named("name")` | Custom index name (default: `idx_{table}_{col1}_{col2}`) |
+
 #### Generating Migrations
 
 Run the migration generator:
@@ -3076,7 +3126,7 @@ Run the migration generator:
 This will:
 1. Scan schema files in `src/data/{connection_name}/models/`
 2. Compare against the stored snapshot (`._schema_snapshot.json`)
-3. Detect changes (new tables, dropped tables, column changes)
+3. Detect changes (new tables, dropped tables, column changes, index changes)
 4. Generate SQL in `src/data/{connection_name}/_migrations/{timestamp}_migration.sql`
 5. Update the snapshot for the next run
 
