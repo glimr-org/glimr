@@ -3049,19 +3049,6 @@ pub fn define() {
 | `timestamps()` | Creates `created_at` and `updated_at` | | |
 | `unix_timestamps()` | Creates `created_at` and `updated_at` as integers | | |
 
-##### Array Columns
-
-Any column type can be wrapped with the `array()` modifier to create an array column:
-
-| Example | PostgreSQL | SQLite | Gleam Type |
-|---------|------------|--------|------------|
-| `string("tags") \|> array()` | `VARCHAR(255)[]` | `TEXT` (JSON) | `List(String)` |
-| `int("scores") \|> array()` | `INTEGER[]` | `TEXT` (JSON) | `List(Int)` |
-| `int("matrix") \|> array() \|> array()` | `INTEGER[][]` | `TEXT` (JSON) | `List(List(Int))` |
-| `float("coords") \|> array() \|> nullable()` | `DOUBLE PRECISION[]` | `TEXT` (JSON) | `Option(List(Float))` |
-
-Array columns use native PostgreSQL arrays and are transparently stored as JSON in SQLite. The generated decoders handle both formats automatically.
-
 #### Column Modifiers
 
 ```gleam
@@ -3098,6 +3085,19 @@ string("tags") |> array() |> default_empty_array()
 | `\|> default_empty_array()` | Default to empty array (`'{}'` in Postgres, `'[]'` in SQLite) |
 | `\|> array()` | Wrap column type as an array (chainable for nesting) |
 | `\|> rename_from("old_name")` | Track column rename for migrations |
+
+##### Array Columns
+
+Any column type can be wrapped with the `array()` modifier to create an array column:
+
+| Example | PostgreSQL | SQLite | Gleam Type |
+|---------|------------|--------|------------|
+| `string("tags") \|> array()` | `VARCHAR(255)[]` | `TEXT` (JSON) | `List(String)` |
+| `int("scores") \|> array()` | `INTEGER[]` | `TEXT` (JSON) | `List(Int)` |
+| `int("matrix") \|> array() \|> array()` | `INTEGER[][]` | `TEXT` (JSON) | `List(List(Int))` |
+| `float("coords") \|> array() \|> nullable()` | `DOUBLE PRECISION[]` | `TEXT` (JSON) | `Option(List(Float))` |
+
+Array columns use native PostgreSQL arrays and are transparently stored as JSON in SQLite. The generated decoders handle both formats automatically.
 
 #### Indexes
 
