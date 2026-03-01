@@ -838,10 +838,7 @@ pub fn dashboard(ctx: Context) -> Response {
   // Safe to assert because auth middleware guarantees this
   let assert Some(user) = ctx.user
 
-  view.build()
-  |> view.html("dashboard.html")
-  |> view.data([#("username", user.username)])
-  |> view.render()
+  response.html(dashboard.render(user: user), 200)
 }
 ```
 
@@ -2793,10 +2790,7 @@ pub fn show(_req: Request, ctx: Context, user_id: String) -> Response {
 
   case user.find(ctx.db, user_id) {
     Ok(user) -> {
-      view.build()
-      |> view.html("users/show.html")
-      |> view.data([#("user", user.name)])
-      |> view.render()
+      response.html(user_show.render(user: user), 200)
     }
     Error(NotFound) -> wisp.not_found()
     Error(_) -> wisp.internal_server_error()
@@ -2909,10 +2903,7 @@ pub fn show(_req: Request, ctx: Context, user_id: String) -> Response {
 
   case user.find(ctx.db, user_id) {
     Ok(user) -> {
-      view.build()
-      |> view.html("users/show.html")
-      |> view.data([#("user", user.name)])
-      |> view.render()
+      response.html(user_show.render(user: user), 200)
     }
     Error(NotFound) -> wisp.not_found()
     Error(_) -> wisp.internal_server_error()
@@ -3002,28 +2993,29 @@ Define the user schema for your migrations:
 
 ```gleam
 // src/data/models/user/user_schema.gleam
-import glimr/db/schema.{
-  table, id, string, text, boolean, uuid, foreign, index, indexes, unique,
-  nullable, default_bool, default_string, auto_uuid, unix_timestamps, array,
-  default_empty_array,
-}
+import glimr/db/schema
 
-pub const name = "users"
+pub const table_name = "users"
 
-pub fn define() {
-  table(name, [
-    id(),
-    foreign("organization_id", "organizations") |> nullable(),
-    string("email"),
-    string("name"),
-    text("bio") |> nullable(),
-    boolean("is_admin") |> default_bool(False),
-    string("role") |> default_string("user"),
-    unix_timestamps(),
+pub fn definition() {
+  schema.table(table_name, [
+    schema.id(),
+    schema.foreign("organization_id", "organizations")
+      |> schema.nullable()
+      |> schema.on_delete(schema.Cascade),
+    schema.string("email"),
+    schema.string("name"),
+    schema.text("bio") |> schema.nullable(),
+    schema.boolean("is_admin") |> schema.default_bool(False),
+    schema.enum("role", ["admin", "editor", "viewer"]),
+    schema.decimal("balance", 10, 2) |> schema.nullable(),
+    schema.blob("avatar_data") |> schema.nullable(),
+    schema.time("starts_at") |> schema.nullable(),
+    schema.unix_timestamps(),
   ])
-  |> indexes([
-    unique(["email"]),
-    index(["name", "role"]),
+  |> schema.indexes([
+    schema.unique(["email"]),
+    schema.index(["name", "role"]),
   ])
 }
 ```
@@ -3032,105 +3024,191 @@ pub fn define() {
 
 | Function | PostgreSQL | SQLite | Gleam Type |
 |----------|------------|--------|------------|
-| `id()` | `SERIAL PRIMARY KEY` | `INTEGER PRIMARY KEY AUTOINCREMENT` | `Int` |
-| `uuid("name")` | `UUID` | `TEXT` | `String` |
-| `string("name")` | `VARCHAR(255)` | `TEXT` | `String` |
-| `string_sized("name", 100)` | `VARCHAR(100)` | `TEXT` | `String` |
-| `text("name")` | `TEXT` | `TEXT` | `String` |
-| `int("name")` | `INTEGER` | `INTEGER` | `Int` |
-| `bigint("name")` | `BIGINT` | `INTEGER` | `Int` |
-| `float("name")` | `DOUBLE PRECISION` | `REAL` | `Float` |
-| `boolean("name")` | `BOOLEAN` | `INTEGER` | `Bool` |
-| `timestamp("name")` | `TIMESTAMP` | `TEXT` | `String` |
-| `unix_timestamp("name")` | `BIGINT` | `INTEGER` | `Int` |
-| `date("name")` | `DATE` | `TEXT` | `String` |
-| `json("name")` | `JSONB` | `TEXT` | `String` |
-| `foreign("user_id", "users")` | `INTEGER REFERENCES users(id)` | `INTEGER` | `Int` |
-| `timestamps()` | Creates `created_at` and `updated_at` | | |
-| `unix_timestamps()` | Creates `created_at` and `updated_at` as integers | | |
+| `schema.id()` | `SERIAL PRIMARY KEY` | `INTEGER PRIMARY KEY AUTOINCREMENT` | `Int` |
+| `schema.uuid("name")` | `UUID` | `TEXT` | `String` |
+| `schema.string("name")` | `VARCHAR(255)` | `TEXT` | `String` |
+| `schema.string_sized("name", 100)` | `VARCHAR(100)` | `TEXT` | `String` |
+| `schema.text("name")` | `TEXT` | `TEXT` | `String` |
+| `schema.int("name")` | `INTEGER` | `INTEGER` | `Int` |
+| `schema.smallint("name")` | `SMALLINT` | `INTEGER` | `Int` |
+| `schema.bigint("name")` | `BIGINT` | `INTEGER` | `Int` |
+| `schema.float("name")` | `DOUBLE PRECISION` | `REAL` | `Float` |
+| `schema.boolean("name")` | `BOOLEAN` | `INTEGER` | `Bool` |
+| `schema.timestamp("name")` | `TIMESTAMP` | `TEXT` | `String` |
+| `schema.unix_timestamp("name")` | `BIGINT` | `INTEGER` | `Int` |
+| `schema.date("name")` | `DATE` | `TEXT` | `String` |
+| `schema.json("name")` | `JSONB` | `TEXT` | `String` |
+| `schema.foreign("user_id", "users")` | `INTEGER REFERENCES users(id)` | `INTEGER` | `Int` |
+| `schema.enum("status", ["active", "inactive"])` | `CREATE TYPE` + type name | `TEXT` + `CHECK` constraint | Custom Gleam type |
+| `schema.decimal("price", 10, 2)` | `NUMERIC(10, 2)` | `TEXT` | `String` |
+| `schema.blob("data")` | `BYTEA` | `BLOB` | `BitArray` |
+| `schema.time("starts_at")` | `TIME` | `TEXT` | `String` |
+| `schema.timestamps()` | Creates `created_at` and `updated_at` | | |
+| `schema.unix_timestamps()` | Creates `created_at` and `updated_at` as integers | | |
+| `schema.soft_deletes()` | Creates nullable `deleted_at` timestamp | | |
 
 #### Column Modifiers
 
 ```gleam
 // Make a column nullable (default is NOT NULL)
-string("bio") |> nullable()
+schema.string("bio") |> schema.nullable()
 
 // Set default values
-boolean("active") |> default_bool(True)
-string("role") |> default_string("user")
-int("count") |> default_int(0)
-float("rate") |> default_float(0.0)
-timestamp("published_at") |> default_now()
-unix_timestamp("created_at") |> default_unix_now()
-uuid("external_id") |> auto_uuid()
-string("deleted_at") |> nullable() |> default_null()
+schema.boolean("active") |> schema.default_bool(True)
+schema.string("role") |> schema.default_string("user")
+schema.int("count") |> schema.default_int(0)
+schema.float("rate") |> schema.default_float(0.0)
+schema.timestamp("published_at") |> schema.default_now()
+schema.unix_timestamp("created_at") |> schema.default_unix_now()
+schema.uuid("external_id") |> schema.auto_uuid()
+schema.string("deleted_at") 
+  |> schema.nullable() 
+  |> schema.default_null()
 
 // Array columns
-string("tags") |> array()
-int("scores") |> array() |> array()  // nested: List(List(Int))
-string("tags") |> array() |> default_empty_array()
+schema.string("tags") |> schema.array()
+
+// nested: List(List(Int))
+schema.int("scores") 
+  |> schema.array() 
+  |> schema.array()  
+
+// Array with default
+schema.string("tags") 
+  |> schema.array() 
+  |> schema.default_empty_array()
+
+// Foreign key actions
+schema.foreign("user_id", "users")
+  |> schema.on_delete(schema.Cascade)
+  |> schema.on_update(schema.Restrict)
+
+// Enum with custom type name override
+schema.enum("status", ["active", "inactive"]) |> schema.enum_name("user_status")
 ```
 
 | Modifier | Description |
 |----------|-------------|
-| `\|> nullable()` | Allow NULL values (default is NOT NULL) |
-| `\|> default_bool(True)` | Set a boolean default value |
-| `\|> default_string("value")` | Set a string default value |
-| `\|> default_int(0)` | Set an integer default value |
-| `\|> default_float(0.0)` | Set a float default value |
-| `\|> default_now()` | Default to current timestamp |
-| `\|> default_unix_now()` | Default to current Unix timestamp |
-| `\|> auto_uuid()` | Default to auto-generated UUID |
-| `\|> default_null()` | Default to NULL (use with `nullable()`) |
-| `\|> default_empty_array()` | Default to empty array (`'{}'` in Postgres, `'[]'` in SQLite) |
-| `\|> array()` | Wrap column type as an array (chainable for nesting) |
-| `\|> rename_from("old_name")` | Track column rename for migrations |
+| `\|> schema.nullable()` | Allow NULL values (default is NOT NULL) |
+| `\|> schema.default_bool(True)` | Set a boolean default value |
+| `\|> schema.default_string("value")` | Set a string default value |
+| `\|> schema.default_int(0)` | Set an integer default value |
+| `\|> schema.default_float(0.0)` | Set a float default value |
+| `\|> schema.default_now()` | Default to current timestamp |
+| `\|> schema.default_unix_now()` | Default to current Unix timestamp |
+| `\|> schema.auto_uuid()` | Default to auto-generated UUID |
+| `\|> schema.default_null()` | Default to NULL (use with `schema.nullable()`) |
+| `\|> schema.default_empty_array()` | Default to empty array (`'{}'` in Postgres, `'[]'` in SQLite) |
+| `\|> schema.array()` | Wrap column type as an array (chainable for nesting) |
+| `\|> schema.on_delete(schema.Cascade)` | Set foreign key ON DELETE action |
+| `\|> schema.on_update(schema.Restrict)` | Set foreign key ON UPDATE action |
+| `\|> schema.enum_name("custom")` | Override auto-generated enum type name |
+| `\|> schema.rename_from("old_name")` | Track column rename for migrations |
 
 ##### Array Columns
 
-Any column type can be wrapped with the `array()` modifier to create an array column:
+Any column type can be wrapped with the `schema.array()` modifier to create an array column:
 
 | Example | PostgreSQL | SQLite | Gleam Type |
 |---------|------------|--------|------------|
-| `string("tags") \|> array()` | `VARCHAR(255)[]` | `TEXT` (JSON) | `List(String)` |
-| `int("scores") \|> array()` | `INTEGER[]` | `TEXT` (JSON) | `List(Int)` |
-| `int("matrix") \|> array() \|> array()` | `INTEGER[][]` | `TEXT` (JSON) | `List(List(Int))` |
-| `float("coords") \|> array() \|> nullable()` | `DOUBLE PRECISION[]` | `TEXT` (JSON) | `Option(List(Float))` |
+| `schema.string("tags") \|> schema.array()` | `VARCHAR(255)[]` | `TEXT` (JSON) | `List(String)` |
+| `schema.int("scores") \|> schema.array()` | `INTEGER[]` | `TEXT` (JSON) | `List(Int)` |
+| `schema.int("matrix") \|> schema.array() \|> schema.array()` | `INTEGER[][]` | `TEXT` (JSON) | `List(List(Int))` |
+| `schema.float("coords") \|> schema.array() \|> schema.nullable()` | `DOUBLE PRECISION[]` | `TEXT` (JSON) | `Option(List(Float))` |
 
 Array columns use native PostgreSQL arrays and are transparently stored as JSON in SQLite. The generated decoders handle both formats automatically.
+
+##### Enum Columns
+
+Enum columns generate a Gleam custom type with compile-time safety instead of raw strings:
+
+```gleam
+schema.enum("status", ["active", "inactive", "banned"])
+```
+
+This generates:
+
+```gleam
+pub type Status {
+  Active
+  Inactive
+  Banned
+}
+
+pub fn status_to_string(value: Status) -> String {
+  case value {
+    Active -> "active"
+    Inactive -> "inactive"
+    Banned -> "banned"
+  }
+}
+
+pub fn status_from_string(value: String) -> Result(Status, Nil) {
+  case value {
+    "active" -> Ok(Active)
+    "inactive" -> Ok(Inactive)
+    "banned" -> Ok(Banned)
+    _ -> Error(Nil)
+  }
+}
+```
+
+The model type uses the generated custom type (`status: Status`) instead of `String`. The type name is derived from the column name in PascalCase. Use `|> schema.enum_name("custom_name")` to override it.
+
+On PostgreSQL, enums use `CREATE TYPE ... AS ENUM (...)`. On SQLite, they use `TEXT` with a `CHECK` constraint.
+
+##### Foreign Key Actions
+
+Foreign key columns support `ON DELETE` and `ON UPDATE` actions:
+
+```gleam
+import glimr/db/schema
+
+schema.foreign("user_id", "users")
+  |> schema.on_delete(schema.Cascade)
+  |> schema.on_update(schema.Restrict)
+```
+
+| Action | SQL |
+|--------|-----|
+| `schema.Cascade` | `CASCADE` |
+| `schema.Restrict` | `RESTRICT` |
+| `schema.SetNull` | `SET NULL` |
+| `schema.SetDefault` | `SET DEFAULT` |
+| `schema.NoAction` | `NO ACTION` |
 
 #### Indexes
 
 Define indexes by piping `indexes()` onto your table definition:
 
 ```gleam
-import glimr/db/schema.{table, id, string, index, indexes, unique, named}
+import glimr/db/schema
 
-table(name, [
-  id(),
-  string("email"),
-  string("first_name"),
-  string("last_name"),
+schema.table(table_name, [
+  schema.id(),
+  schema.string("email"),
+  schema.string("first_name"),
+  schema.string("last_name"),
 ])
-|> indexes([
-  unique(["email"]),
-  index(["first_name", "last_name"]),
-  index(["email"]) |> named("idx_users_email_lookup"),
+|> schema.indexes([
+  schema.unique(["email"]),
+  schema.index(["first_name", "last_name"]),
+  schema.index(["email"]) |> schema.named("idx_users_email_lookup"),
 ])
 ```
 
 | Function | Description |
 |----------|-------------|
-| `index(["col"])` | Regular index on a single column |
-| `index(["col1", "col2"])` | Composite index on multiple columns |
-| `unique(["col"])` | Unique index on a single column |
-| `unique(["col1", "col2"])` | Composite unique index |
+| `schema.index(["col"])` | Regular index on a single column |
+| `schema.index(["col1", "col2"])` | Composite index on multiple columns |
+| `schema.unique(["col"])` | Unique index on a single column |
+| `schema.unique(["col1", "col2"])` | Composite unique index |
 
 #### Index Modifiers
 
 | Modifier | Description |
 |----------|-------------|
-| `\|> named("name")` | Custom index name (default: `idx_{table}_{col1}_{col2}`) |
+| `\|> schema.named("name")` | Custom index name (default: `idx_{table}_{col1}_{col2}`) |
 
 #### Generating Migrations
 
@@ -3176,7 +3254,7 @@ Additionally, you can generate migrations/queries for a specific model or multip
 To rename a column without losing data, use the `schema.rename_from` modifier:
 
 ```gleam
-string("email_address") |> schema.rename_from("email")
+schema.string("email_address") |> schema.rename_from("email")
 ```
 
 This generates `ALTER TABLE ... RENAME COLUMN` instead of drop/add. The `schema.rename_from` modifier is automatically removed from your schema file after the migration is generated.
@@ -3326,10 +3404,7 @@ pub fn show(id: String, req: Request, ctx: Context) -> Response {
   let assert Ok(user_id) = int.parse(id)
   let user = user.find_or_fail(ctx.db, user_id)
 
-  view.build()
-  |> view.html("users/show.html")
-  |> view.data([#("user", user.name)])
-  |> view.render()
+  response.html(user_show.render(user: user), 200)
 }
 ```
 
@@ -3340,11 +3415,9 @@ import data/models/user/gen/user
 
 pub fn index(req: Request, ctx: Context) -> Response {
   let users = user.list_or_fail(ctx.db)
+  let count = int.to_string(list.length(users))
 
-  view.build()
-  |> view.html("users/index.html")
-  |> view.data([#("count", int.to_string(list.length(users)))])
-  |> view.render()
+  response.html(user_index.render(count: count), 200)
 }
 ```
 
@@ -3359,10 +3432,7 @@ pub fn show(id: String, req: Request, ctx: Context) -> Response {
 
   case user.find(ctx.db, user_id) {
     Ok(user) -> {
-      view.build()
-      |> view.html("users/show.html")
-      |> view.data([#("user", user.name)])
-      |> view.render()
+      response.html(user_show.render(user: user), 200)
     }
     Error(NotFound) -> wisp.not_found()
     Error(_) -> wisp.internal_server_error()
