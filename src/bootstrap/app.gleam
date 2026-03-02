@@ -9,7 +9,7 @@
 import app/http/kernel
 import app/providers/ctx_provider
 import app/providers/route_provider
-import glimr/config
+import glimr/config/config
 import glimr/routing/router
 import wisp.{type Request, type Response}
 

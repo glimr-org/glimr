@@ -16,7 +16,7 @@
 import bootstrap/app
 import dot_env/env
 import gleam/erlang/process
-import glimr/config
+import glimr/config/config
 import glimr/http/glimr_mist
 import mist
 

@@ -4202,7 +4202,7 @@ This allows third party packages to provide commands for your app in the same wa
 All configuration lives in TOML files under `config/`. At boot, `config.load()` reads every `*.toml` file in that directory and caches the merged result. You then access values anywhere via dot-separated paths where the first segment is the filename:
 
 ```gleam
-import glimr/config
+import glimr/config/config
 
 pub fn show(req: Request, ctx: Context) -> Response {
   let app_name = config.get_string("app.name")
