@@ -311,7 +311,7 @@ This compiles to a pattern matched router in `src/compiled/routes/web.gleam`:
 ```gleam
 import app/http/controllers/user_controller
 import gleam/http.{Delete, Get, Post, Put}
-import wisp
+import glimr/response/response
 
 pub fn routes(path, method, req, ctx) {
   case path {
@@ -319,7 +319,7 @@ pub fn routes(path, method, req, ctx) {
       case method {
         Get -> user_controller.index(req, ctx)
         Post -> user_controller.store(req, ctx)
-        _ -> wisp.method_not_allowed([Get, Post])
+        _ -> response.method_not_allowed([Get, Post])
       }
 
     ["users", id] ->
@@ -327,10 +327,10 @@ pub fn routes(path, method, req, ctx) {
         Get -> user_controller.show(req, ctx, id)
         Put -> user_controller.update(req, ctx, id)
         Delete -> user_controller.destroy(req, ctx, id)
-        _ -> wisp.method_not_allowed([Get, Put, Delete])
+        _ -> response.method_not_allowed([Get, Put, Delete])
       }
 
-    _ -> wisp.not_found()
+    _ -> response.not_found()
   }
 }
 ```
@@ -575,30 +575,30 @@ If you prefer to write routes manually without annotations, you can bypass the c
 import gleam/http.{Get, Post}
 import app/http/controllers/home_controller
 import app/http/controllers/user_controller
-import wisp
+import glimr/response/response
 
 pub fn routes(path, method, req, ctx) {
   case path {
     [] ->
       case method {
         Get -> home_controller.show(req, ctx)
-        _ -> wisp.method_not_allowed([Get])
+        _ -> response.method_not_allowed([Get])
       }
 
     ["users"] ->
       case method {
         Get -> user_controller.index(req, ctx)
         Post -> user_controller.store(req, ctx)
-        _ -> wisp.method_not_allowed([Get, Post])
+        _ -> response.method_not_allowed([Get, Post])
       }
 
     ["users", id] ->
       case method {
         Get -> user_controller.show(req, ctx, id)
-        _ -> wisp.method_not_allowed([Get])
+        _ -> response.method_not_allowed([Get])
       }
 
-    _ -> wisp.not_found()
+    _ -> response.not_found()
   }
 }
 ```
@@ -701,8 +701,8 @@ pub fn update(req: Request, ctx: Context, submission: String, validated: Data) -
     Ok(submission) -> {
       redirect.to("/contact/updated")
     }
-    Error(NotFound) -> wisp.not_found()
-    Error(_) -> wisp.internal_server_error()
+    Error(NotFound) -> response.not_found()
+    Error(_) -> response.internal_server_error()
   }
 }
 ```
@@ -728,7 +728,7 @@ pub fn store(req: Request, ctx: Context, validated: Data) -> Response {
     Ok(user) -> {
       redirect.to("/users/" <> int.to_string(user.id))
     }
-    Error(_) -> wisp.internal_server_error()
+    Error(_) -> response.internal_server_error()
   }
 }
 ```
@@ -825,7 +825,7 @@ pub fn run(req, ctx, next) {
       let updated_ctx = Context(..ctx, user: Some(user))
       next(req, updated_ctx)
     }
-    Error(_) -> wisp.response(401)
+    Error(_) -> response.empty(401)
   }
 }
 ```
@@ -2793,8 +2793,8 @@ pub fn show(_req: Request, ctx: Context, user_id: String) -> Response {
     Ok(user) -> {
       response.html(user_show.render(user: user), 200)
     }
-    Error(NotFound) -> wisp.not_found()
-    Error(_) -> wisp.internal_server_error()
+    Error(NotFound) -> response.not_found()
+    Error(_) -> response.internal_server_error()
 }
 ```
 
@@ -2906,8 +2906,8 @@ pub fn show(_req: Request, ctx: Context, user_id: String) -> Response {
     Ok(user) -> {
       response.html(user_show.render(user: user), 200)
     }
-    Error(NotFound) -> wisp.not_found()
-    Error(_) -> wisp.internal_server_error()
+    Error(NotFound) -> response.not_found()
+    Error(_) -> response.internal_server_error()
 }
 ```
 
@@ -3435,8 +3435,8 @@ pub fn show(id: String, req: Request, ctx: Context) -> Response {
     Ok(user) -> {
       response.html(user_show.render(user: user), 200)
     }
-    Error(NotFound) -> wisp.not_found()
-    Error(_) -> wisp.internal_server_error()
+    Error(NotFound) -> response.not_found()
+    Error(_) -> response.internal_server_error()
   }
 }
 ```
@@ -3568,7 +3568,7 @@ pub fn show(req: Request, ctx: Context) -> Response {
   case cache.get(ctx.cache, "user:123") {
     Ok(value) -> // use cached value
     Error(cache.NotFound) -> // cache miss, compute value
-    Error(_) -> wisp.internal_server_error()
+    Error(_) -> response.internal_server_error()
   }
 }
 ```
@@ -3623,7 +3623,7 @@ pub fn show(req: Request, ctx: Context) -> Response {
   case cache.get(ctx.cache, "user:123") {
     Ok(value) -> // use cached value
     Error(cache.NotFound) -> // cache miss
-    Error(_) -> wisp.internal_server_error()
+    Error(_) -> response.internal_server_error()
   }
 }
 ```
@@ -3694,7 +3694,7 @@ pub fn show(req: Request, ctx: Context) -> Response {
   case cache.get(ctx.cache, "user:123") {
     Ok(value) -> // use cached value
     Error(cache.NotFound) -> // cache miss
-    Error(_) -> wisp.internal_server_error()
+    Error(_) -> response.internal_server_error()
   }
 }
 ```
@@ -3755,7 +3755,7 @@ pub fn show(req: Request, ctx: Context) -> Response {
   case cache.get(ctx.cache, "user:123") {
     Ok(value) -> // use cached value
     Error(cache.NotFound) -> // cache miss
-    Error(_) -> wisp.internal_server_error()
+    Error(_) -> response.internal_server_error()
   }
 }
 ```
@@ -4301,7 +4301,7 @@ Access context in controllers:
 pub fn show(req: Request, ctx: Context) -> Response {
   case user.find(ctx.db, user_id) {
     Ok(user) -> // ...
-    Error(_) -> wisp.not_found()
+    Error(_) -> response.not_found()
   }
 }
 ```
