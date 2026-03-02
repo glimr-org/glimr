@@ -3,7 +3,6 @@
 
   packages = [
     "glimr",
-    "glimr_postgres",
   ]
 
 [routes]
@@ -12,16 +11,15 @@
 [loom]
   auto_compile = true
 
+[database]
+  auto_gen = true
+
 # Define any shell commands or Glimr commands you want to run
 # when running the `./glimr build` command
 [hooks.build]
 
   # Before `gleam build` logic is ran
-  pre = [
-    "./glimr route_compile",
-    "./glimr loom_compile",
-    "./glimr command_compile",
-  ]
+  pre = []
 
   # After `gleam build` logic is ran
   post = [
@@ -33,11 +31,7 @@
 [hooks.run]
 
   # Before `gleam run` logic is ran
-  pre = [
-    "./glimr route_compile",
-    "./glimr loom_compile",
-    "./glimr command_compile",
-  ]
+  pre = []
 
 # Define any shell commands or Glimr commands you want to run
 # during the `./glimr run` command, when an app reload needs 

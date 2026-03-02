@@ -13,7 +13,6 @@ import app/http/context/ctx.{type Context}
 import app/http/middleware/expects_html
 import app/http/middleware/expects_json
 import app/http/middleware/load_session
-import app/http/middleware/load_user
 import glimr/http/kernel.{type MiddlewareGroup}
 import glimr/http/middleware
 import glimr/http/middleware/handle_head
@@ -38,7 +37,6 @@ pub fn handle(
         rescue_crashes.run,
         handle_head.run,
         load_session.run,
-        load_user.run,
         // ...
       ]
       |> middleware.apply(req, ctx, router)
@@ -56,7 +54,6 @@ pub fn handle(
         rescue_crashes.run,
         handle_head.run,
         load_session.run,
-        load_user.run,
         // ...
       ]
       |> middleware.apply(req, ctx, router)

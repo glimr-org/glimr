@@ -183,7 +183,7 @@ Gleam provides `gleam build` and `gleam run` out of the box, which you can of co
 ./glimr build
 ```
 
-This runs any configured `pre-build` hooks, compiles your Gleam code, then runs `post-build` hooks.
+This automatically compiles routes, Loom templates, console commands, and database models (based on your `glimr.toml` config flags), runs any configured `pre-build` hooks, compiles your Gleam code, then runs `post-build` hooks.
 
 ### Run Command
 
@@ -191,7 +191,7 @@ This runs any configured `pre-build` hooks, compiles your Gleam code, then runs 
 ./glimr run
 ```
 
-This runs `pre-run` hooks, starts your application, and watches for file changes. When `.gleam` files change, it automatically reloads your application.
+This automatically compiles routes, Loom templates, console commands, and database models, then runs `pre-run` hooks, starts your application, and watches for file changes. When `.gleam` files change, it automatically reloads your application.
 
 #### Dev Proxy
 
@@ -216,7 +216,7 @@ In production (when running directly via `gleam run`), there's no proxy—your a
 
 Hooks let you run shell commands or Glimr console commands at specific points during the build/run lifecycle. Configure them in `glimr.toml` at your project root.
 
-Your `glimr.toml` file comes with some preconfigured behavior by default, feel free to extend or remove an pre-existing behavior altogether.
+Route compilation, Loom template compilation, console command compilation, and database model generation all happen automatically based on the `auto_compile` / `auto_gen` flags in `glimr.toml` — no need to add them as hooks. Hooks are for your own custom extensions (e.g. building CSS, running linters).
 
 #### Available Hooks
 
@@ -237,6 +237,9 @@ Hooks that start with `./glimr` run in-process for better performance:
 pre = [
   "./glimr some_command",   # runs in-process (fast)
   "npm run css:build",      # runs as shell command
+]
+post = [
+  "gleam format",           # runs after build completes
 ]
 ```
 
@@ -292,12 +295,8 @@ Available HTTP method annotations:
 Routes are automatically compiled when using:
 
 ```bash
-# Routes compile automatically during build 
-# (configured in glimr.toml)
+# Routes compile automatically during build and run
 ./glimr build
-
-# Routes recompile when controller files change 
-# (configured in glimr.toml)
 ./glimr run
 
 # Manually compile routes
@@ -564,7 +563,7 @@ pub fn handle(req, ctx, middleware_group, router) -> Response {
 
 If you prefer to write routes manually without annotations, you can bypass the compiler entirely:
 
-1. Remove route compilation hooks from `glimr.toml`
+1. Set `auto_compile = false` under `[routes]` in `glimr.toml`
 2. Create your route files directly in `src/routes/` (or any another location)
 3. Write pattern-matching routes:
 
@@ -661,7 +660,7 @@ This creates `update_submission.gleam`. Actions follow a simple pattern - they p
 ```gleam
 // src/app/actions/update_submission.gleam
 import app/http/requests/contact_store_request.{type Data}
-import data/models/submission/gen/submission_repository.{type CreateRow}
+import database/models/submission/gen/submission_repository.{type CreateRow}
 import glimr/db/db.{type DbError}
 import glimr/utils/unix_timestamp
 import glimr/db/pool.{type Pool}
@@ -2666,7 +2665,7 @@ Use `<slot />` to mark where child content will be inserted. You can also use na
 
 #### Compiling Templates
 
-Loom files are compiled automatically when running `./glimr run` whenever they're modified via the `[loom] auto_compile = true` setting in your `glimr.toml`. This runs the `./glimr loom_compile --path=$PATH` command.
+Loom files are compiled automatically when running `./glimr build` or `./glimr run` via the `[loom] auto_compile = true` setting in your `glimr.toml`. During `./glimr run`, modified templates are also recompiled on the fly.
 
 You can manually compile all templates with the CLI:
 
@@ -2742,7 +2741,7 @@ Configure a SQLite connection in `config/database.toml`:
   pool_size = "${DB_POOL_SIZE}"
 ```
 
-Run the following command to create a directory for your new database connection. This will contain all migrations, queries, repositories, for this database. In our previous example we set the name to "main", so the command below would create `src/data/main/`. This also creates a database file in `src/data/main/data.db`.
+Run the following command to create a directory for your new database connection. This will contain all migrations, queries, repositories, for this database. In our previous example we set the name to "main", so the command below would create `src/database/main/`. This also creates a database file in `src/database/main/data.db`.
 
 ```bash
 ./glimr setup_database main --sqlite
@@ -2751,7 +2750,7 @@ Run the following command to create a directory for your new database connection
 Update your .env variables:
 
 ```env
-DB_DATABASE=src/data/main/data.db
+DB_DATABASE=src/database/main/data.db
 DB_POOL_SIZE=15
 ```
 
@@ -2863,7 +2862,7 @@ DB_URL=postgres://user@host:port/db_name
 DB_POOL_SIZE=15
 ```
 
-Run the following command to create a directory for your new database connection. This will contain all migrations, queries, repositories, for this database. In our previous example we set the name to "main", so the command below would create `src/data/main/`.
+Run the following command to create a directory for your new database connection. This will contain all migrations, queries, repositories, for this database. In our previous example we set the name to "main", so the command below would create `src/database/main/`.
 
 ```bash
 ./glimr setup_database main
@@ -2977,7 +2976,7 @@ Start by creating a data model using the following command:
 ./glimr make_model user
 ```
 
-This creates a `user/` folder inside your default database directory `src/data/main/models/`. The folder contains `user_schema.gleam` for defining your table schema, and a `queries/` folder with pre-generated CRUD queries that get compiled into fully typed gleam code. You can add custom queries to this folder as well (see [Queries](#queries) section).
+This creates a `user/` folder inside your default database directory `src/database/main/models/`. The folder contains `user_schema.gleam` for defining your table schema, and a `queries/` folder with pre-generated CRUD queries that get compiled into fully typed gleam code. You can add custom queries to this folder as well (see [Queries](#queries) section).
 
 The `make:model` command defines your default connection as the very first one in your `config/database.toml`. All other commands that accept the `--database` flag define it as the first of its driver type instead.
 
@@ -2987,12 +2986,12 @@ If you need to specify the connection folder you can always pass a `--database` 
 ./glimr make_model user --database=analytics
 ```
 
-This creates a `user/` folder inside `src/data/analytics/models/`.
+This creates a `user/` folder inside `src/database/analytics/models/`.
 
 Define the user schema for your migrations:
 
 ```gleam
-// src/data/models/user/user_schema.gleam
+// src/database/main/models/user/user_schema.gleam
 import glimr/db/schema
 
 pub const table_name = "users"
@@ -3223,10 +3222,10 @@ Run the migration generator:
 ```
 
 This will:
-1. Scan schema files in `src/data/{connection_name}/models/`
+1. Scan schema files in `src/database/{connection_name}/models/`
 2. Compare against the stored snapshot (`._schema_snapshot.json`)
 3. Detect changes (new tables, dropped tables, column changes, index changes)
-4. Generate SQL in `src/data/{connection_name}/_migrations/{timestamp}_migration.sql`
+4. Generate SQL in `src/database/{connection_name}/_migrations/{timestamp}_migration.sql`
 5. Update the snapshot for the next run
 
 You can also run the following command to generate migrations and also run them:
@@ -3277,7 +3276,7 @@ Glimr takes a forward-only approach to migrations. Instead of rollbacks, simply 
 
 #### Dropping Tables
 
-To drop a database table, simply delete the model from the `src/data/{connection}/models/` folder. For example, if your model is called `user` in your main connection, delete the `src/data/main/models/user/` folder. Finally, regenerate migrations and rerun them. This will create a new migration to drop the table.
+To drop a database table, simply delete the model from the `src/database/{connection}/models/` folder. For example, if your model is called `user` in your main connection, delete the `src/database/main/models/user/` folder. Finally, regenerate migrations and rerun them. This will create a new migration to drop the table.
 
 ### Queries
 
@@ -3288,7 +3287,7 @@ Each model includes a `queries/` folder with pre-generated CRUD queries. These a
 When you create a model with the `./glimr make_model` command, the following query files are generated for you:
 
 ```
-src/data/models/user/queries/
+src/database/main/models/user/queries/
 ├── create.sql
 ├── delete.sql
 ├── find.sql
@@ -3303,12 +3302,12 @@ You can modify these queries to fit your needs or delete any you don't need.
 Add new `.sql` files to the `queries/` folder for custom queries:
 
 ```sql
--- src/data/models/user/queries/by_email.sql
+-- src/database/main/models/user/queries/by_email.sql
 SELECT * FROM users WHERE email = $1;
 ```
 
 ```sql
--- src/data/models/user/queries/list_active.sql
+-- src/database/main/models/user/queries/list_active.sql
 SELECT * FROM users WHERE is_active = true ORDER BY created_at DESC;
 ```
 
@@ -3354,7 +3353,7 @@ The `_or_fail` variants unwrap the result automatically. On error, they halt the
 If the request is expecting a json response, it will instead return the appropriate  error message as json.
 
 ```gleam
-// src/data/models/user/gen/user.gleam (auto-generated)
+// src/database/main/models/user/gen/user.gleam (auto-generated)
 
 // Default functions - return Result for explicit error handling
 pub fn find(pool, id) -> Result(User, DbError)
@@ -3398,7 +3397,7 @@ This means each query holds a connection only for the duration of the query itse
 The `_or_fail` variants are the most convenient for HTTP handlers — they return values directly and automatically render the appropriate [error page](#error-pages) on failure:
 
 ```gleam
-import data/models/user/gen/user
+import database/models/user/gen/user
 
 pub fn show(id: String, req: Request, ctx: Context) -> Response {
   let assert Ok(user_id) = int.parse(id)
@@ -3411,7 +3410,7 @@ pub fn show(id: String, req: Request, ctx: Context) -> Response {
 **List queries:**
 
 ```gleam
-import data/models/user/gen/user
+import database/models/user/gen/user
 
 pub fn index(req: Request, ctx: Context) -> Response {
   let users = user.list_or_fail(ctx.db)
@@ -3424,7 +3423,7 @@ pub fn index(req: Request, ctx: Context) -> Response {
 When you need explicit error handling (e.g. showing a custom error page, or in background jobs), use the default variants which return `Result`:
 
 ```gleam
-import data/models/user/gen/user
+import database/models/user/gen/user
 import glimr/db/db.{NotFound}
 
 pub fn show(id: String, req: Request, ctx: Context) -> Response {

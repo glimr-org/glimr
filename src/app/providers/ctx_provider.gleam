@@ -11,9 +11,8 @@ pub fn register() -> Context {
 
   ctx.Context(
     response_format: response.HTML,
-    cache: cache,
     db: db,
+    cache: cache,
     session: session,
-    user: option.None,
   )
 }
