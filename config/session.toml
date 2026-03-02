@@ -5,23 +5,21 @@
 # session.start_cookie(), postgres.start_session(pool), etc.)
 # and these settings apply to whichever driver you use.
 
-[session]
-  # The cookie name used to store the session ID.
-  cookie = "glimr_session"
+# The cookie name used to store the session ID.
+cookie = "glimr_session"
 
-  # Session lifetime in minutes. After this duration of
-  # inactivity, the session will be eligible for garbage
-  # collection (database/file drivers).
-  lifetime = 120
+# Session lifetime in minutes. After this duration of
+# inactivity, the session will be eligible for garbage
+# collection (database/file drivers).
+lifetime = 120
 
-  # If true, the session cookie expires when the browser
-  # closes (no max-age is set). If false, the cookie
-  # persists for the lifetime duration.
-  expire_on_close = false
+# If true, the session cookie expires when the browser
+# closes (no max-age is set). If false, the cookie
+# persists for the lifetime duration.
+expire_on_close = false
 
-  # The database table name used by database drivers
-  # (postgres, sqlite). Ignored by cookie/file/redis drivers.
-  # Run `gleam run -m postgres_session_table` or
-  # `gleam run -m sqlite_session_table` to generate the
-  # migration for this table.
-  table = "sessions"
+# The database table name used by database drivers
+# (postgres, sqlite). Ignored by cookie/file/redis drivers.
+# Run `./glimr make_session_table` to generate the
+# migration for this table.
+table = "sessions"

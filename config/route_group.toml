@@ -1,20 +1,28 @@
-# Route Group Configuration
+# Route Group Config
 #
-# Defines route groups for the application. Each group maps a
-# URL prefix to an output file name and middleware group. 
-# Routes are compiled into separate files based on their 
-# prefix match.
+# Route group configuration for your application. Each group
+# maps a URL prefix to a middleware stack. Routes are compiled
+# into separate files based on their prefix match, so each
+# group gets its own middleware applied at compile time.
 
 [groups.web]
+  # The URL prefix to match for this group. An empty string
+  # matches all routes that don't match a more specific group.
   prefix = ""
+
+  # The middleware stack to apply: "web", "api", or a custom
+  # name matching your own middleware group.
   middleware = "web"
 
 [groups.api]
+  # The URL prefix to match for this group.
   prefix = "/api"
+
+  # The middleware stack to apply.
   middleware = "api"
 
 # Add your own custom route groups below:
-# For example:
+#
 # [groups.admin]
 #   prefix = "/admin"
 #   middleware = "web"

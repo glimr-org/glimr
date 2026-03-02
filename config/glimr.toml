@@ -1,0 +1,64 @@
+# Glimr Config
+#
+# Core configuration for the Glimr CLI. Controls automatic
+# compilation of commands, routes, and templates, as well
+# as build and run lifecycle hooks.
+
+[commands]
+  # Automatically compile commands when building or running
+  # the application with ./glimr run  or ./glimr build.
+  auto_compile = true
+
+  # The packages to scan for CLI commands. Add your own
+  # packages here if they define Glimr commands.
+  packages = [
+    "glimr",
+  ]
+
+[routes]
+  # Automatically compile route files when building or
+  # running the application with ./glimr run or ./glimr build.
+  auto_compile = true
+
+[loom]
+  # Automatically compile Loom templates when building or
+  # running the application with ./glimr run or ./glimr build.
+  auto_compile = true
+
+[database]
+  # Automatically generate database-related code when
+  # building or running the application. with ./glimr run
+  # or ./glimr build
+  auto_gen = true
+
+# Define any shell commands or Glimr commands you want to run
+# when running the `./glimr build` command.
+[hooks.build]
+
+  # Commands to run before `gleam build` logic is ran.
+  pre = []
+
+  # Commands to run after `gleam build` logic is ran.
+  post = [
+    "gleam format",
+  ]
+
+# Define any shell commands or Glimr commands you want to run
+# when running the `./glimr run` command.
+[hooks.run]
+
+  # Commands to run before `gleam run` logic is ran.
+  pre = []
+
+# Define any shell commands or Glimr commands you want to run
+# during the `./glimr run` command, when an app reload needs
+# to occur. (When .gleam or .loom.html files are modified)
+[hooks.run.reload]
+
+  # Commands to run when any .gleam or .loom.html file is
+  # modified, before the app is reloaded.
+  pre = []
+
+  # Commands to run after all other reload hooks, right
+  # before the actual reload occurs.
+  post-modified = []

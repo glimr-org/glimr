@@ -4,8 +4,7 @@
 # middleware uses these values to manage session-based
 # authentication and redirect unauthenticated users.
 
-[auth]
-  # The session key used to store the authenticated user's
-  # ID. Prefixed with underscore to avoid collisions with
-  # application session data.
-  session_key = "_auth_user_id"
+# The session key used to store the authenticated user's
+# ID. Prefixed with underscore to avoid collisions with
+# application session data.
+session_key = "_auth_user_id"

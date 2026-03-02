@@ -145,12 +145,12 @@ Visit `http://localhost:8000` in your browser.
 ## Project Structure
 
 ```
+├── config/                             # Configuration TOML files
 ├── src/
 │   ├── glimr_app.gleam                 # Application entry point
 │   ├── app/
-│   │   ├── actions/                    # Modules for reusable business logic
 │   │   ├── console/                    # Custom console commands ran with `./glimr`
-│   │   │   ├── kernel.gleam            # Console command configuration
+│   │   │   ├── commands/               # Where your custom console commands live
 │   │   ├── http/
 │   │   │   ├── controllers/            # Request handlers (routes defined here)
 │   │   │   ├── middleware/             # Custom middleware
@@ -158,19 +158,22 @@ Visit `http://localhost:8000` in your browser.
 │   │   │   ├── rules/                  # Custom validation rules
 │   │   │   ├── context/                # Application context
 │   │   │   └── kernel.gleam            # HTTP middleware configuration
-│   │   ├── loom/                       # Variable data for your Loom templates
 │   │   └── providers/                  # Service providers
 │   │       ├── ctx_provider.gleam      # Context registration
 │   │       ├── route_provider.gleam    # Route group registration
-│   │       └── command_provider.gleam  # Command registration
 │   ├── bootstrap/
 │   │   ├── app.gleam                   # Application bootstrapping
 │   ├── compiled/                       # Generated gleam files (loom, routes)
-│   ├── config/                         # Configuration files
+│   ├── database/                       # Database schemas, models, and migrations
+│   │   └── main/                       # Connection name (one directory per connection)
+│   │       ├── models/                 # Schema definitions and generated models
+│   │       └── _migrations/            # Database migrations for connection
+│   ├── resources/
+│   │   └── views/                      # Loom templates (.loom.html files)
+│   │       └── components/             # Reusable Loom components
 ├── test/                               # Test files
 ├── .env                                # Environment variables
 └── gleam.toml                          # Project configuration
-└── glimr.toml                          # Glimr configuration
 ```
 
 ## Build Tools
@@ -480,7 +483,7 @@ Routes are matched to groups by their URL prefix:
 By default, routes with the `/api` prefix:
 - Compile to `src/compiled/routes/api.gleam`
 - Use the `Api` middleware group (JSON error responses)
-- The prefix is configured in `src/config/config_api.gleam`
+- The prefix is configured in `config/route_group.toml`
 
 ```gleam
 // src/app/http/controllers/api/user_controller.gleam
@@ -984,11 +987,10 @@ Session settings live in `config/session.toml`:
 ```toml
 # config/session.toml
 
-[session]
-  table = "sessions"
-  cookie = "glimr_session"
-  lifetime = 120
-  expire_on_close = false
+table = "sessions"
+cookie = "glimr_session"
+lifetime = 120
+expire_on_close = false
 ```
 
 | Setting | Description |
@@ -1180,7 +1182,7 @@ fn web_middleware(
   ctx: Context,
   router: fn(Request, Context) -> Response,
 ) -> Response {
-  use <- wisp.serve_static(req, under: "/static", from: config_app.static_directory())
+  use <- wisp.serve_static(req, under: "/static", from: "priv/static")
   use <- wisp.log_request(req)
   use <- error_handler.default_html_responses()
   use <- wisp.rescue_crashes
@@ -4197,21 +4199,64 @@ This allows third party packages to provide commands for your app in the same wa
 
 ## Configuration
 
-Access configuration values anywhere in your application:
+All configuration lives in TOML files under `config/`. At boot, `config.load()` reads every `*.toml` file in that directory and caches the merged result. You then access values anywhere via dot-separated paths where the first segment is the filename:
 
 ```gleam
-import config/config_app
+import glimr/config
 
 pub fn show(req: Request, ctx: Context) -> Response {
-  let app_name = config_app.name()
-  let app_url = config_app.url()
-  let debug_mode = config_app.debug()
+  let app_name = config.get_string("app.name")
+  let app_url = config.get_string("app.url")
+  let session_lifetime = config.get_int("session.lifetime")
+  let debug_mode = config.get_bool("app.debug")
 
   // Use configuration...
 }
 ```
 
-Add your own configuration files in `src/config/`.
+### Getter Variants
+
+Each getter has two variants:
+
+| Function | Behavior |
+|----------|----------|
+| `config.get_string(path)` | Returns the value or **panics** if missing |
+| `config.get_string_or(path)` | Returns `Result(String, Nil)` |
+| `config.get_int(path)` | Returns the value or **panics** if missing |
+| `config.get_int_or(path)` | Returns `Result(Int, Nil)` |
+| `config.get_bool(path)` | Returns the value or **panics** if missing |
+| `config.get_bool_or(path)` | Returns `Result(Bool, Nil)` |
+
+Use the panicking variants when you know the key exists (defined in your TOML files). Use the `_or` variants when you want to handle missing keys gracefully.
+
+### Environment Variable Interpolation
+
+TOML values support `${VAR}` and `${VAR:-fallback}` syntax:
+
+```toml
+# config/app.toml
+
+name = "${APP_NAME:-Glimr}"
+port = "${APP_PORT:-8000}"
+key = "${APP_KEY}"
+```
+
+- `${APP_NAME:-Glimr}` — reads `APP_NAME` from the environment, falls back to `"Glimr"`
+- `${APP_KEY}` — reads `APP_KEY` from the environment, panics if unset (when using `get_string`)
+
+### Adding Configuration
+
+Drop any `.toml` file in `config/` and access it immediately. For example, creating `config/mail.toml`:
+
+```toml
+# config/mail.toml
+
+driver = "smtp"
+host = "${MAIL_HOST:-localhost}"
+port = "${MAIL_PORT:-587}"
+```
+
+Access it with `config.get_string("mail.driver")`, `config.get_int("mail.port")`, etc.
 
 ## Context System
 

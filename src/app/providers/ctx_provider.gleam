@@ -1,5 +1,4 @@
 import app/http/context/ctx.{type Context}
-import gleam/option
 import glimr/cache/file_cache
 import glimr/response/response
 import glimr_postgres/postgres

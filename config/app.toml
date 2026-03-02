@@ -2,7 +2,29 @@
 #
 # General application settings for your Glimr project.
 # These values are used by the framework to configure
-# core behaviour like static file serving.
+# core behaviour like static file serving, server port,
+# and application metadata.
+#
+# Use ${VAR:-fallback} syntax to read from environment
+# variables with a default value.
+
+# The application name, used in responses and error pages.
+name = "${APP_NAME:-Glimr}"
+
+# The network port the web server listens on.
+port = "${APP_PORT:-8000}"
+
+# The secret key for encrypting sessions and signing tokens.
+# This MUST be set in your .env file — the app will crash
+# without it.
+key = "${APP_KEY}"
+
+# Controls whether detailed error messages and stack traces
+# are shown. Never enable in production.
+debug = "${APP_DEBUG:-false}"
+
+# The base URL used for generating links and redirects.
+url = "${APP_URL}"
 
 [static]
   # The directory from which static assets (CSS, JS,

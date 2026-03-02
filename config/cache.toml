@@ -1,12 +1,35 @@
 # Cache Config
 #
-# Cache configuration module for defining your cache stores. 
-# Add your cache stores here and they will be available 
-# throughout your application via the context system.
+# Cache configuration for your application. Define one or
+# more named stores using different backends (file, redis,
+# database). Stores are available throughout your application
+# via the context system.
 
 [stores.main]
+  # The cache driver to use: "file", "redis", or "database".
   driver = "file"
+
+  # The directory where cached data is stored on disk.
+  # Only used by the file driver.
   path = "priv/storage/framework/cache/data"
+
+  # The URL for connecting to Redis. Uses ${VAR} syntax
+  # to read from environment variables. Only used by the 
+  # redis driver.
+  # url = "${REDIS_URL}"
+
+  # The number of connections to maintain in the Redis
+  # connection pool. Only used by the redis driver.
+  # pool_size = "${REDIS_POOL_SIZE}"
+
+  # The database connection name to use for storing cache
+  # entries. Must match a connection defined in database.toml.
+  # Only used by the database driver.
+  # database = "main"
+
+  # The database table name used to store cache entries.
+  # Only used by the database driver.
+  # table = "cache"
 
 # Add as many cache stores as you need. Below are some examples 
 # setting up an redis, or a database store. Uncomment and 
@@ -19,5 +42,3 @@
 
 # [stores.database_example]
 #   driver = "database"
-#   database = "main"
-#   table = "cache"
