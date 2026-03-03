@@ -12,8 +12,8 @@
 ////
 
 import gleam/json
+import glimr/http/kernel.{type Response}
 import glimr/response/response
-import wisp.{type Response}
 
 /// Welcome to Glimr ✨
 /// Build something beautiful...

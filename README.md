@@ -272,7 +272,7 @@ You can access the `Request` and shared `Context` by just accepting them as para
 ```gleam
 // src/app/http/controllers/user_controller.gleam
 import app/http/context/ctx.{type Context}
-import wisp.{type Request, type Response}
+import glimr/http/kernel.{type Request, type Response}
 import compiled/loom/welcome
 
 /// @get "/welcome"
@@ -398,7 +398,7 @@ Apply middleware to all routes in a controller using `// @group_middleware` at t
 ```gleam
 // src/app/http/controllers/admin_controller.gleam
 import app/http/context/ctx.{type Context}
-import wisp.{type Request, type Response}
+import glimr/http/kernel.{type Request, type Response}
 
 // @group_middleware "auth"
 // @group_middleware "admin"
@@ -553,9 +553,38 @@ pub fn register() -> List(RouteGroup(Context)) {
 ```gleam
 pub fn handle(req, ctx, middleware_group, router) -> Response {
   case middleware_group {
-    kernel.Api -> api_middleware(req, ctx, router)
-    kernel.Custom("admin") -> admin_middleware(req, ctx, router) // Handle "admin" group
-    _ -> web_middleware(req, ctx, router)
+    kernel.Api -> {
+      [
+        expects_json.run,
+        method_override.run,
+        log_request.run,
+        rescue_crashes.run,
+        handle_head.run,
+      ]
+      |> middleware.apply(req, ctx, router)
+    }
+    kernel.Custom("admin") -> { // <-- Add your middleware group before the web group
+      [
+        expects_html.run,
+        method_override.run,
+        log_request.run,
+        rescue_crashes.run,
+        handle_head.run,
+        admin_auth.run,
+      ]
+      |> middleware.apply(req, ctx, router)
+    }
+    kernel.Web | _ -> {
+      [
+        expects_html.run,
+        serve_static.run,
+        method_override.run,
+        log_request.run,
+        rescue_crashes.run,
+        handle_head.run,
+      ]
+      |> middleware.apply(req, ctx, router)
+    }
   }
 }
 ```
@@ -749,8 +778,7 @@ This creates `logger.gleam`. In it you can add your custom logic.
 
 ```gleam
 // app/http/middleware/logger.gleam
-import wisp
-import glimr/http/kernel.{type Next}
+import glimr/http/kernel.{type Next, type Request, type Response}
 
 pub fn run(req: Request, ctx: Context, next: Next(Context)) -> Response {
   io.println("Request received")
@@ -850,14 +878,16 @@ Middleware can also modify responses on the way back up the chain:
 
 ```gleam
 // middleware/cors.gleam
+import glimr/response/response
+
 pub fn run(req, ctx, next) {
   // Call the next middleware/handler first
-  let response = next(req, ctx)
+  let resp = next(req, ctx)
 
   // Modify the response on the way back
-  response
-  |> wisp.set_header("Access-Control-Allow-Origin", "*")
-  |> wisp.set_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE")
+  resp
+  |> response.header("Access-Control-Allow-Origin", "*")
+  |> response.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE")
 }
 ```
 
@@ -876,43 +906,49 @@ Middleware groups let you define different middleware stacks for different types
 Groups are defined in `src/app/http/kernel.gleam`:
 
 ```gleam
-import glimr/http/kernel.{type MiddlewareGroup}
+import app/http/middleware/expects_html
+import app/http/middleware/expects_json
+import glimr/http/kernel.{type MiddlewareGroup, type Request, type Response}
+import glimr/http/middleware
+import glimr/http/middleware/handle_head
+import glimr/http/middleware/log_request
+import glimr/http/middleware/method_override
+import glimr/http/middleware/rescue_crashes
+import glimr/http/middleware/serve_static
 
 pub fn handle(
   req: Request,
   ctx: Context,
   middleware_group: MiddlewareGroup,
-  router: fn(Request) -> Response,
+  router: fn(Request, Context) -> Response,
 ) -> Response {
-  let req = wisp.method_override(req)
-
   case middleware_group {
-    kernel.Api -> api_middleware(req, ctx, router)
-    _ -> web_middleware(req, ctx, router)
+    kernel.Api -> {
+      [
+        expects_json.run,
+        method_override.run,
+        log_request.run,
+        rescue_crashes.run,
+        handle_head.run,
+      ]
+      |> middleware.apply(req, ctx, router)
+    }
+    kernel.Web | _ -> {
+      [
+        expects_html.run,
+        serve_static.run,
+        method_override.run,
+        log_request.run,
+        rescue_crashes.run,
+        handle_head.run,
+      ]
+      |> middleware.apply(req, ctx, router)
+    }
   }
-}
-
-fn web_middleware(req, _ctx, router) -> Response {
-  use <- wisp.serve_static(req, under: "/static", from: static_dir)
-  use <- wisp.log_request(req)
-  use <- error_handler.default_html_responses()  // HTML error pages
-  use <- wisp.rescue_crashes
-  use req <- wisp.handle_head(req)
-
-  router(req)
-}
-
-fn api_middleware(req, _ctx, router) -> Response {
-  use <- wisp.log_request(req)
-  use <- error_handler.default_json_responses()  // JSON error responses
-  use <- wisp.rescue_crashes
-  use req <- wisp.handle_head(req)
-
-  router(req)
 }
 ```
 
-The key difference: `Web` serves static files and returns HTML error pages, while `Api` returns JSON error responses.
+The `expects_html` and `expects_json` middleware set the response format for each group. This controls how error responses are rendered — `expects_html` returns styled HTML error pages (using custom templates from `views/errors/` if available), while `expects_json` returns structured `{"error": "..."}` responses. They should be the first middleware in each group so all downstream middleware and controllers produce errors in the correct format.
 
 #### Assigning Groups to Routes
 
@@ -953,24 +989,40 @@ Then handle it in `src/app/http/kernel.gleam`:
 
 ```gleam
 pub fn handle(req, ctx, middleware_group, router) -> Response {
-  let req = wisp.method_override(req)
-
   case middleware_group {
-    kernel.Api -> api_middleware(req, ctx, router)
-    kernel.Custom("admin") -> admin_middleware(req, ctx, router)
-    _ -> web_middleware(req, ctx, router)
+    kernel.Api -> {
+      [
+        expects_json.run,
+        method_override.run,
+        log_request.run,
+        rescue_crashes.run,
+        handle_head.run,
+      ]
+      |> middleware.apply(req, ctx, router)
+    }
+    kernel.Custom("admin") -> {
+      [
+        expects_html.run,
+        method_override.run,
+        log_request.run,
+        rescue_crashes.run,
+        handle_head.run,
+        admin_auth.run,
+      ]
+      |> middleware.apply(req, ctx, router)
+    }
+    kernel.Web | _ -> {
+      [
+        expects_html.run,
+        serve_static.run,
+        method_override.run,
+        log_request.run,
+        rescue_crashes.run,
+        handle_head.run,
+      ]
+      |> middleware.apply(req, ctx, router)
+    }
   }
-}
-
-fn admin_middleware(req, ctx, router) -> Response {
-  use <- wisp.log_request(req)
-  use <- error_handler.default_html_responses()
-  use <- wisp.rescue_crashes
-  use req <- wisp.handle_head(req)
-  // Add admin-specific middleware here, like auth checks
-  use req, ctx <- admin_auth.require(req, ctx)
-
-  router(req)
 }
 ```
 
@@ -1173,26 +1225,32 @@ pub type Context {
 The session middleware runs in your kernel and enriches the Context with a live session for each request. Add it to your middleware groups in `src/app/http/kernel.gleam`:
 
 ```gleam
-import app/http/context/ctx.{type Context, Context}
-import glimr/session/session
-import wisp.{type Request, type Response}
-
-fn web_middleware(
-  req: Request,
-  ctx: Context,
-  router: fn(Request, Context) -> Response,
-) -> Response {
-  use <- wisp.serve_static(req, under: "/static", from: "priv/static")
-  use <- wisp.log_request(req)
-  use <- error_handler.default_html_responses()
-  use <- wisp.rescue_crashes
-  use req <- wisp.handle_head(req)
-  use req, session <- session.load(req)
-
-  // Enrich context with the live session
-  let ctx = Context(..ctx, session: session)
-
-  router(req, ctx)
+pub fn handle(req, ctx, middleware_group, router) -> Response {
+  case middleware_group {
+    kernel.Api -> {
+      [
+        expects_json.run,
+        method_override.run,
+        log_request.run,
+        rescue_crashes.run,
+        handle_head.run,
+        load_session.run,
+      ]
+      |> middleware.apply(req, ctx, router)
+    }
+    kernel.Web | _ -> {
+      [
+        expects_html.run,
+        serve_static.run,
+        method_override.run,
+        log_request.run,
+        rescue_crashes.run,
+        handle_head.run,
+        load_session.run,
+      ]
+      |> middleware.apply(req, ctx, router)
+    }
+  }
 }
 ```
 
@@ -1316,8 +1374,9 @@ This creates `user_store.gleam`. In it you can add your custom logic.
 ```gleam
 // src/app/http/validators/user_store.gleam
 import app/http/context/ctx.{type Context}
+import glimr/forms/form.{type UploadedFile}
 import glimr/forms/validator.{type FormData, type Rule}
-import wisp.{type Request, type Response, type UploadedFile}
+import glimr/http/kernel.{type Request, type Response}
 
 /// Define the shape of the data returned after validation
 ///
@@ -1427,8 +1486,8 @@ Use the `@validator` annotation to automatically validate form data before it re
 import app/http/context/ctx.{type Context}
 import app/http/validators/user_store.{type Data}
 import app/repositories/user_repository
+import glimr/http/kernel.{type Request, type Response}
 import glimr/response/redirect
-import wisp.{type Request, type Response}
 
 /// @post "/users"
 /// @validator "user_store"
@@ -1614,8 +1673,8 @@ Add your rule's validation logic:
 ```gleam
 // app/http/rules/image_dimensions.gleam
 import app/http/context/ctx.{type Context}
+import glimr/forms/form.{type UploadedFile}
 import glimr/forms/validator.{type FormData}
-import wisp.{type UploadedFile}
 
 pub fn run(field: String, file: UploadedFile, _data: FormData, _ctx: Context) -> Result(Nil, String) {
   case get_image_dimensions(file.path) {
@@ -1631,8 +1690,8 @@ Like string custom rules, file custom rules also receive the full form data for 
 ```gleam
 // app/http/rules/image_dimensions.gleam
 import app/http/context/ctx.{type Context}
+import glimr/forms/form.{type UploadedFile}
 import glimr/forms/validator.{type FormData}
-import wisp.{type UploadedFile}
 
 pub fn run(field: String, file: UploadedFile, data: FormData, _ctx: Context) -> Result(Nil, String) {
   // Use form data to conditionally validate
@@ -2690,7 +2749,7 @@ Glimr's redirect builder provides a clean API for redirecting users with flash m
 ```gleam
 import glimr/response/redirect
 
-pub fn store(req: Request, ctx: Context) -> wisp.Response {
+pub fn store(req: Request, ctx: Context) -> Response {
   // Process form...
 
   redirect.to("/contact/success")

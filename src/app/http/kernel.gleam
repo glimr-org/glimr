@@ -13,14 +13,13 @@ import app/http/context/ctx.{type Context}
 import app/http/middleware/expects_html
 import app/http/middleware/expects_json
 import app/http/middleware/load_session
-import glimr/http/kernel.{type MiddlewareGroup}
+import glimr/http/kernel.{type MiddlewareGroup, type Request, type Response}
 import glimr/http/middleware
 import glimr/http/middleware/handle_head
 import glimr/http/middleware/log_request
 import glimr/http/middleware/method_override
 import glimr/http/middleware/rescue_crashes
 import glimr/http/middleware/serve_static
-import wisp.{type Request, type Response}
 
 pub fn handle(
   req: Request,

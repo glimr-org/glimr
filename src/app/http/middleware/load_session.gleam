@@ -1,7 +1,6 @@
 import app/http/context/ctx.{type Context}
-import glimr/http/kernel.{type Next}
+import glimr/http/kernel.{type Next, type Request, type Response}
 import glimr/session/session
-import wisp.{type Request, type Response}
 
 pub fn run(req: Request, ctx: Context, next: Next(Context)) -> Response {
   use req, session <- session.load(req)
