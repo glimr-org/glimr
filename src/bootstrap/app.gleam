@@ -24,14 +24,14 @@ pub fn init() -> fn(Request) -> Response {
   glimr_kernel.configure_logger()
   config.load()
 
-  // Run register for all providers
+  // Register all providers
   let app = app_provider.register()
   let route_groups = route_provider.register()
 
-  // Run boot for providers that need it
+  // Boot providers that need it
   app_provider.boot(app)
 
-  // Create context and handle routes
+  // Create context and handle routing
   fn(req) {
     let ctx = context.new(req, app)
     router.handle(ctx, route_groups, kernel.handle)

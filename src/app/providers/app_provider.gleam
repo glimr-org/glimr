@@ -12,6 +12,4 @@ pub fn register() -> app.App {
 
 pub fn boot(app: App) -> Nil {
   postgres.start_session(app.db)
-
-  Nil
 }

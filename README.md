@@ -65,6 +65,9 @@ If you'd like to stay updated on Glimr's development, Follow [@migueljarias](htt
   - [Third-Party Commands](#third-party-commands)
 - [Configuration](#configuration)
 - [Context System](#context-system)
+- [Service Providers](#service-providers)
+  - [Register & Boot](#register--boot)
+  - [App Provider](#app-provider)
 - [Development](#development)
 - [Learn More](#learn-more)
 - [Contributing](#contributing)
@@ -149,6 +152,7 @@ Visit `http://localhost:8000` in your browser.
 ├── src/
 │   ├── glimr_app.gleam                 # Application entry point
 │   ├── app/
+│   │   ├── app.gleam                   # Application type definition
 │   │   ├── console/                    # Custom console commands ran with `./glimr`
 │   │   │   ├── commands/               # Where your custom console commands live
 │   │   ├── http/
@@ -157,7 +161,6 @@ Visit `http://localhost:8000` in your browser.
 │   │   │   ├── validators/             # Request body validation
 │   │   │   ├── rules/                  # Custom validation rules
 │   │   │   └── kernel.gleam            # HTTP middleware configuration
-│   │   ├── app.gleam                   # Application type definition
 │   │   └── providers/                  # Service providers
 │   │       ├── app_provider.gleam      # App state registration
 │   │       ├── route_provider.gleam    # Route group registration
@@ -1093,11 +1096,14 @@ import glimr_redis/redis
 import glimr_postgres/postgres
 
 pub fn register() -> app.App {
-  let db = postgres.start("main")
-  let cache = redis.start("main")
-  let _ = postgres.start_session(db)
+  app.App(
+    db: postgres.start("main"),
+    cache: redis.start("main"),
+  )
+}
 
-  app.App(db: db, cache: cache)
+pub fn boot(app: app.App) -> Nil {
+  postgres.start_session(app.db)
 }
 ```
 
@@ -1126,11 +1132,14 @@ import glimr_redis/redis
 import glimr_sqlite/sqlite
 
 pub fn register() -> app.App {
-  let db = sqlite.start("main")
-  let cache = redis.start("main")
-  let _ = sqlite.start_session(db)
+  app.App(
+    db: sqlite.start("main"),
+    cache: redis.start("main"),
+  )
+}
 
-  app.App(db: db, cache: cache)
+pub fn boot(app: app.App) -> Nil {
+  sqlite.start_session(app.db)
 }
 ```
 
@@ -1150,11 +1159,14 @@ import glimr_redis/redis
 import glimr_postgres/postgres
 
 pub fn register() -> app.App {
-  let db = postgres.start("main")
-  let cache = redis.start("main")
-  let _ = redis.start_session(cache)
+  app.App(
+    db: postgres.start("main"),
+    cache: redis.start("main"),
+  )
+}
 
-  app.App(db: db, cache: cache)
+pub fn boot(app: app.App) -> Nil {
+  redis.start_session(app.cache)
 }
 ```
 
@@ -1170,11 +1182,14 @@ import glimr/cache/file_cache
 import glimr_postgres/postgres
 
 pub fn register() -> app.App {
-  let db = postgres.start("main")
-  let cache = file_cache.start("main")
-  let _ = file_cache.start_session(cache)
+  app.App(
+    db: postgres.start("main"),
+    cache: file_cache.start("main"),
+  )
+}
 
-  app.App(db: db, cache: cache)
+pub fn boot(app: app.App) -> Nil {
+  file_cache.start_session(app.cache)
 }
 ```
 
@@ -1191,12 +1206,14 @@ import glimr_redis/redis
 import glimr_postgres/postgres
 
 pub fn register() -> app.App {
-  let _ = session.start_cookie()
-
   app.App(
     db: postgres.start("main"),
     cache: redis.start("main"),
   )
+}
+
+pub fn boot(_app: app.App) -> Nil {
+  session.start_cookie()
 }
 ```
 
@@ -4320,24 +4337,6 @@ pub type App {
 }
 ```
 
-Initialize your app state in the provider (`src/app/providers/app_provider.gleam`):
-
-```gleam
-import app/app
-import glimr/cache/file_cache
-import glimr_postgres/postgres
-
-pub fn register() -> app.App {
-  let db = postgres.start("main")
-  let _ = postgres.start_session(db)
-
-  app.App(
-    db: db,
-    cache: file_cache.start("main"),
-  )
-}
-```
-
 Access everything through the unified context in controllers:
 
 ```gleam
@@ -4350,6 +4349,62 @@ pub fn show(ctx: Context(App)) -> Response {
   }
 }
 ```
+
+## Service Providers
+
+Service providers handle application bootstrapping. They live in `src/app/providers/` and follow a two-phase lifecycle: **register** and **boot**.
+
+### Register & Boot
+
+Providers have two methods that run in a specific order during startup:
+
+- **`register()`** — Creates and returns resources (database pools, cache pools, app state). This is where you bind services. Do not use other services here, since they may not be registered yet.
+- **`boot()`** — Runs after all providers have registered. This is where you can safely use registered services to perform setup that depends on them.
+
+The bootstrap module (`src/bootstrap/app.gleam`) enforces this ordering:
+
+```gleam
+pub fn init() -> fn(Request) -> Response {
+  glimr_kernel.configure_logger()
+  config.load()
+
+  // Phase 1: Register all providers
+  let app = app_provider.register()
+  let route_groups = route_provider.register()
+
+  // Phase 2: Boot providers that need it
+  app_provider.boot(app)
+
+  // Return a per-request handler that captures the registered state
+  fn(req) {
+    let ctx = context.new(req, app)
+    router.handle(ctx, route_groups, kernel.handle)
+  }
+}
+```
+
+### App Provider
+
+The app provider (`src/app/providers/app_provider.gleam`) creates your application state:
+
+```gleam
+import app/app
+import glimr/cache/file_cache
+import glimr_postgres/postgres
+
+pub fn register() -> app.App {
+  app.App(
+    db: postgres.start("main"),
+    cache: file_cache.start("main"),
+  )
+}
+
+pub fn boot(app: app.App) -> Nil {
+  postgres.start_session(app.db)
+}
+```
+
+Pool creation goes in `register()` because it's just binding resources. Session store initialization goes in `boot()` because it depends on an already-registered database pool — `start_session` caches the store globally so the `load_session` middleware can access it on every request without needing it threaded through function arguments.
 
 ## Development
 
