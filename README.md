@@ -85,7 +85,7 @@ Glimr is a fully featured web framework built for Gleam. It provides a delightfu
 - **Middleware System** - Composable middleware at route and group levels
 - **Middleware Groups** - Pre-configured middleware stacks for different route types (Web, API, Custom)
 - **Form Validation** - Elegant form validation layer to easily validate requests
-- **Context/Singleton System** - Type-safe use of singletons throughout your application
+- **Context System** - Framework-defined `Context(app)` with embedded request, session, and app state
 - **Controller Pattern** - Organized request handlers with clear separation of concerns
 - **Configuration Management** - Environment-based configuration with `.env` support
 - **Provider Pattern** - Service providers for bootstrapping application services
@@ -156,10 +156,10 @@ Visit `http://localhost:8000` in your browser.
 │   │   │   ├── middleware/             # Custom middleware
 │   │   │   ├── validators/             # Request body validation
 │   │   │   ├── rules/                  # Custom validation rules
-│   │   │   ├── context/                # Application context
 │   │   │   └── kernel.gleam            # HTTP middleware configuration
+│   │   ├── app.gleam                   # Application type definition
 │   │   └── providers/                  # Service providers
-│   │       ├── ctx_provider.gleam      # Context registration
+│   │       ├── app_provider.gleam      # App state registration
 │   │       ├── route_provider.gleam    # Route group registration
 │   ├── bootstrap/
 │   │   ├── app.gleam                   # Application bootstrapping
@@ -267,18 +267,20 @@ pub fn show() -> Response {
 // ...
 ```
 
-You can access the `Request` and shared `Context` by just accepting them as parameters:
+You can access the `Context` by just accepting it as a parameter. The context carries the HTTP request, session, response format, and your app state:
 
 ```gleam
 // src/app/http/controllers/user_controller.gleam
-import app/http/context/ctx.{type Context}
-import glimr/http/kernel.{type Request, type Response}
+import app/app.{type App}
+import glimr/http/context.{type Context}
+import glimr/http/http.{type Response}
 import compiled/loom/welcome
 
 /// @get "/welcome"
 ///
-pub fn show(req: Request, ctx: Context) -> Response {
-  // Do something with `req` or `ctx`
+pub fn show(ctx: Context(App)) -> Response {
+  // Access the request via ctx.req
+  // Access app state via ctx.app
 
   response.html(welcome.render(), 200)
 }
@@ -313,20 +315,20 @@ import app/http/controllers/user_controller
 import gleam/http.{Delete, Get, Post, Put}
 import glimr/response/response
 
-pub fn routes(path, method, req, ctx) {
+pub fn routes(path, method, ctx) {
   case path {
     ["users"] ->
       case method {
-        Get -> user_controller.index(req, ctx)
-        Post -> user_controller.store(req, ctx)
+        Get -> user_controller.index(ctx)
+        Post -> user_controller.store(ctx)
         _ -> response.method_not_allowed([Get, Post])
       }
 
     ["users", id] ->
       case method {
-        Get -> user_controller.show(req, ctx, id)
-        Put -> user_controller.update(req, ctx, id)
-        Delete -> user_controller.destroy(req, ctx, id)
+        Get -> user_controller.show(ctx, id)
+        Put -> user_controller.update(ctx, id)
+        Delete -> user_controller.destroy(ctx, id)
         _ -> response.method_not_allowed([Get, Put, Delete])
       }
 
@@ -397,8 +399,9 @@ Apply middleware to all routes in a controller using `// @group_middleware` at t
 
 ```gleam
 // src/app/http/controllers/admin_controller.gleam
-import app/http/context/ctx.{type Context}
-import glimr/http/kernel.{type Request, type Response}
+import app/app.{type App}
+import glimr/http/context.{type Context}
+import glimr/http/http.{type Response}
 
 // @group_middleware "auth"
 // @group_middleware "admin"
@@ -537,7 +540,7 @@ import compiled/routes/admin
 import compiled/routes/api
 import compiled/routes/web
 
-pub fn register() -> List(RouteGroup(Context)) {
+pub fn register() -> List(RouteGroup(Context(App))) {
   use name <- router.register()
 
   case name {
@@ -551,7 +554,7 @@ pub fn register() -> List(RouteGroup(Context)) {
 3. Handle the custom middleware group in `src/app/http/kernel.gleam`:
 
 ```gleam
-pub fn handle(req, ctx, middleware_group, router) -> Response {
+pub fn handle(ctx, middleware_group, router) -> Response {
   case middleware_group {
     kernel.Api -> {
       [
@@ -561,7 +564,7 @@ pub fn handle(req, ctx, middleware_group, router) -> Response {
         rescue_crashes.run,
         handle_head.run,
       ]
-      |> middleware.apply(req, ctx, router)
+      |> middleware.apply(ctx, router)
     }
     kernel.Custom("admin") -> { // <-- Add your middleware group before the web group
       [
@@ -572,7 +575,7 @@ pub fn handle(req, ctx, middleware_group, router) -> Response {
         handle_head.run,
         admin_auth.run,
       ]
-      |> middleware.apply(req, ctx, router)
+      |> middleware.apply(ctx, router)
     }
     kernel.Web | _ -> {
       [
@@ -583,7 +586,7 @@ pub fn handle(req, ctx, middleware_group, router) -> Response {
         rescue_crashes.run,
         handle_head.run,
       ]
-      |> middleware.apply(req, ctx, router)
+      |> middleware.apply(ctx, router)
     }
   }
 }
@@ -606,24 +609,24 @@ import app/http/controllers/home_controller
 import app/http/controllers/user_controller
 import glimr/response/response
 
-pub fn routes(path, method, req, ctx) {
+pub fn routes(path, method, ctx) {
   case path {
     [] ->
       case method {
-        Get -> home_controller.show(req, ctx)
+        Get -> home_controller.show(ctx)
         _ -> response.method_not_allowed([Get])
       }
 
     ["users"] ->
       case method {
-        Get -> user_controller.index(req, ctx)
-        Post -> user_controller.store(req, ctx)
+        Get -> user_controller.index(ctx)
+        Post -> user_controller.store(ctx)
         _ -> response.method_not_allowed([Get, Post])
       }
 
     ["users", id] ->
       case method {
-        Get -> user_controller.show(req, ctx, id)
+        Get -> user_controller.show(ctx, id)
         _ -> response.method_not_allowed([Get])
       }
 
@@ -653,7 +656,7 @@ import compiled/loom/user_show
 
 /// @get "/users/:user
 ///
-pub fn show(ctx: Context, user: String) -> Response {
+pub fn show(ctx: Context(App), user: String) -> Response {
   // get the user...
 
   response.html(user_show.render(user: user), 200)
@@ -662,10 +665,10 @@ pub fn show(ctx: Context, user: String) -> Response {
 /// @post "/users"
 /// @validator "user_store"
 ///
-pub fn store(validated: Data) -> Response {
+pub fn store(ctx: Context(App), validated: Data) -> Response {
   // Handle POST request...
 
-  redirect.back(req)
+  redirect.back(ctx)
 }
 ```
 
@@ -687,7 +690,7 @@ Create actions in `src/app/actions/`. Use the following command:
 ./glimr make_action update_submission
 ```
 
-This creates `update_submission.gleam`. Actions follow a simple pattern - they perform work and return a Result. If you're going to perform database work within your action, it's preferable to accept a `Pool` rather than an entire `Context`, so that this action may be usable from console commands as well:
+This creates `update_submission.gleam`. Actions follow a simple pattern - they perform work and return a Result. If you're going to perform database work within your action, it's preferable to accept a `Pool` rather than an entire `App`, so that this action may be usable from console commands as well:
 
 ```gleam
 // src/app/actions/update_submission.gleam
@@ -723,10 +726,10 @@ import glimr/db/db.{NotFound}
 /// @put "/submissions/:submission"
 /// @validator "contact_store"
 ///
-pub fn update(req: Request, ctx: Context, submission: String, validated: Data) -> Response {
+pub fn update(ctx: Context(App), submission: String, validated: Data) -> Response {
   let assert Ok(submission_id) = int.parse(submission_id)
 
-  case update_submission.run(ctx.db, submission_id, validated) {
+  case update_submission.run(ctx.app.db, submission_id, validated) {
     Ok(submission) -> {
       redirect.to("/contact/updated")
     }
@@ -747,11 +750,11 @@ import app/http/validators/user_store.{type Data}
 /// @post "/users"
 /// @validator "user_store"
 ///
-pub fn store(req: Request, ctx: Context, validated: Data) -> Response {
+pub fn store(ctx: Context(App), validated: Data) -> Response {
   case {
-    use user <- result.try(create_user.run(ctx.db, validated))
-    use _ <- result.try(send_welcome_email.run(ctx.notif, user))
-    use _ <- result.try(notify_admin.run(ctx.notif, user))
+    use user <- result.try(create_user.run(ctx.app.db, validated))
+    use _ <- result.try(send_welcome_email.run(ctx.app.notif, user))
+    use _ <- result.try(notify_admin.run(ctx.app.notif, user))
     Ok(user)
   } {
     Ok(user) -> {
@@ -778,13 +781,16 @@ This creates `logger.gleam`. In it you can add your custom logic.
 
 ```gleam
 // app/http/middleware/logger.gleam
-import glimr/http/kernel.{type Next, type Request, type Response}
+import app/app.{type App}
+import glimr/http/context.{type Context}
+import glimr/http/http.{type Response}
+import glimr/http/kernel.{type Next}
 
-pub fn run(req: Request, ctx: Context, next: Next(Context)) -> Response {
+pub fn run(ctx: Context(App), next: Next(Context(App))) -> Response {
   io.println("Request received")
 
-  // Pass both request and context to next middleware/handler
-  next(req, ctx)
+  // Pass context to next middleware/handler
+  next(ctx)
 }
 ```
 
@@ -832,11 +838,11 @@ import app/http/middleware/auth.{run as auth}
 import glimr/http/middleware
 ...
 
-pub fn show(req: Request, ctx: Context) -> Response {
-  use req, ctx <- middleware.apply([auth, logger], req, ctx)
+pub fn show(ctx: Context(App)) -> Response {
+  use ctx <- middleware.apply([auth, logger], ctx)
 
   // Continue with controller logic using the modified
-  // req and ctx from your middleware stack
+  // ctx from your middleware stack
 }
 ```
 
@@ -846,12 +852,12 @@ Middleware can modify the context, and those changes are visible to downstream m
 
 ```gleam
 // middleware/auth.gleam
-pub fn run(req, ctx, next) {
-  case authenticate(req) {
+pub fn run(ctx, next) {
+  case authenticate(ctx.req) {
     Ok(user) -> {
-      // Add authenticated user to context
-      let updated_ctx = Context(..ctx, user: Some(user))
-      next(req, updated_ctx)
+      // Add authenticated user to app state
+      let updated_ctx = Context(..ctx, app: App(..ctx.app, user: Some(user)))
+      next(updated_ctx)
     }
     Error(_) -> response.empty(401)
   }
@@ -864,9 +870,9 @@ Then in your controller:
 /// @get "/dashboard"
 /// @middleware "auth"
 ///
-pub fn dashboard(ctx: Context) -> Response {
+pub fn dashboard(ctx: Context(App)) -> Response {
   // Safe to assert because auth middleware guarantees this
-  let assert Some(user) = ctx.user
+  let assert Some(user) = ctx.app.user
 
   response.html(dashboard.render(user: user), 200)
 }
@@ -880,9 +886,9 @@ Middleware can also modify responses on the way back up the chain:
 // middleware/cors.gleam
 import glimr/response/response
 
-pub fn run(req, ctx, next) {
+pub fn run(ctx, next) {
   // Call the next middleware/handler first
-  let resp = next(req, ctx)
+  let resp = next(ctx)
 
   // Modify the response on the way back
   resp
@@ -906,21 +912,24 @@ Middleware groups let you define different middleware stacks for different types
 Groups are defined in `src/app/http/kernel.gleam`:
 
 ```gleam
-import app/http/middleware/expects_html
-import app/http/middleware/expects_json
-import glimr/http/kernel.{type MiddlewareGroup, type Request, type Response}
+import app/app.{type App}
+import glimr/http/context.{type Context}
+import glimr/http/http.{type Response}
+import glimr/http/kernel.{type MiddlewareGroup}
 import glimr/http/middleware
+import glimr/http/middleware/expects_html
+import glimr/http/middleware/expects_json
 import glimr/http/middleware/handle_head
+import glimr/http/middleware/load_session
 import glimr/http/middleware/log_request
 import glimr/http/middleware/method_override
 import glimr/http/middleware/rescue_crashes
 import glimr/http/middleware/serve_static
 
 pub fn handle(
-  req: Request,
-  ctx: Context,
+  ctx: Context(App),
   middleware_group: MiddlewareGroup,
-  router: fn(Request, Context) -> Response,
+  router: fn(Context(App)) -> Response,
 ) -> Response {
   case middleware_group {
     kernel.Api -> {
@@ -930,8 +939,9 @@ pub fn handle(
         log_request.run,
         rescue_crashes.run,
         handle_head.run,
+        load_session.run,
       ]
-      |> middleware.apply(req, ctx, router)
+      |> middleware.apply(ctx, router)
     }
     kernel.Web | _ -> {
       [
@@ -941,8 +951,9 @@ pub fn handle(
         log_request.run,
         rescue_crashes.run,
         handle_head.run,
+        load_session.run,
       ]
-      |> middleware.apply(req, ctx, router)
+      |> middleware.apply(ctx, router)
     }
   }
 }
@@ -988,7 +999,7 @@ Add a custom middleware group using `kernel.Custom("name")`:
 Then handle it in `src/app/http/kernel.gleam`:
 
 ```gleam
-pub fn handle(req, ctx, middleware_group, router) -> Response {
+pub fn handle(ctx, middleware_group, router) -> Response {
   case middleware_group {
     kernel.Api -> {
       [
@@ -998,7 +1009,7 @@ pub fn handle(req, ctx, middleware_group, router) -> Response {
         rescue_crashes.run,
         handle_head.run,
       ]
-      |> middleware.apply(req, ctx, router)
+      |> middleware.apply(ctx, router)
     }
     kernel.Custom("admin") -> {
       [
@@ -1009,7 +1020,7 @@ pub fn handle(req, ctx, middleware_group, router) -> Response {
         handle_head.run,
         admin_auth.run,
       ]
-      |> middleware.apply(req, ctx, router)
+      |> middleware.apply(ctx, router)
     }
     kernel.Web | _ -> {
       [
@@ -1020,7 +1031,7 @@ pub fn handle(req, ctx, middleware_group, router) -> Response {
         rescue_crashes.run,
         handle_head.run,
       ]
-      |> middleware.apply(req, ctx, router)
+      |> middleware.apply(ctx, router)
     }
   }
 }
@@ -1054,7 +1065,7 @@ expire_on_close = false
 
 ### Choosing a Driver
 
-Session drivers are initialized directly in your `ctx_provider.gleam`. Each driver shares the same session API — you only change the start call to switch backends.
+Session drivers are initialized in your `app_provider.gleam`. Each driver shares the same session API — you only change the start call to switch backends. The `load_session` middleware in your kernel then hydrates a live session for each request automatically.
 
 #### PostgreSQL Driver
 
@@ -1074,23 +1085,19 @@ Generate the session table migration:
 ./glimr make_session_table --migrate
 ```
 
-Start the session in `ctx_provider.gleam`:
+Initialize the session store in `app_provider.gleam`:
 
 ```gleam
-import app/http/context/ctx.{type Context}
+import app/app
 import glimr_redis/redis
 import glimr_postgres/postgres
 
-pub fn register() -> Context {
+pub fn register() -> app.App {
   let db = postgres.start("main")
   let cache = redis.start("main")
-  let session = postgres.start_session(db)
+  let _ = postgres.start_session(db)
 
-  ctx.Context(
-    db: db,
-    cache: cache,
-    session: session,
-  )
+  app.App(db: db, cache: cache)
 }
 ```
 
@@ -1111,23 +1118,19 @@ Generate the session table migration:
 ./glimr make_session_table --migrate
 ```
 
-Start the session in `ctx_provider.gleam`:
+Initialize the session store in `app_provider.gleam`:
 
 ```gleam
-import app/http/context/ctx.{type Context}
+import app/app
 import glimr_redis/redis
 import glimr_sqlite/sqlite
 
-pub fn register() -> Context {
+pub fn register() -> app.App {
   let db = sqlite.start("main")
   let cache = redis.start("main")
-  let session = sqlite.start_session(db)
+  let _ = sqlite.start_session(db)
 
-  ctx.Context(
-    db: db,
-    cache: cache,
-    session: session,
-  )
+  app.App(db: db, cache: cache)
 }
 ```
 
@@ -1139,23 +1142,19 @@ Stores sessions in Redis with automatic TTL-based expiration. No garbage collect
 gleam add glimr_redis
 ```
 
-Start the session in `ctx_provider.gleam`:
+Initialize the session store in `app_provider.gleam`:
 
 ```gleam
-import app/http/context/ctx.{type Context}
+import app/app
 import glimr_redis/redis
 import glimr_postgres/postgres
 
-pub fn register() -> Context {
+pub fn register() -> app.App {
   let db = postgres.start("main")
   let cache = redis.start("main")
-  let session = redis.start_session(cache)
+  let _ = redis.start_session(cache)
 
-  ctx.Context(
-    db: db,
-    cache: cache,
-    session: session,
-  )
+  app.App(db: db, cache: cache)
 }
 ```
 
@@ -1163,23 +1162,19 @@ pub fn register() -> Context {
 
 Stores sessions as files on disk using the file cache pool. No database required.
 
-Start the session in `ctx_provider.gleam`:
+Initialize the session store in `app_provider.gleam`:
 
 ```gleam
-import app/http/context/ctx.{type Context}
+import app/app
 import glimr/cache/file_cache
 import glimr_postgres/postgres
 
-pub fn register() -> Context {
+pub fn register() -> app.App {
   let db = postgres.start("main")
   let cache = file_cache.start("main")
-  let session = file_cache.start_session(cache)
+  let _ = file_cache.start_session(cache)
 
-  ctx.Context(
-    db: db,
-    cache: cache,
-    session: session,
-  )
+  app.App(db: db, cache: cache)
 }
 ```
 
@@ -1187,45 +1182,30 @@ pub fn register() -> Context {
 
 Stores session data directly in a signed cookie. No server-side persistence needed. Best for small payloads under ~4KB.
 
-Start the session in your `ctx_provider.gleam`:
+Initialize the session store in your `app_provider.gleam`:
 
 ```gleam
-import app/http/context/ctx.{type Context}
+import app/app
 import glimr/session/session
 import glimr_redis/redis
 import glimr_postgres/postgres
 
-pub fn register() -> Context {
-  ctx.Context(
+pub fn register() -> app.App {
+  let _ = session.start_cookie()
+
+  app.App(
     db: postgres.start("main"),
     cache: redis.start("main"),
-    session: session.start_cookie(), // <--
-  )
-}
-```
-
-Add the fields to your Context type in `src/app/http/context/ctx.gleam`:
-
-```gleam
-import glimr/cache/cache.{type CachePool}
-import glimr/db/db.{type DbPool}
-import glimr/session/session.{type Session}
-
-pub type Context {
-  Context(
-    db: DbPool,
-    cache: CachePool,
-    session: Session,
   )
 }
 ```
 
 ### Kernel Middleware
 
-The session middleware runs in your kernel and enriches the Context with a live session for each request. Add it to your middleware groups in `src/app/http/kernel.gleam`:
+The `load_session` middleware runs in your kernel and hydrates a live session onto the context for each request. Add it to your middleware groups in `src/app/http/kernel.gleam`:
 
 ```gleam
-pub fn handle(req, ctx, middleware_group, router) -> Response {
+pub fn handle(ctx, middleware_group, router) -> Response {
   case middleware_group {
     kernel.Api -> {
       [
@@ -1236,7 +1216,7 @@ pub fn handle(req, ctx, middleware_group, router) -> Response {
         handle_head.run,
         load_session.run,
       ]
-      |> middleware.apply(req, ctx, router)
+      |> middleware.apply(ctx, router)
     }
     kernel.Web | _ -> {
       [
@@ -1248,7 +1228,7 @@ pub fn handle(req, ctx, middleware_group, router) -> Response {
         handle_head.run,
         load_session.run,
       ]
-      |> middleware.apply(req, ctx, router)
+      |> middleware.apply(ctx, router)
     }
   }
 }
@@ -1264,7 +1244,7 @@ import glimr/response/redirect
 
 /// @post "/profile"
 ///
-pub fn update(req: Request, ctx: Context) -> Response {
+pub fn update(ctx: Context(App)) -> Response {
   // Store a value
   session.put(ctx.session, "user_id", "123")
 
@@ -1286,8 +1266,8 @@ pub fn update(req: Request, ctx: Context) -> Response {
   // Get the session ID
   let id = session.id(ctx.session)
 
-  // Redirect back successfully
-  redirect.back(req, 200)
+  // Redirect back
+  redirect.back(ctx)
 }
 ```
 
@@ -1296,12 +1276,12 @@ pub fn update(req: Request, ctx: Context) -> Response {
 Flash messages are one-shot values: set during this request, available only on the next request, then automatically cleared. Ideal for success/error messages after redirects.
 
 ```gleam
-import app/http/context/ctx.{type Context}
+import glimr/http/context.{type Context}
 import glimr/session/session
 
 /// @post "/login"
 ///
-pub fn login(ctx: Context) -> Response {
+pub fn login(ctx: Context(App)) -> Response {
   // Set flash messages for the next request
   session.flash(ctx.session, "success", "Welcome back!")
 
@@ -1310,7 +1290,7 @@ pub fn login(ctx: Context) -> Response {
 
 /// @get "/dashboard"
 ///
-pub fn dashboard(req: Request, ctx: Context) -> Response {
+pub fn dashboard(ctx: Context(App)) -> Response {
   response.html(dashboard.render(ctx), 200)
 }
 ```
@@ -1318,8 +1298,9 @@ And then in your loom file
 
 ```html
 @import(glimr/session/session)
-@import(app/http/context/ctx.{type Context})
-@props(ctx: Context)
+@import(glimr/http/context.{type Context})
+@import(app/app.{type App})
+@props(ctx: Context(App))
 
 ...
 
@@ -1337,7 +1318,7 @@ import glimr/session/session
 
 /// @post "/logout"
 ///
-pub fn logout(req: Request, ctx: Context) -> Response {
+pub fn logout(ctx: Context(App)) -> Response {
   // Destroy all session data and issue a new session ID
   session.invalidate(ctx.session)
 
@@ -1346,7 +1327,7 @@ pub fn logout(req: Request, ctx: Context) -> Response {
 
 /// @post "/login"
 ///
-pub fn login(req: Request, ctx: Context) -> Response {
+pub fn login(ctx: Context(App)) -> Response {
   // After authentication, regenerate the session ID to prevent
   // session fixation attacks. Keeps existing data, new ID only.
   session.regenerate(ctx.session)
@@ -1373,10 +1354,11 @@ This creates `user_store.gleam`. In it you can add your custom logic.
 
 ```gleam
 // src/app/http/validators/user_store.gleam
-import app/http/context/ctx.{type Context}
+import app/app.{type App}
 import glimr/forms/form.{type UploadedFile}
 import glimr/forms/validator.{type FormData, type Rule}
-import glimr/http/kernel.{type Request, type Response}
+import glimr/http/context.{type Context}
+import glimr/http/http.{type Response}
 
 /// Define the shape of the data returned after validation
 ///
@@ -1390,7 +1372,7 @@ pub type Data {
 
 /// Define your form's validation rules
 ///
-fn rules() -> List(Rule(Context)) {
+fn rules() -> List(Rule(Context(App))) {
   [
     validator.for("name", [
       validator.Required,
@@ -1425,15 +1407,8 @@ fn data(data: FormData) -> Data {
 /// you can if you want to add any custom logic before/after
 /// validation.
 ///
-pub fn validate(req: Request, ctx: Context, next: fn(Data) -> Response) {
-  use validated <- validator.run(
-    req,
-    ctx,
-    ctx.response_format,
-    ctx.session,
-    rules,
-    data,
-  )
+pub fn validate(ctx: Context(App), next: fn(Data) -> Response) {
+  use validated <- validator.run(ctx, rules, data)
 
   next(validated)
 }
@@ -1458,9 +1433,10 @@ When validation fails, Glimr automatically handles errors based on your route's 
 **HTML routes** — flashes the first error for each field into the session as `errors.<field_name>` and redirects back. Your templates can then display these errors next to the relevant inputs:
 
 ```html
-@import(app/http/context/ctx)
+@import(glimr/http/context)
 @import(glimr/session/session)
-@props(ctx: ctx.Context)
+@import(app/app.{type App})
+@props(ctx: context.Context(App))
 
 <input type="text" name="email" />
 <span class="error">{{ session.get_flash(ctx.session, "errors.email") }}</span>
@@ -1483,25 +1459,26 @@ Use the `@validator` annotation to automatically validate form data before it re
 
 ```gleam
 // app/http/controllers/user_controller.gleam
-import app/http/context/ctx.{type Context}
+import app/app.{type App}
 import app/http/validators/user_store.{type Data}
 import app/repositories/user_repository
-import glimr/http/kernel.{type Request, type Response}
+import glimr/http/context.{type Context}
+import glimr/http/http.{type Response}
 import glimr/response/redirect
 
 /// @post "/users"
 /// @validator "user_store"
 ///
-pub fn store(ctx: Context, validated: Data) -> Response {
+pub fn store(ctx: Context(App), validated: Data) -> Response {
   let assert Ok(user) = user_repository.create(
-    pool: ctx.db,
+    pool: ctx.app.db,
     name: validated.name,
     email: validated.email,
     avatar: validated.avatar.path,
   )
 
   session.flash(ctx.session, "message", "User created successfully!")
-  redirect.back(req)
+  redirect.back(ctx)
 }
 ```
 
@@ -1522,18 +1499,18 @@ import app/repositories/user_repository
 
 /// @post "/users"
 ///
-pub fn store(req: Request, ctx: Context) -> Response {
-  use validated <- user_store.validate(req, ctx)
+pub fn store(ctx: Context(App)) -> Response {
+  use validated <- user_store.validate(ctx)
 
   let assert Ok(user) = user_repository.create(
-    pool: ctx.db,
+    pool: ctx.app.db,
     name: validated.name,
     email: validated.email,
     avatar: validated.avatar.path,
   )
 
   session.flash(ctx.session, "message", "User created successfully!")
-  redirect.back(req)
+  redirect.back(ctx)
 }
 ```
 
@@ -1588,11 +1565,11 @@ Add your rule's validation logic:
 
 ```gleam
 // app/http/rules/no_gmail.gleam
-import app/http/context/ctx.{type Context}
+import glimr/http/context.{type Context}
 import gleam/string
 import glimr/forms/validator.{type FormData}
 
-pub fn run(field: String, value: String, _data: FormData, _ctx: Context) -> Result(Nil, String) {
+pub fn run(field: String, value: String, _data: FormData, _ctx: Context(App)) -> Result(Nil, String) {
   case string.contains(value, "gmail") {
     False -> Ok(Nil)
     True -> Error(field <> " cannot be a Gmail address")
@@ -1604,10 +1581,10 @@ Custom rules receive the full form data, so you can access other field values wh
 
 ```gleam
 // app/http/rules/after_start_date.gleam
-import app/http/context/ctx.{type Context}
+import glimr/http/context.{type Context}
 import glimr/forms/validator.{type FormData}
 
-pub fn run(field: String, value: String, data: FormData, _ctx: Context) -> Result(Nil, String) {
+pub fn run(field: String, value: String, data: FormData, _ctx: Context(App)) -> Result(Nil, String) {
   case value > data.get("start_date") {
     True -> Ok(Nil)
     False -> Error(field <> " must be after the start date")
@@ -1653,10 +1630,11 @@ fn rules() {
 ```
 
 **Custom validation function signature:**
-- `fn(String, FormData, ctx) -> Result(Nil, String)`
-- First argument is the field's value
-- Second argument is the form data — use `data.get("other_field")` to access other fields
-- Third argument is your app context for database lookups, config, etc.
+- `fn(String, String, FormData, Context(App)) -> Result(Nil, String)`
+- First argument is the field name
+- Second argument is the field's value
+- Third argument is the form data — use `data.get("other_field")` to access other fields
+- Fourth argument is the context for database lookups, config, etc.
 - Return `Ok(Nil)` if validation passes
 - Return `Error(message)` with an error message if validation fails
 
@@ -1672,11 +1650,11 @@ Add your rule's validation logic:
 
 ```gleam
 // app/http/rules/image_dimensions.gleam
-import app/http/context/ctx.{type Context}
+import glimr/http/context.{type Context}
 import glimr/forms/form.{type UploadedFile}
 import glimr/forms/validator.{type FormData}
 
-pub fn run(field: String, file: UploadedFile, _data: FormData, _ctx: Context) -> Result(Nil, String) {
+pub fn run(field: String, file: UploadedFile, _data: FormData, _ctx: Context(App)) -> Result(Nil, String) {
   case get_image_dimensions(file.path) {
     Ok(#(width, height)) if width >= 100 && height >= 100 -> Ok(Nil)
     Ok(_) -> Error(field <> " must be at least 100x100 pixels")
@@ -1689,11 +1667,11 @@ Like string custom rules, file custom rules also receive the full form data for 
 
 ```gleam
 // app/http/rules/image_dimensions.gleam
-import app/http/context/ctx.{type Context}
+import glimr/http/context.{type Context}
 import glimr/forms/form.{type UploadedFile}
 import glimr/forms/validator.{type FormData}
 
-pub fn run(field: String, file: UploadedFile, data: FormData, _ctx: Context) -> Result(Nil, String) {
+pub fn run(field: String, file: UploadedFile, data: FormData, _ctx: Context(App)) -> Result(Nil, String) {
   // Use form data to conditionally validate
   case data.get("type") {
     "profile" -> validate_square(file)
@@ -1722,10 +1700,11 @@ fn rules() {
 ```
 
 **Custom file validation function signature:**
-- `fn(UploadedFile, FormData, ctx) -> Result(Nil, String)`
-- First argument is the uploaded file
-- Second argument is the form data — use `data.get("other_field")` to access other fields
-- Third argument is your app context
+- `fn(String, UploadedFile, FormData, Context(App)) -> Result(Nil, String)`
+- First argument is the field name
+- Second argument is the uploaded file
+- Third argument is the form data — use `data.get("other_field")` to access other fields
+- Fourth argument is the context
 - Return `Ok(Nil)` if validation passes
 - Return `Error(message)` with an error message if validation fails
 
@@ -1738,7 +1717,7 @@ Glimr provides a powerful templating engine called Loom, along with a fluent bui
 ```gleam
 import glimr/response/response
 
-pub fn show(req: Request, ctx: Context) -> Response {
+pub fn show(ctx: Context(App)) -> Response {
   response.html_file("welcome.html", 200)
 }
 ```
@@ -1750,7 +1729,7 @@ HTML files are found in `src/resources/views`.
 ```gleam
 import glimr/response/response
 
-pub fn show(req: Request, ctx: Context) -> Response {
+pub fn show(ctx: Context(App)) -> Response {
   response.html("<h1>This is raw HTML</h1>", 200)
 }
 ```
@@ -1785,7 +1764,7 @@ You can trigger an error response from anywhere in a request handler using `fail
 ```gleam
 import glimr/http/fail
 
-pub fn show(id: String, req: Request, ctx: Context) -> Response {
+pub fn show(ctx: Context(App), id: String) -> Response {
   let user = case get_user(id) {
     Ok(user) -> user
     Error(_) -> fail.with(404)  // stops execution, renders 404 error page
@@ -2749,7 +2728,7 @@ Glimr's redirect builder provides a clean API for redirecting users with flash m
 ```gleam
 import glimr/response/redirect
 
-pub fn store(req: Request, ctx: Context) -> Response {
+pub fn store(ctx: Context(App)) -> Response {
   // Process form...
 
   redirect.to("/contact/success")
@@ -2761,7 +2740,7 @@ pub fn store(req: Request, ctx: Context) -> Response {
 Flash messages persist data across redirects using the [session flash API](#flash-messages):
 
 ```gleam
-pub fn store(req: Request, ctx: Context) -> Response {
+pub fn store(ctx: Context(App)) -> Response {
   // Process form...
   session.flash(ctx.session, "success", "Contact form submitted!")
 
@@ -2774,8 +2753,8 @@ pub fn store(req: Request, ctx: Context) -> Response {
 Redirect users back to the previous page:
 
 ```gleam
-pub fn cancel(req: Request, ctx: Context) -> Response {
-  redirect.back(req)
+pub fn cancel(ctx: Context(App)) -> Response {
+  redirect.back(ctx)
 }
 ```
 
@@ -2815,40 +2794,41 @@ DB_DATABASE=src/database/main/data.db
 DB_POOL_SIZE=15
 ```
 
-Add the pool to your context in `src/app/http/context/ctx.gleam`:
+Add the pool to your app type in `src/app/app.gleam`:
 
 ```gleam
 import glimr/db/db.{type DbPool}
 
-pub type Context {
-  Context(
+pub type App {
+  App(
     db: DbPool,
     // ...
   )
 }
 ```
 
-Start the pool in your `ctx_provider.gleam`:
+Start the pool in your `app_provider.gleam`:
 
 ```gleam
+import app/app
 import glimr_sqlite/sqlite
 
-pub fn register() -> Context {
-  ctx.Context(
+pub fn register() -> app.App {
+  app.App(
     db: sqlite.start("main"),
     // ...
   )
 }
 ```
 
-Use `ctx.db` in your controllers:
+Use `ctx.app.db` in your controllers:
 
 ```gleam
 /// @get "/users/:user_id"
-pub fn show(_req: Request, ctx: Context, user_id: String) -> Response {
+pub fn show(ctx: Context(App), user_id: String) -> Response {
   let assert Ok(user_id) = int.parse(user_id)
 
-  case user.find(ctx.db, user_id) {
+  case user.find(ctx.app.db, user_id) {
     Ok(user) -> {
       response.html(user_show.render(user: user), 200)
     }
@@ -2928,40 +2908,41 @@ Run the following command to create a directory for your new database connection
 ```bash
 ./glimr setup_database main
 ```
-Add the pool to your context in `src/app/http/context/ctx.gleam`:
+Add the pool to your app type in `src/app/app.gleam`:
 
 ```gleam
 import glimr/db/db.{type DbPool}
 
-pub type Context {
-  Context(
+pub type App {
+  App(
     db: DbPool,
     // ...
   )
 }
 ```
 
-Start the pool in your `ctx_provider.gleam`:
+Start the pool in your `app_provider.gleam`:
 
 ```gleam
+import app/app
 import glimr_postgres/postgres
 
-pub fn register() -> Context {
-  ctx.Context(
+pub fn register() -> app.App {
+  app.App(
     db: postgres.start("main"),
     // ...
   )
 }
 ```
 
-Use `ctx.db` in your controllers:
+Use `ctx.app.db` in your controllers:
 
 ```gleam
 /// @get "/users/:user_id"
-pub fn show(_req: Request, ctx: Context, user_id: String) -> Response {
+pub fn show(ctx: Context(App), user_id: String) -> Response {
   let assert Ok(user_id) = int.parse(user_id)
 
-  case user.find(ctx.db, user_id) {
+  case user.find(ctx.app.db, user_id) {
     Ok(user) -> {
       response.html(user_show.render(user: user), 200)
     }
@@ -2986,13 +2967,13 @@ Glimr supports multiple database connections at the same time, even with differe
   pool_size = "${DB_ANALYTICS_POOL_SIZE}"
 ```
 
-Add each pool as a flat field on your context:
+Add each pool as a flat field on your app type:
 
 ```gleam
 import glimr/db/db.{type DbPool}
 
-pub type Context {
-  Context(
+pub type App {
+  App(
     db: DbPool,
     db_analytics: DbPool,
     // ...
@@ -3000,14 +2981,15 @@ pub type Context {
 }
 ```
 
-Start them in your `ctx_provider.gleam`:
+Start them in your `app_provider.gleam`:
 
 ```gleam
+import app/app
 import glimr_postgres/postgres
 import glimr_sqlite/sqlite
 
-pub fn register() -> Context {
-  ctx.Context(
+pub fn register() -> app.App {
+  app.App(
     db: postgres.start("main"),
     db_analytics: sqlite.start("analytics"),
     // ...
@@ -3019,10 +3001,10 @@ Use them in your controllers:
 
 ```gleam
 // your "main" postgres connection pool
-ctx.db
+ctx.app.db
 
 // your "analytics" sqlite connection pool
-ctx.db_analytics
+ctx.app.db_analytics
 ```
 
 ### Migrations
@@ -3439,13 +3421,13 @@ pub fn list_or_fail_wc(conn) -> List(User)
 
 #### Connection Pooling
 
-Glimr manages a pool of database connections to efficiently handle concurrent requests. The pool is initialized in your context in `ctx_provider.gleam`.
+Glimr manages a pool of database connections to efficiently handle concurrent requests. The pool is initialized in your app state in `app_provider.gleam`.
 
 You can specify the pool size by setting the `DB_POOL_SIZE` env variable, and the config value for your connection in `config/database.toml`. It defaults to 15.
 
 **How it works:**
 
-When you call a query function like `user.find(ctx.db, id)`, it automatically:
+When you call a query function like `user.find(ctx.app.db, id)`, it automatically:
 1. Checks out a connection from the pool
 2. Executes the query
 3. Returns the connection to the pool
@@ -3460,9 +3442,9 @@ The `_or_fail` variants are the most convenient for HTTP handlers — they retur
 ```gleam
 import database/models/user/gen/user
 
-pub fn show(id: String, req: Request, ctx: Context) -> Response {
+pub fn show(ctx: Context(App), id: String) -> Response {
   let assert Ok(user_id) = int.parse(id)
-  let user = user.find_or_fail(ctx.db, user_id)
+  let user = user.find_or_fail(ctx.app.db, user_id)
 
   response.html(user_show.render(user: user), 200)
 }
@@ -3473,8 +3455,8 @@ pub fn show(id: String, req: Request, ctx: Context) -> Response {
 ```gleam
 import database/models/user/gen/user
 
-pub fn index(req: Request, ctx: Context) -> Response {
-  let users = user.list_or_fail(ctx.db)
+pub fn index(ctx: Context(App)) -> Response {
+  let users = user.list_or_fail(ctx.app.db)
   let count = int.to_string(list.length(users))
 
   response.html(user_index.render(count: count), 200)
@@ -3487,10 +3469,10 @@ When you need explicit error handling (e.g. showing a custom error page, or in b
 import database/models/user/gen/user
 import glimr/db/db.{NotFound}
 
-pub fn show(id: String, req: Request, ctx: Context) -> Response {
+pub fn show(ctx: Context(App), id: String) -> Response {
   let assert Ok(user_id) = int.parse(id)
 
-  case user.find(ctx.db, user_id) {
+  case user.find(ctx.app.db, user_id) {
     Ok(user) -> {
       response.html(user_show.render(user: user), 200)
     }
@@ -3520,7 +3502,7 @@ pub fn transfer(
   to_id: Int,
   amount: Int,
 ) -> Result(Nil, DbError) {
-  use conn <- db.transaction(ctx.db, 3)
+  use conn <- db.transaction(ctx.app.db, 3)
 
   // Both operations use the same connection within the transaction
   use _ <- result.try(account_repository.debit_wc(conn, from_id, amount))
@@ -3540,11 +3522,11 @@ Retries use exponential backoff to reduce contention.
 ```gleam
 import glimr/db/db
 
-pub fn store(req: Request, ctx: Context) -> Response {
-  use validated <- transfer_request.validate(req, ctx)
+pub fn store(ctx: Context(App)) -> Response {
+  use validated <- transfer_request.validate(ctx)
 
   case {
-    use conn <- db.transaction(ctx.db, 3)
+    use conn <- db.transaction(ctx.app.db, 3)
     use _ <- result.try(account_repository.debit_wc(conn, validated.from_id, validated.amount))
     use _ <- result.try(account_repository.credit_wc(conn, validated.to_id, validated.amount))
     Ok(Nil)
@@ -3605,13 +3587,13 @@ Set up the store in `config/cache.toml`:
   path = "priv/storage/framework/cache/data"
 ```
 
-Start the cache in your `ctx_provider.gleam`:
+Start the cache in your `app_provider.gleam`:
 
 ```gleam
 import glimr/cache/file_cache
 
-pub fn register() -> Context {
-  ctx.Context(
+pub fn register() -> app.App {
+  app.App(
     cache: file_cache.start("main"),
     // ...
   )
@@ -3623,8 +3605,8 @@ Use it in your controllers:
 ```gleam
 import glimr/cache/cache
 
-pub fn show(req: Request, ctx: Context) -> Response {
-  case cache.get(ctx.cache, "user:123") {
+pub fn show(ctx: Context(App)) -> Response {
+  case cache.get(ctx.app.cache, "user:123") {
     Ok(value) -> // use cached value
     Error(cache.NotFound) -> // cache miss, compute value
     Error(_) -> response.internal_server_error()
@@ -3660,13 +3642,13 @@ REDIS_URL=redis://localhost:6379
 REDIS_POOL_SIZE=10
 ```
 
-Start the cache in your `ctx_provider.gleam`:
+Start the cache in your `app_provider.gleam`:
 
 ```gleam
 import glimr_redis/redis
 
-pub fn register() -> Context {
-  ctx.Context(
+pub fn register() -> app.App {
+  app.App(
     cache: redis.start("main"),
     // ...
   )
@@ -3678,8 +3660,8 @@ Use it in your controllers:
 ```gleam
 import glimr/cache/cache
 
-pub fn show(req: Request, ctx: Context) -> Response {
-  case cache.get(ctx.cache, "user:123") {
+pub fn show(ctx: Context(App)) -> Response {
+  case cache.get(ctx.app.cache, "user:123") {
     Ok(value) -> // use cached value
     Error(cache.NotFound) -> // cache miss
     Error(_) -> response.internal_server_error()
@@ -3718,15 +3700,16 @@ Set up the store in `config/cache.toml`:
   table = "cache"
 ```
 
-Start the cache in your `ctx_provider.gleam`:
+Start the cache in your `app_provider.gleam`:
 
 ```gleam
+import app/app
 import glimr_sqlite/sqlite
 
-pub fn register() -> Context {
+pub fn register() -> app.App {
   let db = sqlite.start("main")
 
-  ctx.Context(
+  app.App(
     db: db,
     cache: sqlite.start_cache(db, "database"),
     // ...
@@ -3749,8 +3732,8 @@ Use it in your controllers:
 ```gleam
 import glimr/cache/cache
 
-pub fn show(req: Request, ctx: Context) -> Response {
-  case cache.get(ctx.cache, "user:123") {
+pub fn show(ctx: Context(App)) -> Response {
+  case cache.get(ctx.app.cache, "user:123") {
     Ok(value) -> // use cached value
     Error(cache.NotFound) -> // cache miss
     Error(_) -> response.internal_server_error()
@@ -3779,15 +3762,16 @@ Set up the store in `config/cache.toml`:
   table = "cache"
 ```
 
-Start the cache in your `ctx_provider.gleam`:
+Start the cache in your `app_provider.gleam`:
 
 ```gleam
+import app/app
 import glimr_postgres/postgres
 
-pub fn register() -> Context {
+pub fn register() -> app.App {
   let db = postgres.start("main")
 
-  ctx.Context(
+  app.App(
     db: db,
     cache: postgres.start_cache(db, "database"),
     // ...
@@ -3810,8 +3794,8 @@ Use it in your controllers:
 ```gleam
 import glimr/cache/cache
 
-pub fn show(req: Request, ctx: Context) -> Response {
-  case cache.get(ctx.cache, "user:123") {
+pub fn show(ctx: Context(App)) -> Response {
+  case cache.get(ctx.app.cache, "user:123") {
     Ok(value) -> // use cached value
     Error(cache.NotFound) -> // cache miss
     Error(_) -> response.internal_server_error()
@@ -3869,23 +3853,23 @@ All cache drivers support these operations:
 import glimr/cache/cache
 
 // Store a value for 1 hour (3600 seconds)
-cache.put(ctx.cache, "user:123:name", "Alice", 3600)
+cache.put(ctx.app.cache, "user:123:name", "Alice", 3600)
 
 // Get a value
-case cache.get(ctx.cache, "user:123:name") {
+case cache.get(ctx.app.cache, "user:123:name") {
   Ok(name) -> io.println("Hello, " <> name)
   Error(cache.NotFound) -> io.println("Cache miss")
   Error(_) -> io.println("Cache error")
 }
 
 // Store permanently
-cache.put_forever(ctx.cache, "config:site_name", "My App")
+cache.put_forever(ctx.app.cache, "config:site_name", "My App")
 
 // Delete a value
-cache.forget(ctx.cache, "user:123:name")
+cache.forget(ctx.app.cache, "user:123:name")
 
 // Check existence
-case cache.has(ctx.cache, "user:123:name") {
+case cache.has(ctx.app.cache, "user:123:name") {
   True -> io.println("Cached")
   False -> io.println("Not cached")
 }
@@ -3897,10 +3881,10 @@ The cache stores strings, so to cache structured data you need to provide an enc
 
 ```gleam
 // Store JSON — uses the generated encoder/decoder
-cache.put_json(ctx.cache, "user:123", user, user.encoder(), 3600)
+cache.put_json(ctx.app.cache, "user:123", user, user.encoder(), 3600)
 
 // Retrieve JSON
-case cache.get_json(ctx.cache, "user:123", user.decoder()) {
+case cache.get_json(ctx.app.cache, "user:123", user.decoder()) {
   Ok(user) -> {} // use user
   Error(cache.NotFound) -> {} // cache miss
   Error(cache.SerializationError(_)) -> {} // invalid JSON
@@ -3939,14 +3923,14 @@ let cache_key = "user:" <> id <> ":name"
 
 // Remember a string value for 1 hour
 let name = {
-  use <- cache.remember(ctx.cache, cache_key, 3600)
-  user.find_or_fail(ctx.db, id).name
+  use <- cache.remember(ctx.app.cache, cache_key, 3600)
+  user.find_or_fail(ctx.app.db, id).name
 }
 
 // Remember forever (only cleared by forget or flush)
 let name = {
-  use <- cache.remember_forever(ctx.cache, cache_key)
-  user.find_or_fail(ctx.db, id).name
+  use <- cache.remember_forever(ctx.app.cache, cache_key)
+  user.find_or_fail(ctx.app.db, id).name
 }
 ```
 
@@ -3956,38 +3940,38 @@ Use `remember_json` for structured data — the compute callback goes last so yo
 // Remember a JSON object for 1 hour
 let user = {
   use <- cache.remember_json(
-    ctx.cache,
+    ctx.app.cache,
     "user:" <> id,
     3600,
     user.decoder(),
     user.encoder(),
   )
 
-  user.find_or_fail(ctx.db, id)
+  user.find_or_fail(ctx.app.db, id)
 }
 
 // Remember a JSON object forever
 let user = {
   use <- cache.remember_json_forever(
-    ctx.cache,
+    ctx.app.cache,
     "user:" <> id,
     user.decoder(),
     user.encoder(),
   )
 
-  user.find_or_fail(ctx.db, id)
+  user.find_or_fail(ctx.app.db, id)
 }
 
 // Handle errors yourself inside the callback
 let user = {
   use <- cache.remember_json(
-    ctx.cache,
+    ctx.app.cache,
     "user:" <> id,
     3600,
     user.decoder(),
     user.encoder(),
   )
-  case user.find(ctx.db, id) {
+  case user.find(ctx.app.db, id) {
     Ok(user) -> user
     Error(_) -> User(name: "Guest", email: "")
   }
@@ -4000,11 +3984,11 @@ For counters and rate limiting:
 
 ```gleam
 // Increment page view counter
-let assert Ok(views) = cache.increment(ctx.cache, "page:home:views", 1)
+let assert Ok(views) = cache.increment(ctx.app.cache, "page:home:views", 1)
 
 // Rate limiting example
 let rate_key = "rate:" <> user_id <> ":" <> current_minute()
-case cache.increment(ctx.cache, rate_key, 1) {
+case cache.increment(ctx.app.cache, rate_key, 1) {
   Ok(count) if count > 100 -> Error("Rate limit exceeded")
   Ok(_) -> Ok("Allowed")
   Error(_) -> Ok("Allowed") // fail open
@@ -4263,7 +4247,7 @@ All configuration lives in TOML files under `config/`. At boot, `config.load()` 
 ```gleam
 import glimr/config/config
 
-pub fn show(req: Request, ctx: Context) -> Response {
+pub fn show(ctx: Context(App)) -> Response {
   let app_name = config.get_string("app.name")
   let app_url = config.get_string("app.url")
   let session_lifetime = config.get_int("session.lifetime")
@@ -4319,46 +4303,48 @@ Access it with `config.get_string("mail.driver")`, `config.get_int("mail.port")`
 
 ## Context System
 
-The context system provides type-safe dependency injection. Define your context in `src/app/http/context/ctx.gleam`:
+The framework provides a `Context(app)` type that carries the HTTP request, response format, session, and your application state through the entire middleware and controller pipeline.
+
+The framework owns the outer `Context` — it manages the request, session, and response format automatically. You define only your application-specific state in `src/app/app.gleam`:
 
 ```gleam
 import glimr/cache/cache.{type CachePool}
 import glimr/db/db.{type DbPool}
-import glimr/session/session.{type Session}
 
-pub type Context {
-  Context(
+pub type App {
+  App(
     db: DbPool,
     cache: CachePool,
-    session: Session,
     // Add your own fields here
   )
 }
 ```
 
-Start everything in the provider (`src/app/providers/ctx_provider.gleam`):
+Initialize your app state in the provider (`src/app/providers/app_provider.gleam`):
 
 ```gleam
-import app/http/context/ctx.{type Context}
+import app/app
 import glimr/cache/file_cache
 import glimr_postgres/postgres
 
-pub fn register() -> Context {
+pub fn register() -> app.App {
   let db = postgres.start("main")
+  let _ = postgres.start_session(db)
 
-  ctx.Context(
+  app.App(
     db: db,
     cache: file_cache.start("main"),
-    session: postgres.start_session(db),
   )
 }
 ```
 
-Access context in controllers:
+Access everything through the unified context in controllers:
 
 ```gleam
-pub fn show(req: Request, ctx: Context) -> Response {
-  case user.find(ctx.db, user_id) {
+pub fn show(ctx: Context(App)) -> Response {
+  // Framework state: ctx.req, ctx.session, ctx.response_format
+  // App state: ctx.app.db, ctx.app.cache, etc.
+  case user.find(ctx.app.db, user_id) {
     Ok(user) -> // ...
     Error(_) -> response.not_found()
   }

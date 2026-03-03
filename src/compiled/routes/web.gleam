@@ -12,7 +12,7 @@ import app/http/controllers/welcome_controller
 import gleam/http.{Get}
 import glimr/response/response
 
-pub fn routes(path, method, _req, _ctx) {
+pub fn routes(path, method, _ctx) {
   case path {
     [] ->
       case method {

@@ -7,10 +7,12 @@
 ////
 
 import app/http/kernel
-import app/providers/ctx_provider
+import app/providers/app_provider
 import app/providers/route_provider
 import glimr/config/config
-import glimr/http/kernel.{type Request, type Response} as glimr_kernel
+import glimr/http/context
+import glimr/http/http.{type Request, type Response}
+import glimr/http/kernel as glimr_kernel
 import glimr/routing/router
 
 /// Initializes the HTTP application and returns the request
@@ -22,10 +24,16 @@ pub fn init() -> fn(Request) -> Response {
   glimr_kernel.configure_logger()
   config.load()
 
-  router.handle(
-    _,
-    ctx_provider.register(),
-    route_provider.register(),
-    kernel.handle,
-  )
+  // Run register for all providers
+  let app = app_provider.register()
+  let route_groups = route_provider.register()
+
+  // Run boot for providers that need it
+  app_provider.boot(app)
+
+  // Create context and handle routes
+  fn(req) {
+    let ctx = context.new(req, app)
+    router.handle(ctx, route_groups, kernel.handle)
+  }
 }

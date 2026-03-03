@@ -12,7 +12,7 @@
 ////
 
 import compiled/loom/welcome
-import glimr/http/kernel.{type Response}
+import glimr/http/http.{type Response}
 import glimr/response/response
 
 /// Welcome to Glimr ✨

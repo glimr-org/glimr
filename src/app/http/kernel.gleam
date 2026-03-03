@@ -9,23 +9,24 @@
 //// https://github.com/glimr-org/glimr?tab=readme-ov-file#middleware-groups
 ////
 
-import app/http/context/ctx.{type Context}
-import app/http/middleware/expects_html
-import app/http/middleware/expects_json
-import app/http/middleware/load_session
-import glimr/http/kernel.{type MiddlewareGroup, type Request, type Response}
+import app/app.{type App}
+import glimr/http/context.{type Context}
+import glimr/http/http.{type Response}
+import glimr/http/kernel.{type MiddlewareGroup}
 import glimr/http/middleware
+import glimr/http/middleware/expects_html
+import glimr/http/middleware/expects_json
 import glimr/http/middleware/handle_head
+import glimr/http/middleware/load_session
 import glimr/http/middleware/log_request
 import glimr/http/middleware/method_override
 import glimr/http/middleware/rescue_crashes
 import glimr/http/middleware/serve_static
 
 pub fn handle(
-  req: Request,
-  ctx: Context,
+  ctx: Context(App),
   middleware_group: MiddlewareGroup,
-  router: fn(Request, Context) -> Response,
+  router: fn(Context(App)) -> Response,
 ) -> Response {
   case middleware_group {
     kernel.Api -> {
@@ -38,10 +39,10 @@ pub fn handle(
         load_session.run,
         // ...
       ]
-      |> middleware.apply(req, ctx, router)
+      |> middleware.apply(ctx, router)
     }
     //
-    // Add your custom middleware groups here before 
+    // Add your custom middleware groups here before
     // the catch-all web group below.
     //
     kernel.Web | _ -> {
@@ -55,7 +56,7 @@ pub fn handle(
         load_session.run,
         // ...
       ]
-      |> middleware.apply(req, ctx, router)
+      |> middleware.apply(ctx, router)
     }
   }
 }
