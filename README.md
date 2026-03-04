@@ -65,9 +65,6 @@ If you'd like to stay updated on Glimr's development, Follow [@migueljarias](htt
   - [Third-Party Commands](#third-party-commands)
 - [Configuration](#configuration)
 - [Context System](#context-system)
-- [Service Providers](#service-providers)
-  - [Register & Boot](#register--boot)
-  - [App Provider](#app-provider)
 - [Development](#development)
 - [Learn More](#learn-more)
 - [Contributing](#contributing)
@@ -91,7 +88,6 @@ Glimr is a fully featured web framework built for Gleam. It provides a delightfu
 - **Context System** - Framework-defined `Context(app)` with embedded request, session, and app state
 - **Controller Pattern** - Organized request handlers with clear separation of concerns
 - **Configuration Management** - Environment-based configuration with `.env` support
-- **Provider Pattern** - Service providers for bootstrapping application services
 - **Automatic Migrations** - Schema-based migration generation with snapshot diffing
 - **SQL Queries** - Write raw SQL files with full editor LSP support, compiled to typed Gleam functions
 - **Connection Pooling** - Efficient database connection management for PostgreSQL and SQLite
@@ -161,11 +157,10 @@ Visit `http://localhost:8000` in your browser.
 │   │   │   ├── validators/             # Request body validation
 │   │   │   ├── rules/                  # Custom validation rules
 │   │   │   └── kernel.gleam            # HTTP middleware configuration
-│   │   └── providers/                  # Service providers
-│   │       ├── app_provider.gleam      # App state registration
-│   │       ├── route_provider.gleam    # Route group registration
 │   ├── bootstrap/
-│   │   ├── app.gleam                   # Application bootstrapping
+│   │   ├── bootstrap.gleam             # Application bootstrapping
+│   │   ├── app.gleam                   # App state and resource startup
+│   │   └── routes.gleam                # Route group registration
 │   ├── compiled/                       # Generated gleam files (loom, routes)
 │   ├── database/                       # Database schemas, models, and migrations
 │   │   └── main/                       # Connection name (one directory per connection)
@@ -536,15 +531,15 @@ Create the route file with this command:
 ./glimr make_route_file admin --direct
 ```
 
-2. Register the routes file in `src/app/providers/route_provider.gleam`:
+2. Register the routes file in `src/bootstrap/routes.gleam`:
 
 ```gleam
 import compiled/routes/admin
 import compiled/routes/api
 import compiled/routes/web
 
-pub fn register() -> List(RouteGroup(Context(App))) {
-  use name <- router.register()
+pub fn groups() -> List(RouteGroup(Context(App))) {
+  use name <- router.load()
 
   case name {
     "api" -> api.routes
@@ -638,7 +633,7 @@ pub fn routes(path, method, ctx) {
 }
 ```
 
-4. Update `route_provider.gleam` to import from your custom location if needed.
+4. Update `bootstrap/routes.gleam` to import from your custom location if needed.
 
 ## Controllers
 
@@ -1068,7 +1063,7 @@ expire_on_close = false
 
 ### Choosing a Driver
 
-Session drivers are initialized in your `app_provider.gleam`. Each driver shares the same session API — you only change the start call to switch backends. The `load_session` middleware in your kernel then hydrates a live session for each request automatically.
+Session drivers are initialized in `bootstrap/app.gleam`. Each driver shares the same session API — you only change the start call to switch backends. The `load_session` middleware in your kernel then hydrates a live session for each request automatically.
 
 #### PostgreSQL Driver
 
@@ -1088,23 +1083,19 @@ Generate the session table migration:
 ./glimr make_session_table --migrate
 ```
 
-Initialize the session store in `app_provider.gleam`:
+Create the session store in your bootstrap:
 
 ```gleam
-import app/app
-import glimr_redis/redis
-import glimr_postgres/postgres
-
-pub fn register() -> app.App {
+// bootstrap/app.gleam
+pub fn start() -> app.App {
   app.App(
-    db: postgres.start("main"),
+    db: postgres.start("main"), 
     cache: redis.start("main"),
   )
 }
 
-pub fn boot(app: app.App) -> Nil {
-  postgres.start_session(app.db)
-}
+// bootstrap/bootstrap.gleam (inside init)
+postgres.session_store(app.db) |> session.setup()
 ```
 
 #### SQLite Driver
@@ -1124,23 +1115,19 @@ Generate the session table migration:
 ./glimr make_session_table --migrate
 ```
 
-Initialize the session store in `app_provider.gleam`:
+Create the session store in your bootstrap:
 
 ```gleam
-import app/app
-import glimr_redis/redis
-import glimr_sqlite/sqlite
-
-pub fn register() -> app.App {
+// bootstrap/app.gleam
+pub fn start() -> app.App {
   app.App(
     db: sqlite.start("main"),
     cache: redis.start("main"),
   )
 }
 
-pub fn boot(app: app.App) -> Nil {
-  sqlite.start_session(app.db)
-}
+// bootstrap/bootstrap.gleam (inside init)
+sqlite.session_store(app.db) |> session.setup()
 ```
 
 #### Redis Driver
@@ -1151,70 +1138,57 @@ Stores sessions in Redis with automatic TTL-based expiration. No garbage collect
 gleam add glimr_redis
 ```
 
-Initialize the session store in `app_provider.gleam`:
+Create the session store in your bootstrap:
 
 ```gleam
-import app/app
-import glimr_redis/redis
-import glimr_postgres/postgres
-
-pub fn register() -> app.App {
+// bootstrap/app.gleam
+pub fn start() -> app.App {
   app.App(
     db: postgres.start("main"),
     cache: redis.start("main"),
   )
 }
 
-pub fn boot(app: app.App) -> Nil {
-  redis.start_session(app.cache)
-}
+// bootstrap/bootstrap.gleam (inside init)
+redis.session_store("main") |> session.setup()
 ```
 
 #### File Driver
 
 Stores sessions as files on disk using the file cache pool. No database required.
 
-Initialize the session store in `app_provider.gleam`:
+Create the session store in your bootstrap:
 
 ```gleam
-import app/app
-import glimr/cache/file_cache
-import glimr_postgres/postgres
-
-pub fn register() -> app.App {
+// bootstrap/app.gleam
+pub fn start() -> app.App {
   app.App(
     db: postgres.start("main"),
     cache: file_cache.start("main"),
   )
 }
 
-pub fn boot(app: app.App) -> Nil {
-  file_cache.start_session(app.cache)
-}
+// bootstrap/bootstrap.gleam (inside init)
+file_cache.session_store("main") |> session.setup()
 ```
 
 #### Cookie Driver
 
 Stores session data directly in a signed cookie. No server-side persistence needed. Best for small payloads under ~4KB.
 
-Initialize the session store in your `app_provider.gleam`:
+Create the session store in your bootstrap:
 
 ```gleam
-import app/app
-import glimr/session/session
-import glimr_redis/redis
-import glimr_postgres/postgres
-
-pub fn register() -> app.App {
+// bootstrap/app.gleam
+pub fn start() -> app.App {
   app.App(
     db: postgres.start("main"),
     cache: redis.start("main"),
   )
 }
 
-pub fn boot(_app: app.App) -> Nil {
-  session.start_cookie()
-}
+// bootstrap/bootstrap.gleam (inside init)
+session.cookie_store() |> session.setup()
 ```
 
 ### Kernel Middleware
@@ -2824,13 +2798,13 @@ pub type App {
 }
 ```
 
-Start the pool in your `app_provider.gleam`:
+Start the pool in `bootstrap/app.gleam`:
 
 ```gleam
 import app/app
 import glimr_sqlite/sqlite
 
-pub fn register() -> app.App {
+pub fn start() -> app.App {
   app.App(
     db: sqlite.start("main"),
     // ...
@@ -2938,13 +2912,13 @@ pub type App {
 }
 ```
 
-Start the pool in your `app_provider.gleam`:
+Start the pool in `bootstrap/app.gleam`:
 
 ```gleam
 import app/app
 import glimr_postgres/postgres
 
-pub fn register() -> app.App {
+pub fn start() -> app.App {
   app.App(
     db: postgres.start("main"),
     // ...
@@ -2998,14 +2972,14 @@ pub type App {
 }
 ```
 
-Start them in your `app_provider.gleam`:
+Start them in `bootstrap/app.gleam`:
 
 ```gleam
 import app/app
 import glimr_postgres/postgres
 import glimr_sqlite/sqlite
 
-pub fn register() -> app.App {
+pub fn start() -> app.App {
   app.App(
     db: postgres.start("main"),
     db_analytics: sqlite.start("analytics"),
@@ -3438,7 +3412,7 @@ pub fn list_or_fail_wc(conn) -> List(User)
 
 #### Connection Pooling
 
-Glimr manages a pool of database connections to efficiently handle concurrent requests. The pool is initialized in your app state in `app_provider.gleam`.
+Glimr manages a pool of database connections to efficiently handle concurrent requests. The pool is initialized in your app state in `bootstrap/app.gleam`.
 
 You can specify the pool size by setting the `DB_POOL_SIZE` env variable, and the config value for your connection in `config/database.toml`. It defaults to 15.
 
@@ -3604,12 +3578,12 @@ Set up the store in `config/cache.toml`:
   path = "priv/storage/framework/cache/data"
 ```
 
-Start the cache in your `app_provider.gleam`:
+Start the cache in `bootstrap/app.gleam`:
 
 ```gleam
 import glimr/cache/file_cache
 
-pub fn register() -> app.App {
+pub fn start() -> app.App {
   app.App(
     cache: file_cache.start("main"),
     // ...
@@ -3659,12 +3633,12 @@ REDIS_URL=redis://localhost:6379
 REDIS_POOL_SIZE=10
 ```
 
-Start the cache in your `app_provider.gleam`:
+Start the cache in `bootstrap/app.gleam`:
 
 ```gleam
 import glimr_redis/redis
 
-pub fn register() -> app.App {
+pub fn start() -> app.App {
   app.App(
     cache: redis.start("main"),
     // ...
@@ -3717,13 +3691,13 @@ Set up the store in `config/cache.toml`:
   table = "cache"
 ```
 
-Start the cache in your `app_provider.gleam`:
+Start the cache in `bootstrap/app.gleam`:
 
 ```gleam
 import app/app
 import glimr_sqlite/sqlite
 
-pub fn register() -> app.App {
+pub fn start() -> app.App {
   let db = sqlite.start("main")
 
   app.App(
@@ -3779,13 +3753,13 @@ Set up the store in `config/cache.toml`:
   table = "cache"
 ```
 
-Start the cache in your `app_provider.gleam`:
+Start the cache in `bootstrap/app.gleam`:
 
 ```gleam
 import app/app
 import glimr_postgres/postgres
 
-pub fn register() -> app.App {
+pub fn start() -> app.App {
   let db = postgres.start("main")
 
   app.App(
@@ -4349,62 +4323,6 @@ pub fn show(ctx: Context(App)) -> Response {
   }
 }
 ```
-
-## Service Providers
-
-Service providers handle application bootstrapping. They live in `src/app/providers/` and follow a two-phase lifecycle: **register** and **boot**.
-
-### Register & Boot
-
-Providers have two methods that run in a specific order during startup:
-
-- **`register()`** — Creates and returns resources (database pools, cache pools, app state). This is where you bind services. Do not use other services here, since they may not be registered yet.
-- **`boot()`** — Runs after all providers have registered. This is where you can safely use registered services to perform setup that depends on them.
-
-The bootstrap module (`src/bootstrap/app.gleam`) enforces this ordering:
-
-```gleam
-pub fn init() -> fn(Request) -> Response {
-  glimr_kernel.configure_logger()
-  config.load()
-
-  // Phase 1: Register all providers
-  let app = app_provider.register()
-  let route_groups = route_provider.register()
-
-  // Phase 2: Boot providers that need it
-  app_provider.boot(app)
-
-  // Return a per-request handler that captures the registered state
-  fn(req) {
-    let ctx = context.new(req, app)
-    router.handle(ctx, route_groups, kernel.handle)
-  }
-}
-```
-
-### App Provider
-
-The app provider (`src/app/providers/app_provider.gleam`) creates your application state:
-
-```gleam
-import app/app
-import glimr/cache/file_cache
-import glimr_postgres/postgres
-
-pub fn register() -> app.App {
-  app.App(
-    db: postgres.start("main"),
-    cache: file_cache.start("main"),
-  )
-}
-
-pub fn boot(app: app.App) -> Nil {
-  postgres.start_session(app.db)
-}
-```
-
-Pool creation goes in `register()` because it's just binding resources. Session store initialization goes in `boot()` because it depends on an already-registered database pool — `start_session` caches the store globally so the `load_session` middleware can access it on every request without needing it threaded through function arguments.
 
 ## Development
 

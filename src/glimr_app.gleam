@@ -13,7 +13,7 @@
 //// https://github.com/glimr-org/glimr?tab=readme-ov-file#loom-template-engine
 ////
 
-import bootstrap/app
+import bootstrap/bootstrap
 import dot_env/env
 import gleam/erlang/process
 import glimr/config/config
@@ -26,7 +26,7 @@ import mist
 ///
 pub fn main() -> Nil {
   let assert Ok(_) =
-    glimr_mist.handler(app.init(), config.get_string("app.key"))
+    glimr_mist.handler(bootstrap.init(), config.get_string("app.key"))
     |> mist.new()
     |> mist.port(get_port())
     |> mist.start()

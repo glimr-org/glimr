@@ -1,9 +1,10 @@
 # Session Config
 #
 # Session configuration for your application. The session
-# driver is chosen in your ctx_provider via code (e.g.
-# session.start_cookie(), postgres.start_session(pool), etc.)
-# and these settings apply to whichever driver you use.
+# driver is chosen in your bootstrap via code (e.g.
+# session.cookie_store(), postgres.session_store(pool), etc.)
+# piped into session.setup(). These settings apply to
+# whichever driver you use.
 
 # The cookie name used to store the session ID.
 cookie = "glimr_session"

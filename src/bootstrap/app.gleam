@@ -1,39 +1,19 @@
-//// Application Bootstrap
+//// Application Start
 ////
-//// Entry point for the HTTP application. Initializes the
-//// environment, configures the logger, and returns a request
-//// handler function that processes incoming HTTP requests
-//// through the router.
+//// Creates the App instance with all shared resources
+//// (database pools, caches). Pure — no side effects.
 ////
 
-import app/http/kernel
-import app/providers/app_provider
-import app/providers/route_provider
-import glimr/config/config
-import glimr/http/context
-import glimr/http/http.{type Request, type Response}
-import glimr/http/kernel as glimr_kernel
-import glimr/routing/router
+import app/app
+import glimr/cache/file_cache
+import glimr_postgres/postgres
 
-/// Initializes the HTTP application and returns the request
-/// handler. Configures the logger, loads environment variables
-/// and config, registers database drivers, and sets up the
-/// router with your context, routes, and middleware kernel.
+/// Creates the App with its database pool and cache.
 ///
-pub fn init() -> fn(Request) -> Response {
-  glimr_kernel.configure_logger()
-  config.load()
-
-  // Register all providers
-  let app = app_provider.register()
-  let route_groups = route_provider.register()
-
-  // Boot providers that need it
-  app_provider.boot(app)
-
-  // Create context and handle routing
-  fn(req) {
-    let ctx = context.new(req, app)
-    router.handle(ctx, route_groups, kernel.handle)
-  }
+pub fn start() -> app.App {
+  app.App(
+    db: postgres.start("main"),
+    cache: file_cache.start("main"),
+    // ...
+  )
 }
