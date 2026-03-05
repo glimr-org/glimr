@@ -428,14 +428,15 @@ pub fn reports(ctx: Context(App)) -> Response {
 
 ### Validators
 
-Attach form validators to routes using `@validator` and easily get validated and typed form data in your controller functions:
+Attach form validators to routes using the `use` syntax for validated and typed form data in your controller functions:
 
 ```gleam
-import app/http/validators/user_store.{type Data}
+import app/http/validators/user_store
 
 /// @post "/users"
-/// @validator "user_store"
-pub fn store(validated: Data) -> Response {
+pub fn store(ctx: Context(App)) -> Response {
+  use validated <- user_store.validate(ctx)
+
   // validated contains the validated form data
   // Validation errors automatically return 422
 
@@ -445,7 +446,7 @@ pub fn store(validated: Data) -> Response {
 }
 ```
 
-Validator names expand to `app/http/validators/{name}`. See [Form Validation](#form-validation) for details on creating validators.
+See [Form Validation](#form-validation) for details on creating validators.
 
 ### Route Groups
 
@@ -637,7 +638,7 @@ This creates `user_controller.gleam`. Define routes using annotations above your
 // src/app/http/controllers/user_controller.gleam
 import glimr/response/response
 import glimr/response/redirect
-import app/http/validators/user_store.{type Data}
+import app/http/validators/user_store
 import compiled/loom/user_show
 
 /// @get "/users/:user
@@ -648,8 +649,8 @@ pub fn show(ctx: Context(App), user: String) -> Response {
 }
 
 /// @post "/users"
-/// @validator "user_store"
-pub fn store(ctx: Context(App), validated: Data) -> Response {
+pub fn store(ctx: Context(App)) -> Response {
+  use validated <- user_store.validate(ctx)
   // Handle POST request...
 
   redirect.back(ctx)
@@ -704,12 +705,12 @@ Use actions in controllers with `case` for error handling:
 ```gleam
 // src/app/http/controllers/contact_controller.gleam
 import app/http/actions/create_submission
-import app/http/validators/contact_store.{type Data}
+import app/http/validators/contact_store
 import glimr/db/db.{NotFound}
 
 /// @put "/submissions/:submission"
-/// @validator "contact_store"
-pub fn update(ctx: Context(App), submission: String, validated: Data) -> Response {
+pub fn update(ctx: Context(App), submission: String) -> Response {
+  use validated <- contact_store.validate(ctx)
   let assert Ok(submission_id) = int.parse(submission_id)
 
   case update_submission.run(ctx.app.db, submission_id, validated) {
@@ -728,11 +729,12 @@ Actions can be composed using `result.try` for sequential operations:
 
 ```gleam
 import gleam/result
-import app/http/validators/user_store.{type Data}
+import app/http/validators/user_store
 
 /// @post "/users"
-/// @validator "user_store"
-pub fn store(ctx: Context(App), validated: Data) -> Response {
+pub fn store(ctx: Context(App)) -> Response {
+  use validated <- user_store.validate(ctx)
+
   case {
     use user <- result.try(create_user.run(ctx.app.db, validated))
     use _ <- result.try(send_welcome_email.run(ctx.app.notif, user))
@@ -1410,46 +1412,16 @@ When validation fails, Glimr automatically handles errors based on your route's 
 
 ### Using Validation in Controllers
 
-Use the `@validator` annotation to automatically validate form data before it reaches your handler:
+Apply validation in your handler using the `use` syntax. If validation fails, errors are handled automatically (flash + redirect for HTML, JSON for API):
 
 ```gleam
 // app/http/controllers/user_controller.gleam
 import app/app.{type App}
-import app/http/validators/user_store.{type Data}
+import app/http/validators/user_store
 import app/repositories/user_repository
 import glimr/http/context.{type Context}
 import glimr/http/http.{type Response}
 import glimr/response/redirect
-
-/// @post "/users"
-/// @validator "user_store"
-pub fn store(ctx: Context(App), validated: Data) -> Response {
-  let assert Ok(user) = user_repository.create(
-    pool: ctx.app.db,
-    name: validated.name,
-    email: validated.email,
-    avatar: validated.avatar.path,
-  )
-
-  session.flash(ctx.session, "message", "User created successfully!")
-  redirect.back(ctx)
-}
-```
-
-The `@validator` annotation:
-- Uses the bare validator name (e.g., `"user_store"` resolves to `app/http/validators/user_store`)
-- Automatically runs validation before your handler
-- Adds the validator's `Data` type as a parameter to your function
-- If validation fails, errors are handled automatically (flash + redirect for HTML, JSON for API)
-
-#### Applying Validation Programmatically
-
-You can also apply validation programmatically using the `use` syntax if you prefer to not use annotations:
-
-```gleam
-// app/http/controllers/user_controller.gleam
-import app/http/validators/user_store
-import app/repositories/user_repository
 
 /// @post "/users"
 pub fn store(ctx: Context(App)) -> Response {
@@ -1466,8 +1438,6 @@ pub fn store(ctx: Context(App)) -> Response {
   redirect.back(ctx)
 }
 ```
-
-This approach is useful when you need conditional validation or want more control over the validation flow.
 
 ### Available Validation Rules
 
