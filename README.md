@@ -257,7 +257,6 @@ Routes are defined using annotations in doc comments above your controller funct
 import compiled/loom/welcome
 
 /// @get "/welcome"
-///
 pub fn show() -> Response {
   response.html(welcome.render(), 200)
 }
@@ -275,7 +274,6 @@ import glimr/http/http.{type Response}
 import compiled/loom/welcome
 
 /// @get "/welcome"
-///
 pub fn show(ctx: Context(App)) -> Response {
   // Access the request via ctx.req
   // Access app state via ctx.app
@@ -341,7 +339,6 @@ Use `:param` syntax in your route path to capture URL segments as parameters:
 
 ```gleam
 /// @get "/posts/:post_id/comments/:comment_id"
-///
 pub fn show(post_id: String, comment_id: String) -> Response {
   // Access post_id and comment_id directly as function parameters
 }
@@ -355,14 +352,12 @@ Add redirects to routes using `@redirect` (303 temporary) or `@redirect_permanen
 /// @redirect "/old-contact"
 /// @redirect "/contact-us"
 /// @get "/contact"
-///
 pub fn show() -> Response {
   // Both /old-contact and /contact-us redirect here
 }
 
 /// @redirect_permanent "/legacy-api"
 /// @get "/api/v2"
-///
 pub fn index() -> Response {
   // /legacy-api permanently redirects here
 }
@@ -370,69 +365,64 @@ pub fn index() -> Response {
 
 ### Route Middleware
 
-Apply middleware to individual routes using `@middleware`:
+Apply middleware to individual routes using `middleware.apply` with `use`:
 
 ```gleam
-/// @get "/dashboard"
-/// @middleware "auth"
-///
-pub fn show() -> Response {
-  // Protected by auth middleware
-}
+import app/http/middleware/auth
+import app/http/middleware/rate_limit
+import glimr/http/middleware
 
-/// @post "/admin/users"
-/// @middleware "auth"
-/// @middleware "admin"
-///
-pub fn store() -> Response {
-  // Protected by both auth and admin middleware
+/// @get "/dashboard"
+pub fn show(ctx: Context(App)) -> Response {
+  use ctx <- middleware.apply([auth.run, rate_limit.run], ctx)
+  // Protected by auth and rate_limit middleware
 }
 ```
 
-Middleware names are bare names that expand to `app/http/middleware/{name}`. So `@middleware "auth"` uses `app/http/middleware/auth.gleam`.
+### Controller Middleware
 
-### Group Middleware
-
-Apply middleware to all routes in a controller using `// @group_middleware` at the top of the file (note: regular comment, not doc comment):
+Apply middleware to all routes in a controller by defining a `middleware()` function. The route compiler detects this function and wraps every handler in the controller automatically:
 
 ```gleam
 // src/app/http/controllers/admin_controller.gleam
-import app/app.{type App}
-import glimr/http/context.{type Context}
-import glimr/http/http.{type Response}
+import app/http/middleware/auth
+import app/http/middleware/admin
 
-// @group_middleware "auth"
-// @group_middleware "admin"
+pub fn middleware() {
+  [auth.run, admin.run]
+}
 
 /// @get "/admin/dashboard"
-///
-pub fn dashboard() -> Response {
+pub fn dashboard(ctx: Context(App)) -> Response {
   // Protected by auth and admin middleware
 }
 
 /// @get "/admin/settings"
-///
-pub fn settings() -> Response {
+pub fn settings(ctx: Context(App)) -> Response {
   // Also protected by auth and admin middleware
 }
 ```
 
-You can combine group middleware with route-specific middleware:
+You can combine controller middleware with route-specific middleware:
 
 ```gleam
-// @group_middleware "auth"
+import app/http/middleware/auth
+import app/http/middleware/logging
+import glimr/http/middleware
+
+pub fn middleware() {
+  [auth.run]
+}
 
 /// @get "/dashboard"
-///
-pub fn dashboard() -> Response {
-  // Only auth middleware
+pub fn dashboard(ctx: Context(App)) -> Response {
+  // Only auth middleware (from controller)
 }
 
 /// @get "/reports"
-/// @middleware "logging"
-///
-pub fn reports() -> Response {
-  // Both auth (from group) and logging middleware
+pub fn reports(ctx: Context(App)) -> Response {
+  use ctx <- middleware.apply([logging.run], ctx)
+  // Auth (from controller) then logging (per-route)
 }
 ```
 
@@ -445,7 +435,6 @@ import app/http/validators/user_store.{type Data}
 
 /// @post "/users"
 /// @validator "user_store"
-///
 pub fn store(validated: Data) -> Response {
   // validated contains the validated form data
   // Validation errors automatically return 422
@@ -490,7 +479,6 @@ By default, routes with the `/api` prefix:
 // src/app/http/controllers/api/user_controller.gleam
 
 /// @get "/api/users"
-///
 pub fn index() -> Response {
   // Returns JSON, errors are JSON formatted
 }
@@ -653,7 +641,6 @@ import app/http/validators/user_store.{type Data}
 import compiled/loom/user_show
 
 /// @get "/users/:user
-///
 pub fn show(ctx: Context(App), user: String) -> Response {
   // get the user...
 
@@ -662,7 +649,6 @@ pub fn show(ctx: Context(App), user: String) -> Response {
 
 /// @post "/users"
 /// @validator "user_store"
-///
 pub fn store(ctx: Context(App), validated: Data) -> Response {
   // Handle POST request...
 
@@ -723,7 +709,6 @@ import glimr/db/db.{NotFound}
 
 /// @put "/submissions/:submission"
 /// @validator "contact_store"
-///
 pub fn update(ctx: Context(App), submission: String, validated: Data) -> Response {
   let assert Ok(submission_id) = int.parse(submission_id)
 
@@ -747,7 +732,6 @@ import app/http/validators/user_store.{type Data}
 
 /// @post "/users"
 /// @validator "user_store"
-///
 pub fn store(ctx: Context(App), validated: Data) -> Response {
   case {
     use user <- result.try(create_user.run(ctx.app.db, validated))
@@ -794,53 +778,36 @@ pub fn run(ctx: Context(App), next: Next(Context(App))) -> Response {
 
 ### Applying Middleware to a Route
 
-Apply middleware to individual routes using the `@middleware` annotation:
+Apply middleware to individual routes using `middleware.apply` with `use`:
 
 ```gleam
 // src/app/http/controllers/dashboard_controller.gleam
+import app/http/middleware/auth
+import glimr/http/middleware
 
 /// @get "/dashboard"
-/// @middleware "auth"
-///
-pub fn show() -> Response {
+pub fn show(ctx: Context(App)) -> Response {
+  use ctx <- middleware.apply([auth.run], ctx)
   // Protected by auth middleware
 }
 ```
 
-Middleware names are bare names that expand to `app/http/middleware/{name}`.
-
 ### Applying Middleware to Entire Controllers
 
-Apply middleware to all routes in a controller using `// @group_middleware` at the top of the file:
+Apply middleware to all routes in a controller by defining a `middleware()` function:
 
 ```gleam
 // src/app/http/controllers/admin_controller.gleam
+import app/http/middleware/auth
+import app/http/middleware/admin
 
-// @group_middleware "auth"
-// @group_middleware "admin"
+pub fn middleware() {
+  [auth.run, admin.run]
+}
 
 /// @get "/admin/dashboard"
-///
-pub fn dashboard() -> Response {
+pub fn dashboard(ctx: Context(App)) -> Response {
   // Protected by auth and admin middleware
-}
-```
-
-### Applying Middleware Programmatically
-
-You can also apply middleware directly in controller functions if you prefer to not use annotations:
-
-```gleam
-import app/http/middleware/logger.{run as logger}
-import app/http/middleware/auth.{run as auth}
-import glimr/http/middleware
-...
-
-pub fn show(ctx: Context(App)) -> Response {
-  use ctx <- middleware.apply([auth, logger], ctx)
-
-  // Continue with controller logic using the modified
-  // ctx from your middleware stack
 }
 ```
 
@@ -865,10 +832,12 @@ pub fn run(ctx, next) {
 Then in your controller:
 
 ```gleam
+import app/http/middleware/auth
+import glimr/http/middleware
+
 /// @get "/dashboard"
-/// @middleware "auth"
-///
 pub fn dashboard(ctx: Context(App)) -> Response {
+  use ctx <- middleware.apply([auth.run], ctx)
   // Safe to assert because auth middleware guarantees this
   let assert Some(user) = ctx.app.user
 
@@ -1234,7 +1203,6 @@ import glimr/session/session
 import glimr/response/redirect
 
 /// @post "/profile"
-///
 pub fn update(ctx: Context(App)) -> Response {
   // Store a value
   session.put(ctx.session, "user_id", "123")
@@ -1271,7 +1239,6 @@ import glimr/http/context.{type Context}
 import glimr/session/session
 
 /// @post "/login"
-///
 pub fn login(ctx: Context(App)) -> Response {
   // Set flash messages for the next request
   session.flash(ctx.session, "success", "Welcome back!")
@@ -1280,7 +1247,6 @@ pub fn login(ctx: Context(App)) -> Response {
 }
 
 /// @get "/dashboard"
-///
 pub fn dashboard(ctx: Context(App)) -> Response {
   response.html(dashboard.render(ctx), 200)
 }
@@ -1308,7 +1274,6 @@ And then in your loom file
 import glimr/session/session
 
 /// @post "/logout"
-///
 pub fn logout(ctx: Context(App)) -> Response {
   // Destroy all session data and issue a new session ID
   session.invalidate(ctx.session)
@@ -1317,7 +1282,6 @@ pub fn logout(ctx: Context(App)) -> Response {
 }
 
 /// @post "/login"
-///
 pub fn login(ctx: Context(App)) -> Response {
   // After authentication, regenerate the session ID to prevent
   // session fixation attacks. Keeps existing data, new ID only.
@@ -1459,7 +1423,6 @@ import glimr/response/redirect
 
 /// @post "/users"
 /// @validator "user_store"
-///
 pub fn store(ctx: Context(App), validated: Data) -> Response {
   let assert Ok(user) = user_repository.create(
     pool: ctx.app.db,
@@ -1489,7 +1452,6 @@ import app/http/validators/user_store
 import app/repositories/user_repository
 
 /// @post "/users"
-///
 pub fn store(ctx: Context(App)) -> Response {
   use validated <- user_store.validate(ctx)
 
@@ -1799,7 +1761,6 @@ import compiled/loom/home
 import glimr/response/response
 
 /// @get "/"
-///
 pub fn show() {
   response.html(home.render(), 200)
 }
@@ -1822,7 +1783,6 @@ import compiled/loom/counter
 import glimr/response/response
 
 /// @get "/counter"
-///
 pub fn show() {
   response.html(counter.render(count: 0), 200)
 }
@@ -2090,7 +2050,6 @@ import compiled/loom/home
 import glimr/response/response
 
 /// @get "/"
-///
 pub fn show() {
   response.html(
     home.render(name: "John"),
