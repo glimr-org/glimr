@@ -65,7 +65,6 @@ If you'd like to stay updated on Glimr's development, Follow [@migueljarias](htt
   - [Third-Party Commands](#third-party-commands)
 - [Configuration](#configuration)
 - [Context System](#context-system)
-- [Development](#development)
 - [Learn More](#learn-more)
 - [Contributing](#contributing)
 - [License](#license)
@@ -1383,33 +1382,6 @@ fn data(data: FormData) -> Data {
 }
 ```
 
-### Validation Error Handling
-
-When validation fails, Glimr automatically handles errors based on your route's response format (set by the `expects_html` or `expects_json` middleware in your kernel):
-
-**HTML routes** — flashes the first error for each field into the session as `errors.<field_name>` and redirects back. Your templates can then display these errors next to the relevant inputs:
-
-```html
-@import(glimr/http/context)
-@import(glimr/session/session)
-@import(app/app.{type App})
-@props(ctx: context.Context(App))
-
-<input type="text" name="email" />
-<span class="error">{{ session.get_flash(ctx.session, "errors.email") }}</span>
-```
-
-**API routes** — returns a `422 Unprocessable Entity` response with a structured JSON body:
-
-```json
-{
-  "errors": {
-    "email": ["Email is required", "Email must be a valid email address"],
-    "name": ["Name is required"]
-  }
-}
-```
-
 ### Using Validation in Controllers
 
 Apply validation in your handler using the `use` syntax. If validation fails, errors are handled automatically (flash + redirect for HTML, JSON for API):
@@ -1634,6 +1606,37 @@ fn rules() {
 - Fourth argument is the context
 - Return `Ok(Nil)` if validation passes
 - Return `Error(message)` with an error message if validation fails
+
+### Validation Error Handling
+
+When validation fails, Glimr automatically handles errors based on your route's response format (set by the `expects_html` or `expects_json` middleware in your kernel):
+
+**HTML routes** — flashes the first error for each field into the session as `errors.<field_name>` and redirects back. Your templates can then display these errors next to the relevant inputs:
+
+```html
+@import(glimr/http/context)
+@import(glimr/session/session)
+@import(app/app.{type App})
+
+@props(ctx: context.Context(App))
+
+<input type="text" name="email" />
+
+<span class="error" l-if="session.has_flash(ctx.session, 'errors.email')">
+  {{ session.get_flash(ctx.session, "errors.email") }}
+</span>
+```
+
+**API routes** — returns a `422 Unprocessable Entity` response with a structured JSON body:
+
+```json
+{
+  "errors": {
+    "email": ["Email is required", "Email must be a valid email address"],
+    "name": ["Name is required"]
+  }
+}
+```
 
 ## Views & Responses
 
@@ -4340,20 +4343,6 @@ pub fn show(ctx: Context(App)) -> Response {
     Error(_) -> response.not_found()
   }
 }
-```
-
-## Development
-
-### Running Tests
-
-```sh
-gleam test
-```
-
-### Building for Production
-
-```sh
-gleam build
 ```
 
 ## Learn More
