@@ -39,6 +39,12 @@ If you'd like to stay updated on Glimr's development, Follow [@migueljarias](htt
   - [Session API](#session-api)
   - [Flash Messages](#flash-messages)
   - [Session Invalidation & Regeneration](#session-invalidation--regeneration)
+- [Authentication](#authentication)
+  - [Generating Auth Scaffolding](#generating-auth-scaffolding)
+  - [Scoped Mode](#scoped-mode)
+  - [Generated Files](#generated-files)
+  - [Auth & Guest Middleware](#auth--guest-middleware)
+  - [Auth Functions](#auth-functions)
 - [Form Validation](#form-validation)
 - [Views & Responses](#views--responses)
 - [Error Pages](#error-pages)
@@ -1293,6 +1299,100 @@ pub fn login(ctx: Context(App)) -> Response {
   redirect.to("/dashboard")
 }
 ```
+
+## Authentication
+
+Glimr provides a `make_auth` command that scaffolds everything needed for model-based authentication — the database model, middleware, controllers, and context wiring.
+
+### Generating Auth Scaffolding
+
+```bash
+./glimr make_auth user
+```
+
+This generates:
+
+- **Model** — schema with `email` and `hashed_password` columns, plus CRUD queries in `src/database/{connection}/models/user/`
+- **Migration** — a migration for the users table
+- **Load middleware** — `src/app/http/middleware/load_user.gleam` — resolves the current user from the session on every request
+- **Auth middleware** — `src/app/http/middleware/auth.gleam` — redirects unauthenticated visitors to `/login`
+- **Guest middleware** — `src/app/http/middleware/guest.gleam` — redirects authenticated users away from login/register pages
+- **Login controller** — `src/app/http/controllers/auth/login_controller.gleam`
+- **Logout controller** — `src/app/http/controllers/auth/logout_controller.gleam`
+- **Register controller** — `src/app/http/controllers/auth/register_controller.gleam`
+- **Context patches** — adds a `user: Option(user.User)` field to your `App` type, initializes it in the bootstrap module, and registers the load middleware in the kernel
+
+Add `-m` to run migrations immediately:
+
+```bash
+./glimr make_auth user -m
+```
+
+If you run `make_auth` again for a different model without `--scoped`, it will warn you that unscoped auth already exists and suggest using scoped mode instead.
+
+### Scoped Mode
+
+When your application needs multiple authenticatable models (e.g. users and customers), use `--scoped` for additional models:
+
+```bash
+./glimr make_auth customer --scoped
+```
+
+Scoped mode namespaces middleware and controllers to avoid conflicts:
+
+| File | Unscoped (`make_auth user`) | Scoped (`make_auth customer --scoped`) |
+|------|---------------------------|----------------------------------------|
+| Auth middleware | `middleware/auth.gleam` | `middleware/auth_customer.gleam` |
+| Guest middleware | `middleware/guest.gleam` | `middleware/guest_customer.gleam` |
+| Login controller | `controllers/auth/login_controller.gleam` | `controllers/auth/customer_login_controller.gleam` |
+| Routes | `/login`, `/register`, `/logout` | `/customer/login`, `/customer/register`, `/customer/logout` |
+
+The load middleware (`middleware/load_{model}.gleam`), model, and context patches are always model-specific regardless of mode.
+
+### Generated Files
+
+The generated controllers are empty stubs with route annotations and `wisp.ok()` responses. Fill them in with your authentication logic:
+
+```gleam
+// src/app/http/controllers/auth/login_controller.gleam
+import glimr/http/http.{type Response}
+import glimr/response/response
+
+/// @get "/login"
+pub fn show() -> Response {
+  response.empty(200)
+}
+
+/// @post "/login"
+pub fn store() -> Response {
+  response.empty(200)
+}
+```
+
+### Auth & Guest Middleware
+
+The **auth middleware** protects routes that require authentication. It checks `ctx.app.user` and redirects to the login page if the user is not authenticated:
+
+```gleam
+// Apply to protected routes
+/// @middleware auth
+```
+
+The **guest middleware** does the opposite — it redirects authenticated users away from pages like login and registration:
+
+```gleam
+// Apply to login/register routes
+/// @middleware guest
+```
+
+### Auth Functions
+
+The `glimr_auth` package provides helper functions for authentication:
+
+- `auth.login(session, model_name, id)` — stores the user ID in the session
+- `auth.logout(session, model_name)` — removes the user ID from the session
+- `hash.make(password)` — hashes a password with bcrypt
+- `hash.verify(password, hash)` — verifies a password against a hash
 
 ## Form Validation
 
