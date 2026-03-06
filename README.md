@@ -770,7 +770,7 @@ import glimr/http/context.{type Context}
 import glimr/http/http.{type Response}
 import glimr/http/kernel.{type Next}
 
-pub fn run(ctx: Context(App), next: Next(Context(App))) -> Response {
+pub fn run(ctx: Context(App), next: Next(App)) -> Response {
   io.println("Request received")
 
   // Pass context to next middleware/handler
@@ -1469,6 +1469,10 @@ pub fn store(ctx: Context(App)) -> Response {
 - **Digits(Int)** — Field must have exactly n digits
 - **MinDigits(Int)** — Field must have at least n digits
 - **MaxDigits(Int)** — Field must have at most n digits
+
+**Database Rules:**
+- **Exists(DbPool, String)** — Field value must exist in the given database table (e.g., `Exists(ctx.app.db, "users")`)
+- **Unique(DbPool, String)** — Field value must not already exist in the given database table (e.g., `Unique(ctx.app.db, "users")`)
 
 **File Upload Rules:**
 - **FileRequired** — File field must have a file uploaded
@@ -3401,6 +3405,91 @@ pub fn show(ctx: Context(App), id: String) -> Response {
   }
 }
 ```
+
+#### Inline Queries
+
+Sometimes you need a quick one-off query without creating a `.sql` file and regenerating. The `db` module provides `query_one`, `query_all`, and `exec` for this:
+
+**Fetching a single row with `db.query_one`:**
+
+```gleam
+import gleam/dynamic/decode
+import glimr/db/db
+
+pub fn count_active_users(ctx: Context(App)) -> Result(Int, db.DbError) {
+  db.query_one(
+    ctx.app.db,
+    "SELECT COUNT(*) FROM users WHERE is_active = $1",
+    [db.bool(True)],
+    decode.at([0], decode.int),
+  )
+}
+```
+
+`query_one` returns `Ok(row)` for exactly one row, `Error(NotFound)` for zero rows, or `Error(QueryError(...))` if multiple rows are returned.
+
+**Fetching multiple rows with `db.query_all`:**
+
+```gleam
+import gleam/dynamic/decode
+import glimr/db/db
+
+pub fn admin_emails(ctx: Context(App)) -> Result(List(#(String, Int)), db.DbError) {
+  db.query_all(
+    ctx.app.db,
+    "SELECT email, created_at FROM users WHERE role = $1",
+    [db.string("admin")],
+    {
+      use email <- decode.field(0, decode.string)
+      use created_at <- decode.field(1, decode.int)
+      decode.success(#(email, created_at))
+    },
+  )
+}
+```
+
+**Writing data with `db.exec`:**
+
+```gleam
+import glimr/db/db
+
+pub fn deactivate_old_users(ctx: Context(App), cutoff: Int) -> Result(Int, db.DbError) {
+  db.exec(
+    ctx.app.db,
+    "UPDATE users SET is_active = $1 WHERE last_login_at < $2",
+    [db.bool(False), db.int(cutoff)],
+  )
+  // Returns Ok(row_count) — the number of rows affected
+}
+```
+
+**INSERT with RETURNING using `db.query_one`:**
+
+```gleam
+pub fn create_token(ctx: Context(App), user_id: Int) -> Result(String, db.DbError) {
+  db.query_one(
+    ctx.app.db,
+    "INSERT INTO tokens (user_id) VALUES ($1) RETURNING token",
+    [db.int(user_id)],
+    decode.at([0], decode.string),
+  )
+}
+```
+
+Inside transactions, use the `_wc` (with-connection) variants — `db.query_one_wc`, `db.query_all_wc` — which accept a `Connection` instead of a pool. The lower-level `db.query` and `db.query_with` are still available when you need access to the full `QueryResult(count, rows)`.
+
+**Available parameter helpers:**
+
+| Helper | Type | Example |
+|--------|------|---------|
+| `db.string(value)` | `String` | `db.string("hello")` |
+| `db.int(value)` | `Int` | `db.int(42)` |
+| `db.float(value)` | `Float` | `db.float(3.14)` |
+| `db.bool(value)` | `Bool` | `db.bool(True)` |
+| `db.null()` | `Nil` | `db.null()` |
+| `db.blob(value)` | `BitArray` | `db.blob(<<1, 2, 3>>)` |
+
+> **Note:** Always use `$1`, `$2`, etc. for placeholders — Glimr automatically converts them to `?` when running against SQLite, so your queries work with both drivers.
 
 #### Database Transactions
 
