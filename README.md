@@ -42,7 +42,9 @@ If you'd like to stay updated on Glimr's development, Follow [@migueljarias](htt
 - [Authentication](#authentication)
   - [Generating Auth Scaffolding](#generating-auth-scaffolding)
   - [Scoped Mode](#scoped-mode)
-  - [Generated Files](#generated-files)
+  - [Multiple Auth Models](#multiple-auth-models)
+  - [Authenticatable Schema](#authenticatable-schema)
+  - [Generated Controllers](#generated-controllers)
   - [Auth & Guest Middleware](#auth--guest-middleware)
   - [Auth Functions](#auth-functions)
 - [Form Validation](#form-validation)
@@ -1321,8 +1323,8 @@ This generates:
 - **Model** — schema with `email` and `password` columns, plus CRUD queries in `src/database/{connection}/models/user/`
 - **Migration** — a migration for the users table
 - **Load middleware** — `src/app/http/middleware/load_user.gleam` — resolves the current user from the session on every request
-- **Auth middleware** — `src/app/http/middleware/auth.gleam` — redirects unauthenticated visitors to `/login`
-- **Guest middleware** — `src/app/http/middleware/guest.gleam` — redirects authenticated users away from login/register pages
+- **Auth middleware** — `src/app/http/middleware/auth_user.gleam` — redirects unauthenticated visitors to `/login`
+- **Guest middleware** — `src/app/http/middleware/guest_user.gleam` — redirects authenticated users away from login/register pages
 - **Validator** — `src/app/http/validators/store_login.gleam` — validates login form data (email + password)
 - **Login controller** — `src/app/http/controllers/auth/login_controller.gleam` — handles login form display and authentication
 - **Logout controller** — `src/app/http/controllers/auth/logout_controller.gleam` — invalidates the session and redirects
@@ -1349,13 +1351,63 @@ Scoped mode namespaces middleware, controllers, and validators to avoid conflict
 
 | File | Unscoped (`make_auth user`) | Scoped (`make_auth customer --scoped`) |
 |------|---------------------------|----------------------------------------|
-| Auth middleware | `middleware/auth.gleam` | `middleware/auth_customer.gleam` |
-| Guest middleware | `middleware/guest.gleam` | `middleware/guest_customer.gleam` |
 | Validator | `validators/store_login.gleam` | `validators/store_customer_login.gleam` |
 | Login controller | `controllers/auth/login_controller.gleam` | `controllers/auth/customer_login_controller.gleam` |
 | Routes | `/login`, `/register`, `/logout` | `/customer/login`, `/customer/register`, `/customer/logout` |
 
-The load middleware (`middleware/load_{model}.gleam`), model, and context patches are always model-specific regardless of mode.
+Middleware (`auth_{model}.gleam`, `guest_{model}.gleam`, `load_{model}.gleam`), the model, and context patches are always model-specific regardless of mode.
+
+### Multiple Auth Models
+
+A common pattern is having regular users and a separate admin panel. With Glimr, this is two commands:
+
+```bash
+./glimr make_auth user
+./glimr make_auth admin --scoped
+```
+
+This generates completely independent auth stacks — each with its own model, middleware, controllers, and session key. Your `App` type ends up with both models available on the context:
+
+```gleam
+pub type App {
+  App(
+    db: glimr_postgres.Pool,
+    user: Option(user.User),
+    admin: Option(admin.Admin),
+  )
+}
+```
+
+Each model gets its own middleware, so you can protect routes independently:
+
+```gleam
+import app/http/middleware/auth_user
+import app/http/middleware/auth_admin
+import glimr/http/middleware
+
+/// @get "/dashboard"
+pub fn show(ctx: Context(App)) -> Response {
+  use ctx <- middleware.apply([auth_user.run], ctx)
+
+  // Any authenticated user can access this.
+}
+
+/// @get "/admin/dashboard"
+pub fn admin(ctx: Context(App)) -> Response {
+  use ctx <- middleware.apply([auth_admin.run], ctx)
+
+  // Only authenticated admins can access this.
+}
+```
+
+Users log in at `/login`, admins at `/admin/login` — completely separate flows with separate throttling, sessions, and redirects. Each model can also have its own throttle limits:
+
+```gleam
+// src/database/main/models/admin/admin_schema.gleam
+pub const authenticatable = True
+pub const max_login_attempts = 3
+pub const lockout_seconds = 300
+```
 
 ### Authenticatable Schema
 
@@ -1408,7 +1460,7 @@ The login controller validates input, authenticates, and handles success/failure
 /// @post "/login"
 pub fn store(ctx: Context(App)) -> Response {
   // Ensure only guests reach this endpoint.
-  use ctx <- middleware.apply([guest.run], ctx)
+  use ctx <- middleware.apply([guest_user.run], ctx)
 
   // Validate the incoming login data.
   use validated <- store_login.validate(ctx)
@@ -1430,7 +1482,7 @@ pub fn store(ctx: Context(App)) -> Response {
 
       session.flash(ctx.session, "message", message)
 
-      redirect.to(guest.auth_redirect)
+      redirect.to(guest_user.auth_redirect)
     }
     Error(_) -> {
       let message = "Invalid email or password"
@@ -1465,11 +1517,11 @@ pub fn destroy(ctx: Context(App)) -> Response {
 The **auth middleware** protects routes that require authentication. It checks `ctx.app.user` and redirects to the login page if the user is not authenticated. Apply it using `middleware.apply`:
 
 ```gleam
-import app/http/middleware/auth
+import app/http/middleware/auth_user
 
 /// @get "/settings"
 pub fn show(ctx: Context(App)) -> Response {
-  use ctx <- middleware.apply([auth.run], ctx)
+  use ctx <- middleware.apply([auth_user.run], ctx)
 
   // Only authenticated users reach this point.
 }
@@ -1478,11 +1530,11 @@ pub fn show(ctx: Context(App)) -> Response {
 The **guest middleware** does the opposite — it redirects authenticated users away from pages like login and registration:
 
 ```gleam
-import app/http/middleware/guest
+import app/http/middleware/guest_user
 
 /// @get "/login"
 pub fn show(ctx: Context(App)) -> Response {
-  use ctx <- middleware.apply([guest.run], ctx)
+  use ctx <- middleware.apply([guest_user.run], ctx)
 
   // Only unauthenticated users reach this point.
 }
