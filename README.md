@@ -1302,7 +1302,13 @@ pub fn login(ctx: Context(App)) -> Response {
 
 ## Authentication
 
-Glimr provides a `make_auth` command that scaffolds everything needed for model-based authentication — the database model, middleware, controllers, and context wiring.
+Glimr provides a `make_auth` command that scaffolds everything needed for model-based authentication — the database model, middleware, controllers, validators, and context wiring.
+
+First, add the `glimr_auth` package to your project:
+
+```bash
+gleam add glimr_auth
+```
 
 ### Generating Auth Scaffolding
 
@@ -1312,14 +1318,15 @@ Glimr provides a `make_auth` command that scaffolds everything needed for model-
 
 This generates:
 
-- **Model** — schema with `email` and `hashed_password` columns, plus CRUD queries in `src/database/{connection}/models/user/`
+- **Model** — schema with `email` and `password` columns, plus CRUD queries in `src/database/{connection}/models/user/`
 - **Migration** — a migration for the users table
 - **Load middleware** — `src/app/http/middleware/load_user.gleam` — resolves the current user from the session on every request
 - **Auth middleware** — `src/app/http/middleware/auth.gleam` — redirects unauthenticated visitors to `/login`
 - **Guest middleware** — `src/app/http/middleware/guest.gleam` — redirects authenticated users away from login/register pages
-- **Login controller** — `src/app/http/controllers/auth/login_controller.gleam`
-- **Logout controller** — `src/app/http/controllers/auth/logout_controller.gleam`
-- **Register controller** — `src/app/http/controllers/auth/register_controller.gleam`
+- **Validator** — `src/app/http/validators/store_login.gleam` — validates login form data (email + password)
+- **Login controller** — `src/app/http/controllers/auth/login_controller.gleam` — handles login form display and authentication
+- **Logout controller** — `src/app/http/controllers/auth/logout_controller.gleam` — invalidates the session and redirects
+- **Register controller** — `src/app/http/controllers/auth/register_controller.gleam` — stub for user registration
 - **Context patches** — adds a `user: Option(user.User)` field to your `App` type, initializes it in the bootstrap module, and registers the load middleware in the kernel
 
 Add `-m` to run migrations immediately:
@@ -1338,61 +1345,163 @@ When your application needs multiple authenticatable models (e.g. users and cust
 ./glimr make_auth customer --scoped
 ```
 
-Scoped mode namespaces middleware and controllers to avoid conflicts:
+Scoped mode namespaces middleware, controllers, and validators to avoid conflicts:
 
 | File | Unscoped (`make_auth user`) | Scoped (`make_auth customer --scoped`) |
 |------|---------------------------|----------------------------------------|
 | Auth middleware | `middleware/auth.gleam` | `middleware/auth_customer.gleam` |
 | Guest middleware | `middleware/guest.gleam` | `middleware/guest_customer.gleam` |
+| Validator | `validators/store_login.gleam` | `validators/store_customer_login.gleam` |
 | Login controller | `controllers/auth/login_controller.gleam` | `controllers/auth/customer_login_controller.gleam` |
 | Routes | `/login`, `/register`, `/logout` | `/customer/login`, `/customer/register`, `/customer/logout` |
 
 The load middleware (`middleware/load_{model}.gleam`), model, and context patches are always model-specific regardless of mode.
 
-### Generated Files
+### Authenticatable Schema
 
-The generated controllers are empty stubs with route annotations and `wisp.ok()` responses. Fill them in with your authentication logic:
+The generated schema includes constants that control authentication behavior:
 
 ```gleam
-// src/app/http/controllers/auth/login_controller.gleam
-import glimr/http/http.{type Response}
-import glimr/response/response
+import glimr/db/schema
 
-/// @get "/login"
-pub fn show() -> Response {
-  response.empty(200)
+pub const table_name = "users"
+
+pub const authenticatable = True
+
+pub const max_login_attempts = 5
+
+pub const lockout_seconds = 60
+
+pub fn definition() {
+  schema.table(table_name, [
+    schema.id(),
+    schema.string("email"),
+    schema.string("password"),
+    schema.unix_timestamps(),
+  ])
 }
+```
 
+- `authenticatable = True` — tells the code generator to create an `authenticate` function and `session_key` constant on the generated model
+- `max_login_attempts` — number of failed login attempts before lockout (default: 5)
+- `lockout_seconds` — how long the lockout lasts in seconds (default: 60)
+
+The generated `authenticate` function handles the full login flow — user lookup, timing-safe password verification, session login, and throttling:
+
+```gleam
+user.authenticate(
+  session: ctx.session,
+  pool: ctx.app.db,
+  email: validated.email,
+  password: validated.password,
+)
+// -> Result(User, auth.AuthError)
+```
+
+Returns `Ok(user)` on success, `Error(auth.InvalidCredentials)` on bad credentials, or `Error(auth.Throttled)` when the login attempt limit is exceeded.
+
+### Generated Controllers
+
+The login controller validates input, authenticates, and handles success/failure:
+
+```gleam
 /// @post "/login"
-pub fn store() -> Response {
-  response.empty(200)
+pub fn store(ctx: Context(App)) -> Response {
+  // Ensure only guests reach this endpoint.
+  use ctx <- middleware.apply([guest.run], ctx)
+
+  // Validate the incoming login data.
+  use validated <- store_login.validate(ctx)
+
+  // Attempt to authenticate with the given credentials.
+  let authenticated = {
+    user.authenticate(
+      session: ctx.session,
+      pool: ctx.app.db,
+      email: validated.email,
+      password: validated.password,
+    )
+  }
+
+  // Handle authentication flow
+  case authenticated {
+    Ok(user) -> {
+      let message = "Welcome back, " <> user.email
+
+      session.flash(ctx.session, "message", message)
+
+      redirect.to(guest.auth_redirect)
+    }
+    Error(_) -> {
+      let message = "Invalid email or password"
+
+      session.flash(ctx.session, "error", message)
+
+      redirect.back(ctx)
+    }
+  }
+}
+```
+
+The logout controller invalidates the session and flashes a message on the fresh session:
+
+```gleam
+/// @post "/logout"
+pub fn destroy(ctx: Context(App)) -> Response {
+  // Ensure only authenticated users reach this endpoint.
+  use ctx <- middleware.apply([auth_user.run], ctx)
+
+  // Log out user and invalidate session.
+  auth.logout(ctx.session)
+
+  session.flash(ctx.session, "message", "You have been logged out.")
+
+  redirect.to(auth_user.guest_redirect)
 }
 ```
 
 ### Auth & Guest Middleware
 
-The **auth middleware** protects routes that require authentication. It checks `ctx.app.user` and redirects to the login page if the user is not authenticated:
+The **auth middleware** protects routes that require authentication. It checks `ctx.app.user` and redirects to the login page if the user is not authenticated. Apply it using `middleware.apply`:
 
 ```gleam
-// Apply to protected routes
-/// @middleware auth
+import app/http/middleware/auth
+
+/// @get "/settings"
+pub fn show(ctx: Context(App)) -> Response {
+  use ctx <- middleware.apply([auth.run], ctx)
+
+  // Only authenticated users reach this point.
+}
 ```
 
 The **guest middleware** does the opposite — it redirects authenticated users away from pages like login and registration:
 
 ```gleam
-// Apply to login/register routes
-/// @middleware guest
+import app/http/middleware/guest
+
+/// @get "/login"
+pub fn show(ctx: Context(App)) -> Response {
+  use ctx <- middleware.apply([guest.run], ctx)
+
+  // Only unauthenticated users reach this point.
+}
 ```
 
 ### Auth Functions
 
-The `glimr_auth` package provides helper functions for authentication:
+The `glimr_auth` package provides helper functions used by the generated code:
 
-- `auth.login(session, model_name, id)` — stores the user ID in the session
-- `auth.logout(session, model_name)` — removes the user ID from the session
+- `auth.login(session, user_id, session_key)` — stores the user ID in the session and regenerates the session ID
+- `auth.logout(session)` — invalidates the entire session (clears data, generates fresh ID)
+- `auth.check(session, session_key)` — returns `True` if the user is logged in
+- `auth.id(session, session_key)` — returns `Ok(user_id)` or `Error(Nil)`
+- `auth.check_throttle(session, session_key)` — returns `Error(Throttled)` if locked out
+- `auth.record_failure(session, session_key, max_attempts, lockout_seconds)` — increments failed attempt count, sets lockout when threshold reached
+- `auth.clear_throttle(session, session_key)` — resets attempt count after successful login
 - `hash.make(password)` — hashes a password with bcrypt
 - `hash.verify(password, hash)` — verifies a password against a hash
+- `hash.dummy_verify(password)` — burns CPU time equivalent to a real verify (timing-safe for nonexistent users)
 
 ## Form Validation
 
