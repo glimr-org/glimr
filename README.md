@@ -1589,7 +1589,7 @@ pub type Data {
 
 /// Define your form's validation rules
 ///
-fn rules() -> List(Rule(Context(App))) {
+fn rules(_ctx: Context(App)) -> List(Rule(Context(App))) {
   [
     validator.for("name", [
       validator.Required,
@@ -1703,7 +1703,7 @@ pub fn store(ctx: Context(App)) -> Response {
 - **MinDigits(Int)** — Field must have at least n digits
 - **MaxDigits(Int)** — Field must have at most n digits
 
-**Database Rules:**
+**Database Rules** (available because the `rules` function receives `ctx`):
 - **Exists(DbPool, String)** — Field value must exist in the given database table (e.g., `Exists(ctx.app.db, "users")`)
 - **Unique(DbPool, String)** — Field value must not already exist in the given database table (e.g., `Unique(ctx.app.db, "users")`)
 
@@ -1757,7 +1757,7 @@ pub fn run(field: String, value: String, data: FormData, _ctx: Context(App)) -> 
 import app/http/rules/after_start_date
 import glimr/forms/validator.{Custom, Required}
 
-fn rules() {
+fn rules(_ctx) {
   [
     validator.for("start_date", [Required]),
     validator.for("end_date", [
@@ -1775,7 +1775,7 @@ Use your custom rule in your validator:
 import app/http/rules/no_gmail
 import glimr/forms/validator.{Custom, MinLength, MaxLength, Required}
 
-fn rules() {
+fn rules(_ctx) {
   [
     validator.for("email", [
       Required,
@@ -1848,7 +1848,7 @@ Use your custom rule in your validator:
 import app/http/rules/image_dimensions
 import glimr/forms/validator.{FileCustom, FileRequired, FileMaxSize}
 
-fn rules() {
+fn rules(_ctx) {
   [
     validator.for_file("avatar", [
       FileRequired,
