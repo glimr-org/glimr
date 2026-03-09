@@ -1325,10 +1325,11 @@ This generates:
 - **Load middleware** — `src/app/http/middleware/load_user.gleam` — resolves the current user from the session on every request
 - **Auth middleware** — `src/app/http/middleware/auth_user.gleam` — redirects unauthenticated visitors to `/login`
 - **Guest middleware** — `src/app/http/middleware/guest_user.gleam` — redirects authenticated users away from login/register pages
-- **Validator** — `src/app/http/validators/store_login.gleam` — validates login form data (email + password)
+- **Login validator** — `src/app/http/validators/store_login.gleam` — validates login form data (email + password)
+- **Register validator** — `src/app/http/validators/store_register.gleam` — validates registration form data (email + password with confirmation)
 - **Login controller** — `src/app/http/controllers/auth/login_controller.gleam` — handles login form display and authentication
 - **Logout controller** — `src/app/http/controllers/auth/logout_controller.gleam` — invalidates the session and redirects
-- **Register controller** — `src/app/http/controllers/auth/register_controller.gleam` — stub for user registration
+- **Register controller** — `src/app/http/controllers/auth/register_controller.gleam` — handles registration with password hashing and automatic login
 - **Context patches** — adds a `user: Option(user.User)` field to your `App` type, initializes it in the bootstrap module, and registers the load middleware in the kernel
 
 Add `-m` to run migrations immediately:
@@ -1351,7 +1352,8 @@ Scoped mode namespaces middleware, controllers, and validators to avoid conflict
 
 | File | Unscoped (`make_auth user`) | Scoped (`make_auth customer --scoped`) |
 |------|---------------------------|----------------------------------------|
-| Validator | `validators/store_login.gleam` | `validators/store_customer_login.gleam` |
+| Login validator | `validators/store_login.gleam` | `validators/store_customer_login.gleam` |
+| Register validator | `validators/store_register.gleam` | `validators/store_customer_register.gleam` |
 | Login controller | `controllers/auth/login_controller.gleam` | `controllers/auth/customer_login_controller.gleam` |
 | Routes | `/login`, `/register`, `/logout` | `/customer/login`, `/customer/register`, `/customer/logout` |
 
@@ -1400,7 +1402,51 @@ pub fn admin(ctx: Context(App)) -> Response {
 }
 ```
 
-Users log in at `/login`, admins at `/admin/login` — completely separate flows with separate throttling, sessions, and redirects. Each model can also have its own throttle limits:
+Users log in at `/login`, admins at `/admin/login` — completely separate flows with separate throttling, sessions, and redirects. Registration works the same way — users register at `/register`, admins at `/admin/register`:
+
+```gleam
+/// @post "/admin/register"
+pub fn store(ctx: Context(App)) -> Response {
+  use validated <- store_admin_register.validate(ctx)
+
+  let now = unix_timestamp.now()
+
+  let registered = {
+    use pool, hashed_password <- admin.register(
+      session: ctx.session,
+      pool: ctx.app.db,
+      password: validated.password,
+    )
+
+    admin.create(
+      pool: pool,
+      email: validated.email,
+      password: hashed_password,
+      created_at: now,
+      updated_at: now,
+    )
+  }
+
+  case registered {
+    Ok(_) -> {
+      let message = "Admin account created"
+
+      session.flash(ctx.session, "message", message)
+
+      redirect.to(guest_admin.auth_redirect)
+    }
+    Error(_) -> {
+      let message = "Registration failed"
+
+      session.flash(ctx.session, "error", message)
+
+      redirect.back(ctx)
+    }
+  }
+}
+```
+
+Each model can also have its own throttle limits:
 
 ```gleam
 // src/database/main/models/admin/admin_schema.gleam
@@ -1434,7 +1480,7 @@ pub fn definition() {
 }
 ```
 
-- `authenticatable = True` — tells the code generator to create an `authenticate` function and `session_key` constant on the generated model
+- `authenticatable = True` — tells the code generator to create `authenticate` and `register` functions plus a `session_key` constant on the generated model
 - `max_login_attempts` — number of failed login attempts before lockout (default: 5)
 - `lockout_seconds` — how long the lockout lasts in seconds (default: 60)
 
@@ -1452,20 +1498,43 @@ user.authenticate(
 
 Returns `Ok(user)` on success, `Error(auth.InvalidCredentials)` on bad credentials, or `Error(auth.Throttled)` when the login attempt limit is exceeded.
 
-### Generated Controllers
-
-The login controller validates input, authenticates, and handles success/failure:
+The generated `register` function handles password hashing and automatic login after account creation. It takes a callback so you control exactly which fields get inserted:
 
 ```gleam
+let registered = {
+  use pool, hashed_password <- user.register(
+    session: ctx.session,
+    pool: ctx.app.db,
+    password: validated.password,
+  )
+
+  user.create(
+    pool: pool,
+    email: validated.email,
+    password: hashed_password,
+    created_at: now,
+    updated_at: now,
+  )
+}
+// -> Result(User, db.DbError)
+```
+
+The callback receives the database pool and the hashed password. You call your `create` query inside the callback, passing whatever fields your table needs. On success, the user is automatically logged in and the model is returned.
+
+### Generated Controllers
+
+The login controller uses a `middleware()` function to apply guest middleware at the controller level, then validates input and authenticates:
+
+```gleam
+/// Apply the guest middleware to the entire controller
+pub fn middleware() -> List(Middleware(App)) {
+  [guest_user.run]
+}
+
 /// @post "/login"
 pub fn store(ctx: Context(App)) -> Response {
-  // Ensure only guests reach this endpoint.
-  use ctx <- middleware.apply([guest_user.run], ctx)
-
-  // Validate the incoming login data.
   use validated <- store_login.validate(ctx)
 
-  // Attempt to authenticate with the given credentials.
   let authenticated = {
     user.authenticate(
       session: ctx.session,
@@ -1475,7 +1544,6 @@ pub fn store(ctx: Context(App)) -> Response {
     )
   }
 
-  // Handle authentication flow
   case authenticated {
     Ok(user) -> {
       let message = "Welcome back, " <> user.email
@@ -1500,15 +1568,57 @@ The logout controller invalidates the session and flashes a message on the fresh
 ```gleam
 /// @post "/logout"
 pub fn destroy(ctx: Context(App)) -> Response {
-  // Ensure only authenticated users reach this endpoint.
   use ctx <- middleware.apply([auth_user.run], ctx)
 
-  // Log out user and invalidate session.
   auth.logout(ctx.session)
 
   session.flash(ctx.session, "message", "You have been logged out.")
 
   redirect.to(auth_user.guest_redirect)
+}
+```
+
+The register controller also uses `middleware()` for guest middleware, then validates, hashes the password, creates the account, and logs in:
+
+```gleam
+/// @post "/register"
+pub fn store(ctx: Context(App)) -> Response {
+  use validated <- store_register.validate(ctx)
+
+  let now = unix_timestamp.now()
+
+  let registered = {
+    use pool, hashed_password <- user.register(
+      session: ctx.session,
+      pool: ctx.app.db,
+      password: validated.password,
+    )
+
+    user.create(
+      pool: pool,
+      email: validated.email,
+      password: hashed_password,
+      created_at: now,
+      updated_at: now,
+    )
+  }
+
+  case registered {
+    Ok(_) -> {
+      let message = "Account created successfully"
+
+      session.flash(ctx.session, "message", message)
+
+      redirect.to(guest_user.auth_redirect)
+    }
+    Error(_) -> {
+      let message = "Registration failed"
+
+      session.flash(ctx.session, "error", message)
+
+      redirect.back(ctx)
+    }
+  }
 }
 ```
 
