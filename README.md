@@ -1477,6 +1477,9 @@ pub fn definition() {
     schema.string("password"),
     schema.unix_timestamps(),
   ])
+  |> schema.indexes([
+    schema.unique(["email"]),
+  ])
 }
 ```
 
