@@ -1484,6 +1484,8 @@ pub fn definition() {
 - `max_login_attempts` — number of failed login attempts before lockout (default: 5)
 - `lockout_seconds` — how long the lockout lasts in seconds (default: 60)
 
+The generated auth functions automatically detect the primary key type from your schema. If you use `schema.id()`, the generated code wraps the value with `int.to_string`. If you use `schema.uuid("uid")`, the value is used directly since it's already a `String`.
+
 The generated `authenticate` function handles the full login flow — user lookup, timing-safe password verification, session login, and throttling:
 
 ```gleam
