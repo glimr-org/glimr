@@ -11,6 +11,7 @@ If you'd like to stay updated on Glimr's development, Follow [@migueljarias](htt
 - [Installation](#installation)
 - [Project Structure](#project-structure)
 - [Build Tools](#build-tools)
+    - [Vite & Tailwind](#vite--tailwind)
     - [Build Command](#build-command)
     - [Run Command](#run-command)
     - [Hooks](#hooks)
