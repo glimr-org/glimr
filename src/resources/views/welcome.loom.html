@@ -8,78 +8,6 @@
     />
 
     <style>
-      * {
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-      }
-
-      html,
-      body {
-        background: linear-gradient(
-          to bottom right,
-          #ffb8e4 0%,
-          #fff 40%,
-          #fff 60%,
-          #ffb8e4 100%
-        );
-        color: #2c2e49;
-        font-family: "Inter", sans-serif;
-        font-weight: 400;
-        height: 100vh;
-        margin: 0;
-      }
-
-      a {
-        transition: 0.3s;
-      }
-
-      .full-height {
-        height: 100vh;
-      }
-
-      .flex-center {
-        align-items: center;
-        display: flex;
-        justify-content: center;
-      }
-
-      .position-ref {
-        position: relative;
-      }
-
-      .content {
-        text-align: center;
-      }
-
-      .title {
-        font-size: 72px;
-        font-weight: 500;
-        margin-bottom: 20px;
-      }
-
-      .links > a {
-        color: #2c2e49;
-        margin: 0 10px;
-        font-size: 14px;
-        font-weight: 400;
-        text-decoration: none;
-      }
-
-      .links > a > .icon {
-        position: relative;
-        top: 2.5px;
-        margin-right: 1px;
-        color: #ff43a1;
-      }
-
-      .links > a:hover {
-        color: #ff43a1;
-      }
-
-      .links {
-        margin-top: 20px;
-      }
-
       @keyframes float {
         0%,
         100% {
@@ -89,52 +17,49 @@
           transform: translateY(-10px);
         }
       }
-
-      .floating {
-        animation: float 3s ease-in-out infinite;
-        margin-bottom: 30px;
-      }
-
-      .headline {
-        font-size: 17px;
-        margin-bottom: 5px;
-        font-weight: 500;
-      }
-
-      .subheading {
-        margin-bottom: 20px;
-        color: #9ea0b7;
-        font-size: 15px;
-      }
     </style>
   </slot>
 
-  <div class="flex-center position-ref full-height">
-    <div class="content">
-      <x-logo class="floating" width="140" />
+  <div
+    class="flex items-center justify-center relative h-screen bg-linear-to-br from-[#ffb8e4] via-white to-[#ffb8e4] font-['Inter'] text-[#2c2e49] antialiased"
+  >
+    <div class="text-center">
+      <x-logo
+        class="animate-[float_3s_ease-in-out_infinite] mb-7.5 mx-auto"
+        width="140"
+      />
 
-      <div class="headline">Welcome to Glimr ✨</div>
+      <div class="text-[17px] mb-1.25 font-medium">Welcome to Glimr ✨</div>
 
-      <div class="subheading">
+      <div class="mb-5 text-[#9ea0b7] text-[15px]">
         The batteries-included web framework for Gleam.
       </div>
 
-      <div class="links">
+      <div class="mt-5 flex items-center justify-center">
         <a
           target="_blank"
           href="https://github.com/glimr-org/glimr?tab=readme-ov-file#glimr-"
+          class="inline-flex items-center gap-1 text-[#2c2e49] mx-2.5 text-sm no-underline transition-colors duration-300 hover:text-[#ff43a1]"
         >
-          <x-icons:reader class="icon" width="15" />
+          <x-icons:reader class="mr-px text-[#ff43a1]" width="15" />
 
           Documentation
         </a>
-        <a target="_blank" href="https://github.com/glimr-org/framework">
-          <x-icons:frame class="icon" width="15" />
+        <a
+          target="_blank"
+          href="https://github.com/glimr-org/framework"
+          class="inline-flex items-center gap-1 text-[#2c2e49] mx-2.5 text-sm no-underline transition-colors duration-300 hover:text-[#ff43a1]"
+        >
+          <x-icons:frame class="mr-px text-[#ff43a1]" width="15" />
 
           Core Framework
         </a>
-        <a target="_blank" href="https://gleam.run/">
-          <x-icons:star class="icon" width="15" />
+        <a
+          target="_blank"
+          href="https://gleam.run/"
+          class="inline-flex items-center gap-1 text-[#2c2e49] mx-2.5 text-sm no-underline transition-colors duration-300 hover:text-[#ff43a1]"
+        >
+          <x-icons:star class="mr-px text-[#ff43a1]" width="15" />
 
           Learn Gleam
         </a>

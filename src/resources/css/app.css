@@ -1,0 +1,9 @@
+/*
+ * App Stylesheet
+ *
+ * This is the main CSS entry point for your application.
+ * Tailwind is imported below — add your own custom styles,
+ * @theme overrides, and @source directives after it.
+ */
+
+@import "tailwindcss";

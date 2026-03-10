@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "types": ["node"],
+    "paths": {
+      "@/*": ["src/resources/ts/*"]
+    }
+  },
+  "include": ["src/resources/ts", "vite.config.ts"]
+}

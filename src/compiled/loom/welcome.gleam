@@ -19,7 +19,7 @@ pub fn render() -> String {
     slot_meta_title: { "" <> "Glimr ✨" },
     slot_head: {
       ""
-      <> "\n    <link\n      href=\"https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900\"\n      rel=\"stylesheet\"\n    />\n\n    <style>\n      * {\n        -webkit-font-smoothing: antialiased;\n        -moz-osx-font-smoothing: grayscale;\n      }\n\n      html,\n      body {\n        background: linear-gradient(\n          to bottom right,\n          #ffb8e4 0%,\n          #fff 40%,\n          #fff 60%,\n          #ffb8e4 100%\n        );\n        color: #2c2e49;\n        font-family: \"Inter\", sans-serif;\n        font-weight: 400;\n        height: 100vh;\n        margin: 0;\n      }\n\n      a {\n        transition: 0.3s;\n      }\n\n      .full-height {\n        height: 100vh;\n      }\n\n      .flex-center {\n        align-items: center;\n        display: flex;\n        justify-content: center;\n      }\n\n      .position-ref {\n        position: relative;\n      }\n\n      .content {\n        text-align: center;\n      }\n\n      .title {\n        font-size: 72px;\n        font-weight: 500;\n        margin-bottom: 20px;\n      }\n\n      .links > a {\n        color: #2c2e49;\n        margin: 0 10px;\n        font-size: 14px;\n        font-weight: 400;\n        text-decoration: none;\n      }\n\n      .links > a > .icon {\n        position: relative;\n        top: 2.5px;\n        margin-right: 1px;\n        color: #ff43a1;\n      }\n\n      .links > a:hover {\n        color: #ff43a1;\n      }\n\n      .links {\n        margin-top: 20px;\n      }\n\n      @keyframes float {\n        0%,\n        100% {\n          transform: translateY(0);\n        }\n        50% {\n          transform: translateY(-10px);\n        }\n      }\n\n      .floating {\n        animation: float 3s ease-in-out infinite;\n        margin-bottom: 30px;\n      }\n\n      .headline {\n        font-size: 17px;\n        margin-bottom: 5px;\n        font-weight: 500;\n      }\n\n      .subheading {\n        margin-bottom: 20px;\n        color: #9ea0b7;\n        font-size: 15px;\n      }\n    </style>\n  "
+      <> "\n    <link\n      href=\"https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900\"\n      rel=\"stylesheet\"\n    />\n\n    <style>\n      @keyframes float {\n        0%,\n        100% {\n          transform: translateY(0);\n        }\n        50% {\n          transform: translateY(-10px);\n        }\n      }\n    </style>\n  "
     },
     slot_footer: "",
     slot_footer_scripts: "",
@@ -27,24 +27,27 @@ pub fn render() -> String {
       ""
       <> "\n  "
       <> "\n\n  "
-      <> "\n\n  <div class=\"flex-center position-ref full-height\">\n    <div class=\"content\">\n      "
+      <> "\n\n  <div\n    class=\"flex items-center justify-center relative h-screen bg-linear-to-br from-[#ffb8e4] via-white to-[#ffb8e4] font-['Inter'] text-[#2c2e49] antialiased\"\n  >\n    <div class=\"text-center\">\n      "
       <> components_logo.render(attributes: [
-        runtime.Attribute("class", "floating"),
+        runtime.Attribute(
+          "class",
+          "animate-[float_3s_ease-in-out_infinite] mb-7.5 mx-auto",
+        ),
         runtime.Attribute("width", "140"),
       ])
-      <> "\n\n      <div class=\"headline\">Welcome to Glimr ✨</div>\n\n      <div class=\"subheading\">\n        The batteries-included web framework for Gleam.\n      </div>\n\n      <div class=\"links\">\n        <a\n          target=\"_blank\"\n          href=\"https://github.com/glimr-org/glimr?tab=readme-ov-file#glimr-\"\n        >\n          "
+      <> "\n\n      <div class=\"text-[17px] mb-1.25 font-medium\">Welcome to Glimr ✨</div>\n\n      <div class=\"mb-5 text-[#9ea0b7] text-[15px]\">\n        The batteries-included web framework for Gleam.\n      </div>\n\n      <div class=\"mt-5 flex items-center justify-center\">\n        <a\n          target=\"_blank\"\n          href=\"https://github.com/glimr-org/glimr?tab=readme-ov-file#glimr-\"\n          class=\"inline-flex items-center gap-1 text-[#2c2e49] mx-2.5 text-sm no-underline transition-colors duration-300 hover:text-[#ff43a1]\"\n        >\n          "
       <> components_icons_reader.render(attributes: [
-        runtime.Attribute("class", "icon"),
+        runtime.Attribute("class", "mr-px text-[#ff43a1]"),
         runtime.Attribute("width", "15"),
       ])
-      <> "\n\n          Documentation\n        </a>\n        <a target=\"_blank\" href=\"https://github.com/glimr-org/framework\">\n          "
+      <> "\n\n          Documentation\n        </a>\n        <a\n          target=\"_blank\"\n          href=\"https://github.com/glimr-org/framework\"\n          class=\"inline-flex items-center gap-1 text-[#2c2e49] mx-2.5 text-sm no-underline transition-colors duration-300 hover:text-[#ff43a1]\"\n        >\n          "
       <> components_icons_frame.render(attributes: [
-        runtime.Attribute("class", "icon"),
+        runtime.Attribute("class", "mr-px text-[#ff43a1]"),
         runtime.Attribute("width", "15"),
       ])
-      <> "\n\n          Core Framework\n        </a>\n        <a target=\"_blank\" href=\"https://gleam.run/\">\n          "
+      <> "\n\n          Core Framework\n        </a>\n        <a\n          target=\"_blank\"\n          href=\"https://gleam.run/\"\n          class=\"inline-flex items-center gap-1 text-[#2c2e49] mx-2.5 text-sm no-underline transition-colors duration-300 hover:text-[#ff43a1]\"\n        >\n          "
       <> components_icons_star.render(attributes: [
-        runtime.Attribute("class", "icon"),
+        runtime.Attribute("class", "mr-px text-[#ff43a1]"),
         runtime.Attribute("width", "15"),
       ])
       <> "\n\n          Learn Gleam\n        </a>\n      </div>\n    </div>\n  </div>\n"

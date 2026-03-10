@@ -1,11 +1,12 @@
+@import(glimr/vite)
+
 <!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <!-- Loom script and stylesheet -->
-    <script defer src="/loom.js"></script>
+    {{{ vite.tags("src/resources/ts/app.ts") }}}
 
     <!-- header scripts and meta tags -->
     <slot name="head" />

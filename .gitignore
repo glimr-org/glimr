@@ -13,3 +13,5 @@ erl_crash.dump
 /.vscode
 /.zed
 Thumbs.db
+node_modules/
+priv/static/

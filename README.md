@@ -185,6 +185,79 @@ Visit `http://localhost:8000` in your browser.
 
 Gleam provides `gleam build` and `gleam run` out of the box, which you can of course use. Glimr however provides similar commands that also support hooks to customize the build process. Also, `gleam run` currently does not support hot reloading, while `./glimr run` does.
 
+### Vite & Tailwind
+
+Glimr uses [Vite](https://vite.dev/) as its asset bundler and [Tailwind CSS](https://tailwindcss.com/) for styling. Your frontend entry point lives at `src/resources/ts/app.ts`, and your stylesheet at `src/resources/css/app.css`.
+
+#### How It Works
+
+In development, `./glimr run` starts the Vite dev server alongside the Gleam application. Vite serves your JavaScript and CSS with hot module replacement — when you change a `.css` or `.ts` file, updates appear instantly in the browser without a full reload.
+
+In production, run `npm run build` before deploying. Vite compiles your assets into hashed files under `priv/static/` and generates a manifest. The framework reads this manifest to emit the correct `<script>` and `<link>` tags automatically.
+
+#### Asset Tags
+
+Use the `vite.tags()` function in your layout to include bundled assets:
+
+```html
+@import(glimr/vite)
+
+<!doctype html>
+<html>
+  <head>
+    {{{ vite.tags("src/resources/ts/app.ts") }}}
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>
+```
+
+In dev mode, this emits tags pointing at Vite's dev server. In production, it reads the Vite manifest and outputs hashed filenames with `/static/` prefixes.
+
+#### Adding JavaScript
+
+Your `src/resources/ts/app.ts` is the entry point. The Loom client runtime is already imported — add your own code below:
+
+```ts
+import "../css/app.css";
+import "@glimr/loom";
+
+// Your code here
+document.addEventListener("DOMContentLoaded", () => {
+  console.log("App loaded");
+});
+```
+
+Vite supports TypeScript out of the box. Use the `@` alias to import from `src/resources/ts/`:
+
+```ts
+import { formatDate } from "@/utils";
+```
+
+#### Adding Styles
+
+Your `src/resources/css/app.css` imports Tailwind and is where you add custom CSS:
+
+```css
+@import "tailwindcss";
+
+/* Custom styles */
+.btn-primary {
+  @apply bg-blue-500 text-white px-4 py-2 rounded;
+}
+```
+
+Tailwind automatically scans your `.loom.html` templates for class names.
+
+#### Production Build
+
+```bash
+npm run build
+```
+
+This outputs hashed assets to `priv/static/` and a manifest at `priv/static/.vite/manifest.json`. The `priv/static/` directory is gitignored — assets should be built during deployment.
+
 ### Build Command
 
 ```bash
@@ -199,7 +272,7 @@ This automatically compiles routes, Loom templates, console commands, and databa
 ./glimr run
 ```
 
-This automatically compiles routes, Loom templates, console commands, and database models, then runs `pre-run` hooks, starts your application, and watches for file changes. When `.gleam` files change, it automatically reloads your application.
+This automatically compiles routes, Loom templates, console commands, and database models, then runs `pre-run` hooks, starts your application with Vite's dev server, and watches for file changes. When `.gleam` files change, it automatically reloads your application. When template or CSS changes are detected, the browser reloads automatically.
 
 #### Dev Proxy
 
@@ -2143,7 +2216,7 @@ pub fn show() {
 
 That's it — the `l-on:click` handlers tell the compiler this template is reactive. It automatically establishes a WebSocket connection, and clicks update `count` on the server, which re-renders and patches the DOM.
 
-> **Note:** Reactive templates need `<script defer src="/loom.js"></script>` in your layout's `<head>`. This ~22KB runtime handles WebSocket management, DOM patching (via morphdom), and event forwarding.
+> **Note:** Reactive templates require the Loom client runtime, which is included automatically via `vite.tags()` in your layout. It handles WebSocket management, DOM patching (via morphdom), and event forwarding.
 
 > **Note:** Creating/modifying/deleting `.loom.html` files automatically triggers compilation when `./glimr run` is running. You can also manually compile with `./glimr loom_compile`.
 
@@ -2280,6 +2353,32 @@ Modifiers control browser-side event behavior:
 | `.debounce` | Debounces at 150ms (default) |
 | `.debounce-N` | Debounces with custom time in ms |
 
+##### Client-Side JavaScript Reactivity
+
+Loom's event handlers are server-driven by design — all state lives on the server. If you need purely client-side interactivity (dropdowns, modals, toggles, clipboard operations) without a server round-trip, we recommend pairing Loom with a lightweight library like [Alpine.js](https://alpinejs.dev/).
+
+Alpine works seamlessly alongside Loom. Install it in your `app.ts`:
+
+```ts
+import Alpine from "alpinejs";
+Alpine.start();
+```
+
+Then use it in your templates:
+
+```html
+<div x-data="{ open: false }">
+  <button x-on:click="open = !open">Menu</button>
+
+  <div x-show="open" x-transition>
+    <a href="/profile">Profile</a>
+    <a href="/settings">Settings</a>
+  </div>
+</div>
+```
+
+Use `l-on:*` for anything that needs server state (form submissions, database updates, authentication) and Alpine's `x-on:*` for instant client-side UI interactions.
+
 #### Loading States
 
 Server-driven reactivity introduces a round-trip between user action and UI update. Loom provides built-in loading state management so users get immediate visual feedback.
@@ -2339,7 +2438,7 @@ When the button is clicked, both elements enter loading state. `l-loading` (no v
 
 Loom includes built-in SPA-like navigation. Link clicks are intercepted, pages are fetched over HTTP, and the DOM is swapped — making page transitions feel instant. The WebSocket stays open across navigations; only components are recycled.
 
-Navigation is enabled automatically when `loom.js` loads. A link is intercepted when:
+Navigation is enabled automatically when the Loom runtime loads. A link is intercepted when:
 
 - Left-click with no modifier keys
 - Same-origin href
@@ -2956,11 +3055,13 @@ Layouts are just components that wrap your page content. Create a layout in `src
 
 **components/layouts/app.loom.html:**
 ```html
+@import(glimr/vite)
+
 <!DOCTYPE html>
 <html>
 <head>
   <title>{{ title }}</title>
-  <script defer src="/loom.js"></script>
+  {{{ vite.tags("src/resources/ts/app.ts") }}}
 </head>
 <body>
   <header>
