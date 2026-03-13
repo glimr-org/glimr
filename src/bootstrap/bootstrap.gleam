@@ -15,7 +15,7 @@ import glimr/http/http.{type Request, type Response}
 import glimr/http/kernel as glimr_kernel
 import glimr/routing/router
 import glimr/session/session
-import glimr_postgres/postgres
+import glimr_sqlite/sqlite
 
 /// Initializes the HTTP application and returns the request
 /// handler. Configures the logger, loads environment variables
@@ -29,7 +29,7 @@ pub fn init() -> fn(Request) -> Response {
   let app = app.start()
   let route_groups = routes.groups()
 
-  postgres.session_store(app.db)
+  sqlite.session_store(app.db)
   |> session.setup()
 
   fn(req) {

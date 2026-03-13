@@ -18,7 +18,7 @@ pub fn render(
   attributes attributes: List(runtime.Attribute),
 ) -> String {
   ""
-  <> "\n\n<!doctype html>\n<html>\n  <head>\n    <meta charset=\"utf-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n\n    "
+  <> "\n<!doctype html>\n<html>\n  <head>\n    <meta charset=\"utf-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n\n    "
   <> vite.tags("src/resources/ts/app.ts")
   <> "\n\n    <!-- header scripts and meta tags -->\n    "
   <> slot_head

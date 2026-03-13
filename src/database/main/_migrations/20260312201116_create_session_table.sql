@@ -3,7 +3,7 @@
 CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY,
     payload TEXT NOT NULL,
-    last_activity BIGINT NOT NULL
+    last_activity INTEGER NOT NULL
 );
 
 -- Index for faster garbage collection lookups

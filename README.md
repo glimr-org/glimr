@@ -201,7 +201,9 @@ In production, run `npm run build` before deploying. Vite compiles your assets i
 Use the `vite.tags()` function in your layout to include bundled assets:
 
 ```html
-@import(glimr/vite)
+---
+import glimr/vite
+---
 
 <!doctype html>
 <html>
@@ -1337,10 +1339,13 @@ pub fn dashboard(ctx: Context(App)) -> Response {
 And then in your loom file
 
 ```html
-@import(glimr/session/session)
-@import(glimr/http/context.{type Context})
-@import(app/app.{type App})
-@props(ctx: Context(App))
+---
+import glimr/session/session
+import glimr/http/context.{type Context}
+import app/app.{type App}
+
+props(ctx: Context(App))
+---
 
 ...
 
@@ -1404,6 +1409,9 @@ This generates:
 - **Login controller** — `src/app/http/controllers/auth/login_controller.gleam` — handles login form display and authentication
 - **Logout controller** — `src/app/http/controllers/auth/logout_controller.gleam` — invalidates the session and redirects
 - **Register controller** — `src/app/http/controllers/auth/register_controller.gleam` — handles registration with password hashing and automatic login
+- **Dashboard controller** — `src/app/http/controllers/dashboard_controller.gleam` — a protected page shown after login
+- **Loom views** — `src/resources/views/auth/login.loom.html`, `src/resources/views/auth/register.loom.html`, `src/resources/views/dashboard.loom.html` — ready-to-use Tailwind-styled pages for login, registration, and a post-login dashboard
+- **Shared components** — `src/resources/views/components/input.loom.html`, `button.loom.html`, `link.loom.html` — reusable form components with validation error display
 - **Context patches** — adds a `user: Option(user.User)` field to your `App` type, initializes it in the bootstrap module, and registers the load middleware in the kernel
 
 Add `-m` to run migrations immediately:
@@ -1429,7 +1437,11 @@ Scoped mode namespaces middleware, controllers, and validators to avoid conflict
 | Login validator | `validators/store_login.gleam` | `validators/store_customer_login.gleam` |
 | Register validator | `validators/store_register.gleam` | `validators/store_customer_register.gleam` |
 | Login controller | `controllers/auth/login_controller.gleam` | `controllers/auth/customer_login_controller.gleam` |
-| Routes | `/login`, `/register`, `/logout` | `/customer/login`, `/customer/register`, `/customer/logout` |
+| Dashboard controller | `controllers/dashboard_controller.gleam` | `controllers/customer_dashboard_controller.gleam` |
+| Login view | `views/auth/login.loom.html` | `views/auth/customer/login.loom.html` |
+| Register view | `views/auth/register.loom.html` | `views/auth/customer/register.loom.html` |
+| Dashboard view | `views/dashboard.loom.html` | `views/customer/dashboard.loom.html` |
+| Routes | `/login`, `/register`, `/logout`, `/dashboard` | `/customer/login`, `/customer/register`, `/customer/logout`, `/customer/dashboard` |
 
 Middleware (`auth_{model}.gleam`, `guest_{model}.gleam`, `load_{model}.gleam`), the model, and context patches are always model-specific regardless of mode.
 
@@ -1454,25 +1466,21 @@ pub type App {
 }
 ```
 
-Each model gets its own middleware, so you can protect routes independently:
+Each model gets its own middleware, controllers, and views. The generated dashboard controllers render model-specific views:
 
 ```gleam
-import app/http/middleware/auth_user
-import app/http/middleware/auth_admin
-import glimr/http/middleware
-
+// src/app/http/controllers/dashboard_controller.gleam
 /// @get "/dashboard"
 pub fn show(ctx: Context(App)) -> Response {
-  use ctx <- middleware.apply([auth_user.run], ctx)
-
-  // Any authenticated user can access this.
+  let assert option.Some(user) = ctx.app.user
+  response.html(dashboard.render(ctx: ctx, user: user), 200)
 }
 
+// src/app/http/controllers/admin_dashboard_controller.gleam
 /// @get "/admin/dashboard"
-pub fn admin(ctx: Context(App)) -> Response {
-  use ctx <- middleware.apply([auth_admin.run], ctx)
-
-  // Only authenticated admins can access this.
+pub fn show(ctx: Context(App)) -> Response {
+  let assert option.Some(admin) = ctx.app.admin
+  response.html(dashboard.render(ctx: ctx, admin: admin), 200)
 }
 ```
 
@@ -1602,12 +1610,17 @@ The callback receives the database pool and the hashed password. You call your `
 
 ### Generated Controllers
 
-The login controller uses a `middleware()` function to apply guest middleware at the controller level, then validates input and authenticates:
+The login controller uses a `middleware()` function to apply guest middleware at the controller level. The `show()` action renders the login view, and `store()` validates input and authenticates:
 
 ```gleam
 /// Apply the guest middleware to the entire controller
 pub fn middleware() -> List(Middleware(App)) {
   [guest_user.run]
+}
+
+/// @get "/login"
+pub fn show(ctx: Context(App)) -> Response {
+  response.html(login.render(ctx: ctx), 200)
 }
 
 /// @post "/login"
@@ -1657,9 +1670,14 @@ pub fn destroy(ctx: Context(App)) -> Response {
 }
 ```
 
-The register controller also uses `middleware()` for guest middleware, then validates, hashes the password, creates the account, and logs in:
+The register controller also uses `middleware()` for guest middleware. The `show()` action renders the registration view:
 
 ```gleam
+/// @get "/register"
+pub fn show(ctx: Context(App)) -> Response {
+  response.html(register.render(ctx: ctx), 200)
+}
+
 /// @post "/register"
 pub fn store(ctx: Context(App)) -> Response {
   use validated <- store_register.validate(ctx)
@@ -1698,6 +1716,20 @@ pub fn store(ctx: Context(App)) -> Response {
       redirect.back(ctx)
     }
   }
+}
+```
+
+The dashboard controller is protected by auth middleware and passes the authenticated model to the view:
+
+```gleam
+pub fn middleware() -> List(Middleware(App)) {
+  [auth_user.run]
+}
+
+/// @get "/dashboard"
+pub fn show(ctx: Context(App)) -> Response {
+  let assert option.Some(user) = ctx.app.user
+  response.html(dashboard.render(ctx: ctx, user: user), 200)
 }
 ```
 
@@ -2061,21 +2093,33 @@ fn rules(_ctx) {
 
 When validation fails, Glimr automatically handles errors based on your route's response format (set by the `expects_html` or `expects_json` middleware in your kernel):
 
-**HTML routes** — flashes the first error for each field into the session as `errors.<field_name>` and redirects back. Your templates can then display these errors next to the relevant inputs:
+**HTML routes** — flashes the first error for each field into the session as `errors.<field_name>` and redirects back. It also flashes old input values as `old.<field_name>` for non-sensitive fields (fields containing "password", "secret", or "token" in their name, or fields with the `Confirmed` rule, are skipped).
+
+Your templates can use the `session.old`, `session.error`, and `session.has_error` helpers to repopulate inputs and display errors:
 
 ```html
-@import(glimr/http/context)
-@import(glimr/session/session)
-@import(app/app.{type App})
+---
+import glimr/http/context
+import glimr/session/session
+import app/app.{type App}
 
-@props(ctx: context.Context(App))
+props(ctx: context.Context(App))
+---
 
-<input type="text" name="email" />
+<input type="email" name="email" :value="session.old(ctx.session, 'email')" />
 
-<span class="error" l-if="session.has_flash(ctx.session, 'errors.email')">
-  {{ session.get_flash(ctx.session, "errors.email") }}
-</span>
+<p l-if="session.has_error(ctx.session, 'email')" class="mt-1 text-sm text-red-600">
+  {{ session.error(ctx.session, "email") }}
+</p>
 ```
+
+| Helper | Description |
+|--------|-------------|
+| `session.old(session, field)` | Returns the old input value for a field, or `""` if none |
+| `session.error(session, field)` | Returns the first validation error for a field, or `""` if none |
+| `session.has_error(session, field)` | Returns `True` if a validation error exists for a field |
+
+These are shorthand for `session.get_flash(session, "old.<field>")`, `session.get_flash(session, "errors.<field>")`, and `session.has_flash(session, "errors.<field>")` respectively.
 
 **API routes** — returns a `422 Unprocessable Entity` response with a structured JSON body:
 
@@ -2197,7 +2241,9 @@ Now let's make it reactive. Here's a counter with server-driven state:
 
 **counter.loom.html:**
 ```html
-@props(count: Int)
+---
+props(count: Int)
+---
 
 <p>Count: {{ count }}</p>
 <button l-on:click="count = count - 1">-</button>
@@ -2230,8 +2276,11 @@ A template becomes reactive when it contains `l-on:*` event handlers or `l-model
 Event handlers are assignment expressions where the left side is the prop to update and the right side is a Gleam expression:
 
 ```html
-@props(count: Int)
-@import(app/loom/counter)
+---
+import app/loom/counter
+
+props(count: Int)
+---
 
 <p>Count: {{ count }}</p>
 
@@ -2264,8 +2313,11 @@ pub fn add(count: Int, amount: Int) -> Int {
 ```
 
 ```html
-@import(app/loom/counter)
-@props(count: Int, multiplier: Int)
+---
+import app/loom/counter
+
+props(count: Int, multiplier: Int)
+---
 
 <button l-on:click="count = counter.increment(count)">+</button>
 <button l-on:click="count = counter.add(count, multiplier)">+{{ multiplier }}</button>
@@ -2282,7 +2334,9 @@ Handler expressions can reference browser event data via special variables:
 | `$key` | Key pressed (`e.key`) | `l-on:keydown`, `l-on:keyup` |
 
 ```html
-@props(name: String, enabled: Bool, last_key: String)
+---
+props(name: String, enabled: Bool, last_key: String)
+---
 
 <input l-on:input="name = $value" />
 <input type="checkbox" l-on:change="enabled = $checked" />
@@ -2294,7 +2348,9 @@ Handler expressions can reference browser event data via special variables:
 `l-model` is syntactic sugar for the common input binding pattern:
 
 ```html
-@props(name: String, email: String)
+---
+props(name: String, email: String)
+---
 
 <!-- These are equivalent -->
 <input l-model="name" />
@@ -2315,8 +2371,11 @@ Handler expressions can reference browser event data via special variables:
 Update multiple props at once using tuple destructuring:
 
 ```html
-@import(app/loom/counter)
-@props(count: Int, total: Int)
+---
+import app/loom/counter
+
+props(count: Int, total: Int)
+---
 
 <button l-on:click="#(count, total) = counter.increment_both(count, total)">
   Increment Both
@@ -2469,10 +2528,12 @@ GET forms are also intercepted. POST/PUT/DELETE forms always submit normally.
 
 ##### Props
 
-Use the `@props` directive at the top of a template to declare typed parameters:
+Use the `props()` declaration in the frontmatter block at the top of a template to declare typed parameters:
 
 ```html
-@props(name: String)
+---
+props(name: String)
+---
 
 <h1>Hello, {{ name }}!</h1>
 ```
@@ -2480,16 +2541,21 @@ Use the `@props` directive at the top of a template to declare typed parameters:
 Multiple props are comma-separated:
 
 ```html
-@props(name: String, age: Int, is_admin: Bool)
+---
+props(name: String, age: Int, is_admin: Bool)
+---
 
 <p>{{ name }} is {{ age }} years old.</p>
 ```
 
-For complex types like lists or custom types, use `@import` to bring them into scope:
+For complex types like lists or custom types, use `import` in the frontmatter to bring them into scope:
 
 ```html
-@import(app/models/user.{type User})
-@props(users: List(User), title: String)
+---
+import app/models/user.{type User}
+
+props(users: List(User), title: String)
+---
 
 <h1>{{ title }}</h1>
 <div l-for="user in users">{{ user.name }}</div>
@@ -2526,14 +2592,16 @@ Use double curly braces to output escaped values. You can use simple variables o
 <p>{{ name |> string.uppercase |> string.trim }}</p>
 ```
 
-When using function calls, make sure to import the required modules with `@import`:
+When using function calls, make sure to import the required modules in the frontmatter:
 
 ```html
-@import(gleam/string)
-@import(gleam/list)
-@import(gleam/int)
+---
+import gleam/string
+import gleam/list
+import gleam/int
 
-@props(name: String, items: List(Item))
+props(name: String, items: List(Item))
+---
 
 <p>{{ string.uppercase(name) }} has {{ int.to_string(list.length(items)) }} items</p>
 ```
@@ -2555,15 +2623,18 @@ To output literal `{{` or `{{{` on the page, prefix with a backslash:
 
 ##### Imports
 
-Use the `@import` directive to import modules into your template. Imports are needed for:
-- Custom types referenced in `@props`
+Use the `import` declaration in the frontmatter block to import modules into your template. Imports are needed for:
+- Custom types referenced in `props()`
 - Module functions used in expressions (`{{ }}`, `{{{ }}}`)
 - Module functions used in conditions (`l-if`, `l-else-if`)
 
 ```html
-@import(app/models/user.{type User})
-@import(app/models/post.{type Post, type Category})
-@props(user: User, posts: List(Post))
+---
+import app/models/user.{type User}
+import app/models/post.{type Post, type Category}
+
+props(user: User, posts: List(Post))
+---
 
 <h1>{{ user.name }}'s Posts</h1>
 <div l-for="post in posts">
@@ -2571,12 +2642,15 @@ Use the `@import` directive to import modules into your template. Imports are ne
 </div>
 ```
 
-Import directives must appear at the beginning of the template, before any HTML content. You can have multiple `@import` directives:
+Imports and props must appear inside a frontmatter block (`---` delimiters) at the beginning of the template, before any HTML content. You can have multiple `import` declarations:
 
 ```html
-@import(gleam/option.{type Option})
-@import(app/models/user.{type User})
-@props(current_user: Option(User))
+---
+import gleam/option.{type Option}
+import app/models/user.{type User}
+
+props(current_user: Option(User))
+---
 
 <template l-if="option.is_some(current_user)">
   <p>Welcome back!</p>
@@ -2586,10 +2660,13 @@ Import directives must appear at the beginning of the template, before any HTML 
 **Importing standard library modules for expressions:**
 
 ```html
-@import(gleam/string)
-@import(gleam/list)
-@import(gleam/int)
-@props(name: String, items: List(String))
+---
+import gleam/string
+import gleam/list
+import gleam/int
+
+props(name: String, items: List(String))
+---
 
 <p>{{ string.uppercase(name) }}</p>
 <p l-if="list.length(items) > 0">{{ int.to_string(list.length(items)) }} items</p>
@@ -2635,9 +2712,12 @@ For grouping, use `{}` instead of `()` (Gleam syntax):
 Conditions support full Gleam expressions, including function calls:
 
 ```html
-@import(gleam/list)
-@import(gleam/string)
-@props(items: List(Item), name: String)
+---
+import gleam/list
+import gleam/string
+
+props(items: List(Item), name: String)
+---
 
 <div l-if="list.length(items) > 0">
   <p>You have {{ int.to_string(list.length(items)) }} items</p>
@@ -2677,8 +2757,11 @@ You can chain as many `l-else-if` as needed, and `l-else` at the end is optional
 Expressions also work in `l-else-if`:
 
 ```html
-@import(gleam/list)
-@props(items: List(Item))
+---
+import gleam/list
+
+props(items: List(Item))
+---
 
 <p l-if="list.is_empty(items)">No items</p>
 <p l-else-if="list.length(items) == 1">One item</p>
@@ -2740,6 +2823,25 @@ Each item is either:
 <div :style="['margin: 0', #('color: red', has_error)]">
   Content
 </div>
+```
+
+**Using `case` expressions:**
+
+You can use Gleam `case` expressions inside `:class` lists to select classes based on a value:
+
+```html
+<button
+  :class="[
+    'py-2 px-4 font-medium rounded-md',
+    case variant {
+      'secondary' -> 'bg-gray-200 text-gray-700'
+      'danger' -> 'bg-red-500 text-white'
+      _ -> 'bg-pink-500 text-white'
+    },
+  ]"
+>
+  <slot />
+</button>
 ```
 
 Note: Use `:class` with static strings in the list rather than combining `class` and `:class` attributes.
@@ -2868,7 +2970,7 @@ Components are reusable template partials. Create them in `src/resources/views/c
 
 **components/alert.loom.html:**
 ```html
-<div class="alert alert-{{ type }}">
+<div :class="['alert', 'alert-' <> type]">
   <slot />
   <button class="close">&times;</button>
 </div>
@@ -2882,13 +2984,15 @@ Components are reusable template partials. Create them in `src/resources/views/c
 
 ##### Props
 
-Use the `@props` directive in your component template to define typed props:
+Use the `props()` declaration in the frontmatter block to define typed props for your component:
 
 ```html
 <!-- components/alert.loom.html -->
-@props(dismissable: Bool, type: String)
+---
+props(dismissable: Bool, type: String)
+---
 
-<div class="alert alert-{{ type }}">
+<div :class="['alert', 'alert-' <> type]">
   <slot />
   <button l-if="dismissable" class="close">&times;</button>
 </div>
@@ -2908,7 +3012,7 @@ Then pass props when using the component:
 
 ##### HTML Attributes
 
-When you add attributes to a component that aren't defined in its `@props`, they're treated as HTML attributes and passed through to the component's root element:
+When you add attributes to a component that aren't defined in its `props()`, they're treated as HTML attributes and passed through to the component's root element:
 
 ```html
 <!-- "type" is a prop, "id" and "class" are HTML attributes -->
@@ -2927,7 +3031,7 @@ By default, HTML attributes are added to the first element. Use `@attributes` to
 
 **components/alert.loom.html:**
 ```html
-<div class="alert alert-{{ type }}">
+<div :class="['alert', 'alert-' <> type]">
   <slot />
   <button @attributes class="close">&times;</button>
 </div>
@@ -3056,7 +3160,9 @@ Layouts are just components that wrap your page content. Create a layout in `src
 
 **components/layouts/app.loom.html:**
 ```html
-@import(glimr/vite)
+---
+import glimr/vite
+---
 
 <!DOCTYPE html>
 <html>

@@ -17,7 +17,7 @@ gleam_stdlib = ">= 0.44.0 and < 2.0.0"
 gleam_httpc = ">= 5.0.0 and < 6.0.0"
 # glimr = ">= 0.9.0 and < 0.10.0"
 glimr = {path = "../framework"}
-glimr_postgres = {path = "../postgres"}
+glimr_sqlite = {path = "../sqlite"}
 glimr_auth = {path = "../auth"}
 # glimr_postgres = ">= 0.5.0 and < 0.6.0"
 wisp = ">= 2.1.0 and < 3.0.0"
