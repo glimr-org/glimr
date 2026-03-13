@@ -2335,7 +2335,11 @@ Handler expressions can reference browser event data via special variables:
 
 ```html
 ---
-props(name: String, enabled: Bool, last_key: String)
+props(
+  name: String, 
+  enabled: Bool, 
+  last_key: String
+)
 ---
 
 <input l-on:input="name = $value" />
@@ -2542,7 +2546,11 @@ Multiple props are comma-separated:
 
 ```html
 ---
-props(name: String, age: Int, is_admin: Bool)
+props(
+  name: String, 
+  age: Int, 
+  is_admin: Bool
+)
 ---
 
 <p>{{ name }} is {{ age }} years old.</p>
