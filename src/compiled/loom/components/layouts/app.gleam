@@ -18,7 +18,7 @@ pub fn render(
   attributes attributes: List(runtime.Attribute),
 ) -> String {
   ""
-  <> "\n<!doctype html>\n<html>\n  <head>\n    <meta charset=\"utf-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n\n    "
+  <> "\n<!doctype html>\n<html>\n  <head>\n    <meta charset=\"utf-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n\n    <link\n      href=\"https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900\"\n      rel=\"stylesheet\"\n    />\n\n    "
   <> vite.tags("src/resources/ts/app.ts")
   <> "\n\n    <!-- header scripts and meta tags -->\n    "
   <> slot_head

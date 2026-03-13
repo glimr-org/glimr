@@ -19,7 +19,7 @@ pub fn render() -> String {
     slot_meta_title: { "" <> "Glimr ✨" },
     slot_head: {
       ""
-      <> "\n    <link\n      href=\"https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900\"\n      rel=\"stylesheet\"\n    />\n\n    <style>\n      @keyframes float {\n        0%,\n        100% {\n          transform: translateY(0);\n        }\n        50% {\n          transform: translateY(-10px);\n        }\n      }\n    </style>\n  "
+      <> "\n    <style>\n      @keyframes float {\n        0%,\n        100% {\n          transform: translateY(0);\n        }\n        50% {\n          transform: translateY(-10px);\n        }\n      }\n    </style>\n  "
     },
     slot_footer: "",
     slot_footer_scripts: "",
@@ -27,7 +27,7 @@ pub fn render() -> String {
       ""
       <> "\n  "
       <> "\n\n  "
-      <> "\n\n  <div\n    class=\"flex items-center justify-center relative h-screen bg-linear-to-br from-[#ffb8e4] via-white to-[#ffb8e4] font-['Inter'] text-[#2c2e49] antialiased\"\n  >\n    <div class=\"text-center\">\n      "
+      <> "\n\n  <div\n    class=\"flex items-center justify-center relative h-screen bg-linear-to-br from-[#ffb8e4] via-white to-[#ffb8e4] font-sans text-[#2c2e49] antialiased\"\n  >\n    <div class=\"text-center\">\n      "
       <> components_logo.render(attributes: [
         runtime.Attribute(
           "class",
