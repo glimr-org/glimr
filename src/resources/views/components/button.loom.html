@@ -1,0 +1,36 @@
+---
+import gleam/string
+
+props(variant: String, href: String)
+---
+
+<!-- if no href is present, then use a regular button-->
+<button
+  l-if="string.is_empty(href)"
+  :class="[
+    'w-full py-2.5 px-4 font-medium rounded-lg cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2',
+    case variant {
+      'secondary' -> 'bg-mist-100 text-gray-700 hover:bg-mist-200 focus:ring-mist-400'
+      'danger' -> 'bg-red-500 text-white hover:bg-red-600 focus:ring-red-500'
+      _ -> 'bg-mist-900 text-white hover:bg-mist-700 focus:ring-mist-500'
+    },
+  ]"
+>
+  <slot />
+</button>
+
+<!-- if there's an href present, use an anchor tag -->
+<a
+  l-else
+  :href="href"
+  :class="[
+    'w-full py-2.5 px-4 font-medium rounded-lg cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2',
+    case variant {
+      'secondary' -> 'bg-mist-100 text-gray-700 hover:bg-mist-200 focus:ring-mist-400'
+      'danger' -> 'bg-red-500 text-white hover:bg-red-600 focus:ring-red-500'
+      _ -> 'bg-mist-900 text-white hover:bg-mist-700 focus:ring-mist-500'
+    },
+  ]"
+>
+  <slot />
+</a>

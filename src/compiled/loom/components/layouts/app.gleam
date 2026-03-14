@@ -18,7 +18,7 @@ pub fn render(
   attributes attributes: List(runtime.Attribute),
 ) -> String {
   ""
-  <> "\n<!doctype html>\n<html>\n  <head>\n    <meta charset=\"utf-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n\n    <link\n      href=\"https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900\"\n      rel=\"stylesheet\"\n    />\n\n    "
+  <> "\n<!doctype html>\n<html>\n  <head>\n    <meta charset=\"utf-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n\n    <link\n      href=\"https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600\"\n      rel=\"stylesheet\"\n    />\n\n    "
   <> vite.tags("src/resources/ts/app.ts")
   <> "\n\n    <!-- header scripts and meta tags -->\n    "
   <> slot_head
@@ -27,7 +27,7 @@ pub fn render(
   <> runtime.render_attributes(attributes)
   <> ">"
   <> slot_meta_title
-  <> "</title>\n  </head>\n  <body>\n    "
+  <> "</title>\n  </head>\n  <body class=\"antialiased\">\n    "
   <> slot
   <> "\n\n    "
   <> case slot_footer != "" {
@@ -42,7 +42,6 @@ pub fn render(
     }
     False -> ""
   }
-  <> "\n\n    <!-- footer scripts -->\n    "
   <> slot_footer_scripts
   <> "\n  </body>\n</html>\n"
 }

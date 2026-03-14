@@ -1,63 +1,45 @@
 <x-layouts:app>
   <slot name="meta_title">Glimr ✨</slot>
 
-  <slot name="head">
-    <style>
-      @keyframes float {
-        0%,
-        100% {
-          transform: translateY(0);
-        }
-        50% {
-          transform: translateY(-10px);
-        }
-      }
-    </style>
-  </slot>
-
   <div
-    class="flex items-center justify-center relative h-screen bg-linear-to-br from-[#ffb8e4] via-white to-[#ffb8e4] font-sans text-[#2c2e49] antialiased"
+    class="flex flex-col items-center justify-center min-h-screen bg-mist-50"
   >
-    <div class="text-center">
-      <x-logo
-        class="animate-[float_3s_ease-in-out_infinite] mb-7.5 mx-auto"
-        width="140"
-      />
-
-      <div class="text-[17px] mb-1.25 font-medium">Welcome to Glimr ✨</div>
-
-      <div class="mb-5 text-[#9ea0b7] text-[15px]">
-        The batteries-included web framework for Gleam.
+    <div class="w-full max-w-md p-8 bg-white rounded-lg shadow-md text-center">
+      <div class="flex justify-center">
+        <x-logo width="25" class="mb-3 fill-mist-200" />
       </div>
 
-      <div class="mt-5 flex items-center justify-center">
-        <a
+      <div class="text-[19px] font-semibold text-mist-700 leading-tight mb-3">
+        Welcome to Glimr
+      </div>
+
+      <div class="mb-6 text-[16px] text-mist-400 leading-snug">
+        Build scalable web applications that LLM's can understand, and you can
+        trust.
+      </div>
+
+      <div class="flex items-center justify-center gap-3">
+        <x-button
           target="_blank"
           href="https://github.com/glimr-org/glimr?tab=readme-ov-file#glimr-"
-          class="inline-flex items-center gap-1 text-[#2c2e49] mx-2.5 text-sm no-underline transition-colors duration-300 hover:text-[#ff43a1]"
+          class="flex justify-center gap-1.5 items-center text-[14px]"
         >
-          <x-icons:reader class="mr-px text-[#ff43a1]" width="15" />
+          <x-icons:reader
+            width="14"
+            class="text-mist-400 relative top-[.5px]"
+          />
+          <span>Documentation</span>
+        </x-button>
 
-          Documentation
-        </a>
-        <a
+        <x-button
+          variant="secondary"
+          href="https://gleam.run"
           target="_blank"
-          href="https://github.com/glimr-org/framework"
-          class="inline-flex items-center gap-1 text-[#2c2e49] mx-2.5 text-sm no-underline transition-colors duration-300 hover:text-[#ff43a1]"
+          class="flex justify-center gap-1.5 items-center text-[14px]"
         >
-          <x-icons:frame class="mr-px text-[#ff43a1]" width="15" />
-
-          Core Framework
-        </a>
-        <a
-          target="_blank"
-          href="https://gleam.run/"
-          class="inline-flex items-center gap-1 text-[#2c2e49] mx-2.5 text-sm no-underline transition-colors duration-300 hover:text-[#ff43a1]"
-        >
-          <x-icons:star class="mr-px text-[#ff43a1]" width="15" />
-
-          Learn Gleam
-        </a>
+          <x-icons:star width="15" class="text-mist-400 relative top-[.5px]" />
+          <span>Learn Gleam</span>
+        </x-button>
       </div>
     </div>
   </div>

@@ -6,7 +6,7 @@
 //// loom:compile`.
 ////
 
-import compiled/loom/components/icons/frame as components_icons_frame
+import compiled/loom/components/button as components_button
 import compiled/loom/components/icons/reader as components_icons_reader
 import compiled/loom/components/icons/star as components_icons_star
 import compiled/loom/components/layouts/app as components_layouts_app
@@ -17,40 +17,66 @@ pub fn render() -> String {
   ""
   <> components_layouts_app.render(
     slot_meta_title: { "" <> "Glimr ✨" },
-    slot_head: {
-      ""
-      <> "\n    <style>\n      @keyframes float {\n        0%,\n        100% {\n          transform: translateY(0);\n        }\n        50% {\n          transform: translateY(-10px);\n        }\n      }\n    </style>\n  "
-    },
     slot_footer: "",
     slot_footer_scripts: "",
+    slot_head: "",
     slot: {
       ""
       <> "\n  "
-      <> "\n\n  "
-      <> "\n\n  <div\n    class=\"flex items-center justify-center relative h-screen bg-linear-to-br from-[#ffb8e4] via-white to-[#ffb8e4] font-sans text-[#2c2e49] antialiased\"\n  >\n    <div class=\"text-center\">\n      "
+      <> "\n\n  <div\n    class=\"flex flex-col items-center justify-center min-h-screen bg-mist-50\"\n  >\n    <div class=\"w-full max-w-md p-8 bg-white rounded-lg shadow-md text-center\">\n      <div class=\"flex justify-center\">\n        "
       <> components_logo.render(attributes: [
-        runtime.Attribute(
-          "class",
-          "animate-[float_3s_ease-in-out_infinite] mb-7.5 mx-auto",
-        ),
-        runtime.Attribute("width", "140"),
+        runtime.Attribute("width", "25"),
+        runtime.Attribute("class", "mb-3 fill-mist-200"),
       ])
-      <> "\n\n      <div class=\"text-[17px] mb-1.25 font-medium\">Welcome to Glimr ✨</div>\n\n      <div class=\"mb-5 text-[#9ea0b7] text-[15px]\">\n        The batteries-included web framework for Gleam.\n      </div>\n\n      <div class=\"mt-5 flex items-center justify-center\">\n        <a\n          target=\"_blank\"\n          href=\"https://github.com/glimr-org/glimr?tab=readme-ov-file#glimr-\"\n          class=\"inline-flex items-center gap-1 text-[#2c2e49] mx-2.5 text-sm no-underline transition-colors duration-300 hover:text-[#ff43a1]\"\n        >\n          "
-      <> components_icons_reader.render(attributes: [
-        runtime.Attribute("class", "mr-px text-[#ff43a1]"),
-        runtime.Attribute("width", "15"),
-      ])
-      <> "\n\n          Documentation\n        </a>\n        <a\n          target=\"_blank\"\n          href=\"https://github.com/glimr-org/framework\"\n          class=\"inline-flex items-center gap-1 text-[#2c2e49] mx-2.5 text-sm no-underline transition-colors duration-300 hover:text-[#ff43a1]\"\n        >\n          "
-      <> components_icons_frame.render(attributes: [
-        runtime.Attribute("class", "mr-px text-[#ff43a1]"),
-        runtime.Attribute("width", "15"),
-      ])
-      <> "\n\n          Core Framework\n        </a>\n        <a\n          target=\"_blank\"\n          href=\"https://gleam.run/\"\n          class=\"inline-flex items-center gap-1 text-[#2c2e49] mx-2.5 text-sm no-underline transition-colors duration-300 hover:text-[#ff43a1]\"\n        >\n          "
-      <> components_icons_star.render(attributes: [
-        runtime.Attribute("class", "mr-px text-[#ff43a1]"),
-        runtime.Attribute("width", "15"),
-      ])
-      <> "\n\n          Learn Gleam\n        </a>\n      </div>\n    </div>\n  </div>\n"
+      <> "\n      </div>\n\n      <div class=\"text-[19px] font-semibold text-mist-700 leading-tight mb-3\">\n        Welcome to Glimr\n      </div>\n\n      <div class=\"mb-6 text-[16px] text-mist-400 leading-snug\">\n        Build scalable web applications that LLM's can understand, and you can\n        trust.\n      </div>\n\n      <div class=\"flex items-center justify-center gap-3\">\n        "
+      <> components_button.render(
+        href: "https://github.com/glimr-org/glimr?tab=readme-ov-file#glimr-",
+        variant: "",
+        slot: {
+          ""
+          <> "\n          "
+          <> components_icons_reader.render(attributes: [
+            runtime.Attribute("width", "14"),
+            runtime.Attribute("class", "text-mist-400 relative top-[.5px]"),
+          ])
+          <> "\n          <span>Documentation</span>\n        "
+        },
+        attributes: [
+          runtime.Attribute("target", "_blank"),
+          runtime.Attribute(
+            "href",
+            "https://github.com/glimr-org/glimr?tab=readme-ov-file#glimr-",
+          ),
+          runtime.Attribute(
+            "class",
+            "flex justify-center gap-1.5 items-center text-[14px]",
+          ),
+        ],
+      )
+      <> "\n\n        "
+      <> components_button.render(
+        variant: "secondary",
+        href: "https://gleam.run",
+        slot: {
+          ""
+          <> "\n          "
+          <> components_icons_star.render(attributes: [
+            runtime.Attribute("width", "15"),
+            runtime.Attribute("class", "text-mist-400 relative top-[.5px]"),
+          ])
+          <> "\n          <span>Learn Gleam</span>\n        "
+        },
+        attributes: [
+          runtime.Attribute("variant", "secondary"),
+          runtime.Attribute("href", "https://gleam.run"),
+          runtime.Attribute("target", "_blank"),
+          runtime.Attribute(
+            "class",
+            "flex justify-center gap-1.5 items-center text-[14px]",
+          ),
+        ],
+      )
+      <> "\n      </div>\n    </div>\n  </div>\n"
     },
     attributes: [],
   )

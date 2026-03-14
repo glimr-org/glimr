@@ -8,6 +8,14 @@
 
 @import "tailwindcss";
 
+@layer base {
+  body {
+    font-size: 15px;
+    color: theme(--color-mist-600);
+  }
+}
+
 @theme {
-  --font-sans: "Inter", sans-serif;
+  --font-sans: "Barlow", sans-serif;
+  --text-base: 15px;
 }

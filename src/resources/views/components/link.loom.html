@@ -1,0 +1,14 @@
+---
+props(variant: String)
+---
+
+<a
+  :class="[
+    'font-medium',
+    case variant {
+      _ -> 'text-mist-800 hover:text-mist-600'
+    },
+  ]"
+>
+  <slot />
+</a>
