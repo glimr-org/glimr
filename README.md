@@ -1419,6 +1419,16 @@ Add `-m` to run migrations immediately:
 ./glimr make_auth user -m
 ```
 
+### Skipping Views
+
+If you prefer to build your own login, register, and dashboard pages, pass `--no-views` (or `-nv`) to skip generating loom templates:
+
+```bash
+./glimr make_auth user --no-views
+```
+
+The controllers will still be generated, but their `show()` functions will contain a `todo` instead of rendering a view. Everything else — models, middleware, validators, context patches — is scaffolded as usual.
+
 If you run `make_auth` again for a different model without `--scoped`, it will warn you that unscoped auth already exists and suggest using scoped mode instead.
 
 ### Scoped Mode
