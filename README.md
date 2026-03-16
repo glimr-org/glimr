@@ -72,6 +72,7 @@ If you'd like to stay updated on Glimr's development, Follow [@migueljarias](htt
   - [Commands with Database Access](#commands-with-database-access)
   - [Commands with Cache Access](#commands-with-cache-access)
   - [Third-Party Commands](#third-party-commands)
+  - [Console Output](#console-output)
 - [Configuration](#configuration)
 - [Context System](#context-system)
 - [Learn More](#learn-more)
@@ -4852,6 +4853,35 @@ Register packages that offer console commands in `glimr.toml`:
 ```
 
 This allows third party packages to provide commands for your app in the same way Glimr does, providing a seamless and unified experience.
+
+### Console Output
+
+The `glimr/console/console` module provides helpers for printing styled terminal output in your commands.
+
+**Printing lines** — each function prints immediately and returns `Nil`:
+
+```gleam
+import glimr/console/console
+
+fn run(args: Args) -> Nil {
+  console.line("Processing files...")
+  console.line_success("Created: src/app/example.gleam")
+  console.line_error("Failed to write file")
+  console.line_warning("File already exists, skipping")
+  console.line_info("Running migrations...")
+  console.new_line(1)
+}
+```
+
+**Inline colors** — for coloring parts of a line, use the string-returning helpers:
+
+```gleam
+// These return a colored String, not Nil
+console.line(console.success("✓ ") <> "Migration applied")
+console.line(console.warning("⚠ ") <> "Check your config")
+```
+
+Available inline color functions: `console.success()` (green), `console.warning()` (yellow), `console.error()` (red), `console.info()` (blue).
 
 ## Configuration
 
