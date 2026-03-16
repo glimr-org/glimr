@@ -1411,7 +1411,6 @@ This generates:
 - **Register controller** — `src/app/http/controllers/auth/register_controller.gleam` — handles registration with password hashing and automatic login
 - **Dashboard controller** — `src/app/http/controllers/dashboard_controller.gleam` — a protected page shown after login
 - **Loom views** — `src/resources/views/auth/login.loom.html`, `src/resources/views/auth/register.loom.html`, `src/resources/views/dashboard.loom.html` — ready-to-use Tailwind-styled pages for login, registration, and a post-login dashboard
-- **Shared components** — `src/resources/views/components/input.loom.html`, `button.loom.html`, `link.loom.html` — reusable form components with validation error display
 - **Context patches** — adds a `user: Option(user.User)` field to your `App` type, initializes it in the bootstrap module, and registers the load middleware in the kernel
 
 Add `-m` to run migrations immediately:

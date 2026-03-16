@@ -1,0 +1,29 @@
+---
+import glimr/session/session.{type Session}
+
+props(
+  label: String,
+  id: String,
+  name: String,
+  session: Session
+)
+---
+
+<div>
+  <label :for="id" class="block text-sm font-medium text-mist-800 mb-1">
+    {{ label }}
+  </label>
+
+  <input
+    @attributes
+    :value="session.old(session, name)"
+    class="w-full px-3 py-2 border border-mist-200 rounded-md focus:outline-none focus:ring-2 focus:ring-mist-500 focus:border-transparent placeholder:text-mist-400"
+  />
+
+  <small
+    l-if="session.has_error(session, name)"
+    class="mt-1 text-sm text-red-600"
+  >
+    {{ session.error(session, name) }}
+  </small>
+</div>

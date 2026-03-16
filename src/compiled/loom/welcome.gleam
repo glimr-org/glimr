@@ -23,7 +23,7 @@ pub fn render() -> String {
     slot: {
       ""
       <> "\n  "
-      <> "\n\n  <div\n    class=\"flex flex-col items-center justify-center min-h-screen bg-mist-50\"\n  >\n    <div class=\"w-full max-w-md p-8 bg-white rounded-lg shadow-md text-center\">\n      <div class=\"flex justify-center\">\n        "
+      <> "\n\n  <div\n    class=\"flex flex-col items-center justify-center min-h-screen bg-mist-50\"\n  >\n    <div class=\"w-full max-w-md p-8 bg-white rounded-xl shadow-md text-center\">\n      <div class=\"flex justify-center\">\n        "
       <> components_logo.render(attributes: [
         runtime.Attribute("width", "25"),
         runtime.Attribute("class", "mb-3 fill-mist-200"),
@@ -49,7 +49,7 @@ pub fn render() -> String {
           ),
           runtime.Attribute(
             "class",
-            "flex justify-center gap-1.5 items-center text-[14px]",
+            "flex justify-center gap-1.5 items-center text-[14.5px]",
           ),
         ],
       )
@@ -72,7 +72,7 @@ pub fn render() -> String {
           runtime.Attribute("target", "_blank"),
           runtime.Attribute(
             "class",
-            "flex justify-center gap-1.5 items-center text-[14px]",
+            "flex justify-center gap-1.5 items-center text-[14.5px]",
           ),
         ],
       )
