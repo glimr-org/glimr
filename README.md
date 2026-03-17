@@ -339,6 +339,7 @@ Routes are defined using annotations in doc comments above your controller funct
 ```gleam
 // src/app/http/controllers/user_controller.gleam
 import compiled/loom/welcome
+import glimr/http/http.{type Response}
 
 /// @get "/welcome"
 pub fn show() -> Response {
@@ -422,6 +423,8 @@ pub fn routes(path, method, ctx) {
 Use `:param` syntax in your route path to capture URL segments as parameters:
 
 ```gleam
+import glimr/http/http.{type Response}
+
 /// @get "/posts/:post_id/comments/:comment_id"
 pub fn show(post_id: String, comment_id: String) -> Response {
   // Access post_id and comment_id directly as function parameters
@@ -433,6 +436,8 @@ pub fn show(post_id: String, comment_id: String) -> Response {
 Add redirects to routes using `@redirect` (303 temporary) or `@redirect_permanent` (308 permanent):
 
 ```gleam
+import glimr/http/http.{type Response}
+
 /// @redirect "/old-contact"
 /// @redirect "/contact-us"
 /// @get "/contact"
@@ -454,6 +459,7 @@ Apply middleware to individual routes using `middleware.apply` with `use`:
 ```gleam
 import app/http/middleware/auth
 import app/http/middleware/rate_limit
+import glimr/http/http.{type Response}
 import glimr/http/middleware
 
 /// @get "/dashboard"
@@ -469,8 +475,9 @@ Apply middleware to all routes in a controller by defining a `middleware()` func
 
 ```gleam
 // src/app/http/controllers/admin_controller.gleam
-import app/http/middleware/auth
 import app/http/middleware/admin
+import app/http/middleware/auth
+import glimr/http/http.{type Response}
 
 pub fn middleware() {
   [auth.run, admin.run]
@@ -492,6 +499,7 @@ You can combine controller middleware with route-specific middleware:
 ```gleam
 import app/http/middleware/auth
 import app/http/middleware/logging
+import glimr/http/http.{type Response}
 import glimr/http/middleware
 
 pub fn middleware() {
@@ -516,6 +524,7 @@ Attach form validators to routes using the `use` syntax for validated and typed 
 
 ```gleam
 import app/http/validators/user_store
+import glimr/http/http.{type Response}
 
 /// @post "/users"
 pub fn store(ctx: Context(App)) -> Response {
@@ -562,6 +571,7 @@ By default, routes with the `/api` prefix:
 
 ```gleam
 // src/app/http/controllers/api/user_controller.gleam
+import glimr/http/http.{type Response}
 
 /// @get "/api/users"
 pub fn index() -> Response {
@@ -625,6 +635,8 @@ pub fn groups() -> List(RouteGroup(Context(App))) {
 3. Handle the custom middleware group in `src/app/http/kernel.gleam`:
 
 ```gleam
+import glimr/http/http.{type Response}
+
 pub fn handle(ctx, middleware_group, router) -> Response {
   case middleware_group {
     kernel.Api -> {
@@ -720,10 +732,11 @@ This creates `user_controller.gleam`. Define routes using annotations above your
 
 ```gleam
 // src/app/http/controllers/user_controller.gleam
-import glimr/response/response
-import glimr/response/redirect
 import app/http/validators/user_store
 import compiled/loom/user_show
+import glimr/http/http.{type Response}
+import glimr/response/redirect
+import glimr/response/response
 
 /// @get "/users/:user
 pub fn show(ctx: Context(App), user: String) -> Response {
@@ -791,6 +804,7 @@ Use actions in controllers with `case` for error handling:
 import app/http/actions/create_submission
 import app/http/validators/contact_store
 import glimr/db/db.{NotFound}
+import glimr/http/http.{type Response}
 
 /// @put "/submissions/:submission"
 pub fn update(ctx: Context(App), submission: String) -> Response {
@@ -812,8 +826,9 @@ pub fn update(ctx: Context(App), submission: String) -> Response {
 Actions can be composed using `result.try` for sequential operations:
 
 ```gleam
-import gleam/result
 import app/http/validators/user_store
+import gleam/result
+import glimr/http/http.{type Response}
 
 /// @post "/users"
 pub fn store(ctx: Context(App)) -> Response {
@@ -869,6 +884,7 @@ Apply middleware to individual routes using `middleware.apply` with `use`:
 ```gleam
 // src/app/http/controllers/dashboard_controller.gleam
 import app/http/middleware/auth
+import glimr/http/http.{type Response}
 import glimr/http/middleware
 
 /// @get "/dashboard"
@@ -884,8 +900,9 @@ Apply middleware to all routes in a controller by defining a `middleware()` func
 
 ```gleam
 // src/app/http/controllers/admin_controller.gleam
-import app/http/middleware/auth
 import app/http/middleware/admin
+import app/http/middleware/auth
+import glimr/http/http.{type Response}
 
 pub fn middleware() {
   [auth.run, admin.run]
@@ -919,6 +936,7 @@ Then in your controller:
 
 ```gleam
 import app/http/middleware/auth
+import glimr/http/http.{type Response}
 import glimr/http/middleware
 
 /// @get "/dashboard"
@@ -1052,6 +1070,8 @@ Add a custom middleware group using `kernel.Custom("name")`:
 Then handle it in `src/app/http/kernel.gleam`:
 
 ```gleam
+import glimr/http/http.{type Response}
+
 pub fn handle(ctx, middleware_group, router) -> Response {
   case middleware_group {
     kernel.Api -> {
@@ -1251,6 +1271,8 @@ session.cookie_store() |> session.setup()
 The `load_session` middleware runs in your kernel and hydrates a live session onto the context for each request. Add it to your middleware groups in `src/app/http/kernel.gleam`:
 
 ```gleam
+import glimr/http/http.{type Response}
+
 pub fn handle(ctx, middleware_group, router) -> Response {
   case middleware_group {
     kernel.Api -> {
@@ -1285,8 +1307,9 @@ pub fn handle(ctx, middleware_group, router) -> Response {
 All session operations interact with the per-request OTP actor through `ctx.session`:
 
 ```gleam
-import glimr/session/session
+import glimr/http/http.{type Response}
 import glimr/response/redirect
+import glimr/session/session
 
 /// @post "/profile"
 pub fn update(ctx: Context(App)) -> Response {
@@ -1322,6 +1345,7 @@ Flash messages are one-shot values: set during this request, available only on t
 
 ```gleam
 import glimr/http/context.{type Context}
+import glimr/http/http.{type Response}
 import glimr/session/session
 
 /// @post "/login"
@@ -1360,6 +1384,7 @@ props(ctx: Context(App))
 ### Session Invalidation & Regeneration
 
 ```gleam
+import glimr/http/http.{type Response}
 import glimr/session/session
 
 /// @post "/logout"
@@ -1480,6 +1505,8 @@ Each model gets its own middleware, controllers, and views. The generated dashbo
 
 ```gleam
 // src/app/http/controllers/dashboard_controller.gleam
+import glimr/http/http.{type Response}
+
 /// @get "/dashboard"
 pub fn show(ctx: Context(App)) -> Response {
   let assert option.Some(user) = ctx.app.user
@@ -1487,6 +1514,8 @@ pub fn show(ctx: Context(App)) -> Response {
 }
 
 // src/app/http/controllers/admin_dashboard_controller.gleam
+import glimr/http/http.{type Response}
+
 /// @get "/admin/dashboard"
 pub fn show(ctx: Context(App)) -> Response {
   let assert option.Some(admin) = ctx.app.admin
@@ -1497,6 +1526,8 @@ pub fn show(ctx: Context(App)) -> Response {
 Users log in at `/login`, admins at `/admin/login` — completely separate flows with separate throttling, sessions, and redirects. Registration works the same way — users register at `/register`, admins at `/admin/register`:
 
 ```gleam
+import glimr/http/http.{type Response}
+
 /// @post "/admin/register"
 pub fn store(ctx: Context(App)) -> Response {
   use validated <- store_admin_register.validate(ctx)
@@ -1623,6 +1654,8 @@ The callback receives the database pool and the hashed password. You call your `
 The login controller uses a `middleware()` function to apply guest middleware at the controller level. The `show()` action renders the login view, and `store()` validates input and authenticates:
 
 ```gleam
+import glimr/http/http.{type Response}
+
 /// Apply the guest middleware to the entire controller
 pub fn middleware() -> List(Middleware(App)) {
   [guest_user.run]
@@ -1668,6 +1701,8 @@ pub fn store(ctx: Context(App)) -> Response {
 The logout controller invalidates the session and flashes a message on the fresh session:
 
 ```gleam
+import glimr/http/http.{type Response}
+
 /// @post "/logout"
 pub fn destroy(ctx: Context(App)) -> Response {
   use ctx <- middleware.apply([auth_user.run], ctx)
@@ -1683,6 +1718,8 @@ pub fn destroy(ctx: Context(App)) -> Response {
 The register controller also uses `middleware()` for guest middleware. The `show()` action renders the registration view:
 
 ```gleam
+import glimr/http/http.{type Response}
+
 /// @get "/register"
 pub fn show(ctx: Context(App)) -> Response {
   response.html(register.render(ctx: ctx), 200)
@@ -1732,6 +1769,8 @@ pub fn store(ctx: Context(App)) -> Response {
 The dashboard controller is protected by auth middleware and passes the authenticated model to the view:
 
 ```gleam
+import glimr/http/http.{type Response}
+
 pub fn middleware() -> List(Middleware(App)) {
   [auth_user.run]
 }
@@ -1749,6 +1788,7 @@ The **auth middleware** protects routes that require authentication. It checks `
 
 ```gleam
 import app/http/middleware/auth_user
+import glimr/http/http.{type Response}
 
 /// @get "/settings"
 pub fn show(ctx: Context(App)) -> Response {
@@ -1762,6 +1802,7 @@ The **guest middleware** does the opposite — it redirects authenticated users 
 
 ```gleam
 import app/http/middleware/guest_user
+import glimr/http/http.{type Response}
 
 /// @get "/login"
 pub fn show(ctx: Context(App)) -> Response {
@@ -2149,6 +2190,7 @@ Glimr provides a powerful templating engine called Loom, along with a fluent bui
 ### Rendering HTML Files
 
 ```gleam
+import glimr/http/http.{type Response}
 import glimr/response/response
 
 pub fn show(ctx: Context(App)) -> Response {
@@ -2161,6 +2203,7 @@ HTML files are found in `src/resources/views`.
 ### Rendering Raw HTML
 
 ```gleam
+import glimr/http/http.{type Response}
 import glimr/response/response
 
 pub fn show(ctx: Context(App)) -> Response {
@@ -2197,6 +2240,7 @@ You can trigger an error response from anywhere in a request handler using `fail
 
 ```gleam
 import glimr/http/fail
+import glimr/http/http.{type Response}
 
 pub fn show(ctx: Context(App), id: String) -> Response {
   let user = case get_user(id) {
@@ -3255,6 +3299,7 @@ Glimr's redirect builder provides a clean API for redirecting users with flash m
 ### Basic Redirects
 
 ```gleam
+import glimr/http/http.{type Response}
 import glimr/response/redirect
 
 pub fn store(ctx: Context(App)) -> Response {
@@ -3269,6 +3314,8 @@ pub fn store(ctx: Context(App)) -> Response {
 Flash messages persist data across redirects using the [session flash API](#flash-messages):
 
 ```gleam
+import glimr/http/http.{type Response}
+
 pub fn store(ctx: Context(App)) -> Response {
   // Process form...
   session.flash(ctx.session, "success", "Contact form submitted!")
@@ -3282,6 +3329,8 @@ pub fn store(ctx: Context(App)) -> Response {
 Redirect users back to the previous page:
 
 ```gleam
+import glimr/http/http.{type Response}
+
 pub fn cancel(ctx: Context(App)) -> Response {
   redirect.back(ctx)
 }
@@ -3353,6 +3402,8 @@ pub fn start() -> app.App {
 Use `ctx.app.db` in your controllers:
 
 ```gleam
+import glimr/http/http.{type Response}
+
 /// @get "/users/:user_id"
 pub fn show(ctx: Context(App), user_id: String) -> Response {
   let assert Ok(user_id) = int.parse(user_id)
@@ -3467,6 +3518,8 @@ pub fn start() -> app.App {
 Use `ctx.app.db` in your controllers:
 
 ```gleam
+import glimr/http/http.{type Response}
+
 /// @get "/users/:user_id"
 pub fn show(ctx: Context(App), user_id: String) -> Response {
   let assert Ok(user_id) = int.parse(user_id)
@@ -3970,6 +4023,7 @@ The `_or_fail` variants are the most convenient for HTTP handlers — they retur
 
 ```gleam
 import database/models/user/gen/user
+import glimr/http/http.{type Response}
 
 pub fn show(ctx: Context(App), id: String) -> Response {
   let assert Ok(user_id) = int.parse(id)
@@ -3983,6 +4037,7 @@ pub fn show(ctx: Context(App), id: String) -> Response {
 
 ```gleam
 import database/models/user/gen/user
+import glimr/http/http.{type Response}
 
 pub fn index(ctx: Context(App)) -> Response {
   let users = user.list_or_fail(ctx.app.db)
@@ -3997,6 +4052,7 @@ When you need explicit error handling (e.g. showing a custom error page, or in b
 ```gleam
 import database/models/user/gen/user
 import glimr/db/db.{NotFound}
+import glimr/http/http.{type Response}
 
 pub fn show(ctx: Context(App), id: String) -> Response {
   let assert Ok(user_id) = int.parse(id)
@@ -4135,6 +4191,7 @@ Retries use exponential backoff to reduce contention.
 
 ```gleam
 import glimr/db/db
+import glimr/http/http.{type Response}
 
 pub fn store(ctx: Context(App)) -> Response {
   use validated <- transfer_request.validate(ctx)
@@ -4218,6 +4275,7 @@ Use it in your controllers:
 
 ```gleam
 import glimr/cache/cache
+import glimr/http/http.{type Response}
 
 pub fn show(ctx: Context(App)) -> Response {
   case cache.get(ctx.app.cache, "user:123") {
@@ -4273,6 +4331,7 @@ Use it in your controllers:
 
 ```gleam
 import glimr/cache/cache
+import glimr/http/http.{type Response}
 
 pub fn show(ctx: Context(App)) -> Response {
   case cache.get(ctx.app.cache, "user:123") {
@@ -4345,6 +4404,7 @@ Use it in your controllers:
 
 ```gleam
 import glimr/cache/cache
+import glimr/http/http.{type Response}
 
 pub fn show(ctx: Context(App)) -> Response {
   case cache.get(ctx.app.cache, "user:123") {
@@ -4407,6 +4467,7 @@ Use it in your controllers:
 
 ```gleam
 import glimr/cache/cache
+import glimr/http/http.{type Response}
 
 pub fn show(ctx: Context(App)) -> Response {
   case cache.get(ctx.app.cache, "user:123") {
@@ -4889,6 +4950,7 @@ All configuration lives in TOML files under `config/`. At boot, `config.load()` 
 
 ```gleam
 import glimr/config/config
+import glimr/http/http.{type Response}
 
 pub fn show(ctx: Context(App)) -> Response {
   let app_name = config.get_string("app.name")
@@ -4966,6 +5028,8 @@ pub type App {
 Access everything through the unified context in controllers:
 
 ```gleam
+import glimr/http/http.{type Response}
+
 pub fn show(ctx: Context(App)) -> Response {
   // Framework state: ctx.req, ctx.session, ctx.response_format
   // App state: ctx.app.db, ctx.app.cache, etc.
