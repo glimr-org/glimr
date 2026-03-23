@@ -1848,6 +1848,7 @@ import glimr/forms/form.{type UploadedFile}
 import glimr/forms/validator.{type FormData, type Rule}
 import glimr/http/context.{type Context}
 import glimr/http/http.{type Response}
+import glimr/response/redirect
 
 /// Define the shape of the data returned after validation
 ///
@@ -1897,7 +1898,7 @@ fn data(data: FormData) -> Data {
 /// validation.
 ///
 pub fn validate(ctx: Context(App), next: fn(Data) -> Response) {
-  use validated <- validator.run(ctx, rules, data)
+  use validated <- validator.run(ctx, rules, data, redirect.back(ctx))
 
   next(validated)
 }

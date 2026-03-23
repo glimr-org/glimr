@@ -4,7 +4,6 @@
 /build
 erl_crash.dump
 .env
-.env
 .env.backup
 .env.production
 /.fleet
@@ -15,3 +14,5 @@ erl_crash.dump
 Thumbs.db
 node_modules/
 priv/static/
+!priv/static/images/
+*.db
