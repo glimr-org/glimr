@@ -88,7 +88,6 @@ Glimr is a fully featured web framework built for Gleam. It provides a delightfu
 ## Features
 
 - **Type Safe Routing** - Generated pattern matching routes with compile-time type safety
-- **View Builder** - Fluent API for rendering HTML and Loom Templates
 - **Loom Template Engine** - Blade-inspired templates with components, slots, and conditionals
 - **Redirect Builder** - Clean redirect API with flash message support
 - **Middleware System** - Composable middleware at route and group levels
