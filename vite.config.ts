@@ -19,6 +19,9 @@ function hotFile(): Plugin {
 
   return {
     name: "glimr-hot-file",
+    buildStart() {
+      cleanup();
+    },
     configureServer(server) {
       server.httpServer?.once("listening", () => {
         const addr = server.httpServer!.address() as AddressInfo;
@@ -26,6 +29,8 @@ function hotFile(): Plugin {
         writeFileSync(hotPath, `http://localhost:${addr.port}`);
 
         process.on("exit", cleanup);
+        process.on("SIGINT", () => process.exit());
+        process.on("SIGTERM", () => process.exit());
       });
     },
   };
