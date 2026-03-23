@@ -13,6 +13,6 @@ erl_crash.dump
 /.zed
 Thumbs.db
 node_modules/
-priv/static/
+priv/static/*
 !priv/static/images/
 *.db

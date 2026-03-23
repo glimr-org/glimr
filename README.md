@@ -261,6 +261,17 @@ npm run build
 
 This outputs hashed assets to `priv/static/` and a manifest at `priv/static/.vite/manifest.json`. The `priv/static/` directory is gitignored — assets should be built during deployment.
 
+#### Static Files
+
+To serve static files like images, fonts, or favicons, place them in the `priv/static/` directory. The `serve_static` middleware serves these files under the `/static/` URL prefix.
+
+For example, a file at `priv/static/images/favicon.svg` is accessible at `/static/images/favicon.svg`:
+
+```html
+<link rel="icon" type="image/svg+xml" href="/static/images/favicon.svg" />
+<img src="/static/images/logo.png" />
+```
+
 ### Build Command
 
 ```bash
