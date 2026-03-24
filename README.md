@@ -2,6 +2,8 @@
 
 A batteries-included web framework for Gleam that brings functional programming elegance and developer productivity to web development.
 
+Website: [glimr.build](https://glimr.build)
+
 If you'd like to stay updated on Glimr's development, Follow [@migueljarias](https://x.com/migueljarias) on X (that's me) for updates.
 
 ## Table of Contents
