@@ -443,6 +443,17 @@ pub fn show(post_id: String, comment_id: String) -> Response {
 }
 ```
 
+Route parameters are strings by default, but if you type a parameter as `Int` in your function signature, Glimr will automatically parse it for you. If the value isn't a valid integer, a 404 response is returned:
+
+```gleam
+/// @get "/posts/:id"
+pub fn show(ctx: Context(App), id: Int) -> Response {
+  // id is already an Int — no manual parsing needed
+  let post = post.find_or_fail(ctx.app.db, id)
+  response.html(post_show.render(post: post), 200)
+}
+```
+
 ### Redirects
 
 Add redirects to routes using `@redirect` (303 temporary) or `@redirect_permanent` (308 permanent):
@@ -774,6 +785,21 @@ Create resource controllers with common CRUD functions pre-defined:
 
 This generates a controller with `index`, `show`, `create`, `store`, `edit`, `update`, and `destroy` functions—add route annotations as needed.
 
+### Controller Discovery
+
+By default, controllers live in `src/app/http/controllers/`. However, if you prefer a domain-driven design structure, Glimr also discovers any file ending in `_controller.gleam` or named `controller.gleam` anywhere under `src/`:
+
+```
+# Traditional flat structure
+src/app/http/controllers/user_controller.gleam
+src/app/http/controllers/post_controller.gleam
+
+# Domain driven
+src/app/billing/invoice_controller.gleam
+src/app/billing/payment/controller.gleam
+src/app/user/user_controller.gleam
+```
+
 ## Actions
 
 Actions help keep controllers clean by extracting complex business logic into reusable modules that can be used in controllers, and console commands. They encapsulate database operations and can return `Result` types for clean error handling on the controller's or command's side.
@@ -789,7 +815,7 @@ This creates `update_submission.gleam`. Actions follow a simple pattern - they p
 ```gleam
 // src/app/actions/update_submission.gleam
 import app/http/requests/contact_store_request.{type Data}
-import database/models/submission/gen/submission_repository.{type CreateRow}
+import database/models/submission/gen/submission.{type CreateRow}
 import glimr/db/db.{type DbError}
 import glimr/utils/unix_timestamp
 import glimr/db/pool.{type Pool}
@@ -797,7 +823,7 @@ import glimr/db/pool.{type Pool}
 pub fn run(pool: Pool, id: Int, data: Data) -> Result(CreateRow, DbError) {
   let now = unix_timestamp.now()
 
-  submission_repository.update(
+  submission.update(
     pool: pool,
     id: id,
     name: data.name,
@@ -1936,7 +1962,7 @@ Apply validation in your handler using the `use` syntax. If validation fails, er
 // app/http/controllers/user_controller.gleam
 import app/app.{type App}
 import app/http/validators/user_store
-import app/repositories/user_repository
+import app/repositories/user
 import glimr/http/context.{type Context}
 import glimr/http/http.{type Response}
 import glimr/response/redirect
@@ -1945,7 +1971,7 @@ import glimr/response/redirect
 pub fn store(ctx: Context(App)) -> Response {
   use validated <- user_store.validate(ctx)
 
-  let assert Ok(user) = user_repository.create(
+  let assert Ok(user) = user.create(
     pool: ctx.app.db,
     name: validated.name,
     email: validated.email,
@@ -1989,8 +2015,10 @@ pub fn store(ctx: Context(App)) -> Response {
 - **MaxDigits(Int)** — Field must have at most n digits
 
 **Database Rules** (available because the `rules` function receives `ctx`):
-- **Exists(DbPool, String)** — Field value must exist in the given database table (e.g., `Exists(ctx.app.db, "users")`)
-- **Unique(DbPool, String)** — Field value must not already exist in the given database table (e.g., `Unique(ctx.app.db, "users")`)
+- **Exists(DbPool, String)** — Field value must exist in the given database table, case-insensitive (e.g., `Exists(ctx.app.db, "users")`)
+- **ExistsSensitive(DbPool, String)** — Same as Exists but case-sensitive, for columns where casing matters (e.g., API keys, tokens)
+- **Unique(DbPool, String)** — Field value must not already exist in the given database table, case-insensitive (e.g., `Unique(ctx.app.db, "users")`)
+- **UniqueSensitive(DbPool, String)** — Same as Unique but case-sensitive, for columns where casing matters
 
 **File Upload Rules:**
 - **FileRequired** — File field must have a file uploaded
@@ -3418,9 +3446,7 @@ Use `ctx.app.db` in your controllers:
 import glimr/http/http.{type Response}
 
 /// @get "/users/:user_id"
-pub fn show(ctx: Context(App), user_id: String) -> Response {
-  let assert Ok(user_id) = int.parse(user_id)
-
+pub fn show(ctx: Context(App), user_id: Int) -> Response {
   case user.find(ctx.app.db, user_id) {
     Ok(user) -> {
       response.html(user_show.render(user: user), 200)
@@ -3534,9 +3560,7 @@ Use `ctx.app.db` in your controllers:
 import glimr/http/http.{type Response}
 
 /// @get "/users/:user_id"
-pub fn show(ctx: Context(App), user_id: String) -> Response {
-  let assert Ok(user_id) = int.parse(user_id)
-
+pub fn show(ctx: Context(App), user_id: Int) -> Response {
   case user.find(ctx.app.db, user_id) {
     Ok(user) -> {
       response.html(user_show.render(user: user), 200)
@@ -4038,9 +4062,8 @@ The `_or_fail` variants are the most convenient for HTTP handlers — they retur
 import database/models/user/gen/user
 import glimr/http/http.{type Response}
 
-pub fn show(ctx: Context(App), id: String) -> Response {
-  let assert Ok(user_id) = int.parse(id)
-  let user = user.find_or_fail(ctx.app.db, user_id)
+pub fn show(ctx: Context(App), id: Int) -> Response {
+  let user = user.find_or_fail(ctx.app.db, id)
 
   response.html(user_show.render(user: user), 200)
 }
@@ -4067,10 +4090,8 @@ import database/models/user/gen/user
 import glimr/db/db.{NotFound}
 import glimr/http/http.{type Response}
 
-pub fn show(ctx: Context(App), id: String) -> Response {
-  let assert Ok(user_id) = int.parse(id)
-
-  case user.find(ctx.app.db, user_id) {
+pub fn show(ctx: Context(App), id: Int) -> Response {
+  case user.find(ctx.app.db, id) {
     Ok(user) -> {
       response.html(user_show.render(user: user), 200)
     }
@@ -4188,8 +4209,8 @@ pub fn transfer(
   use conn <- db.transaction(ctx.app.db, 3)
 
   // Both operations use the same connection within the transaction
-  use _ <- result.try(account_repository.debit_wc(conn, from_id, amount))
-  use _ <- result.try(account_repository.credit_wc(conn, to_id, amount))
+  use _ <- result.try(account.debit_wc(conn, from_id, amount))
+  use _ <- result.try(account.credit_wc(conn, to_id, amount))
   Ok(Nil)
 }
 ```
@@ -4211,8 +4232,8 @@ pub fn store(ctx: Context(App)) -> Response {
 
   case {
     use conn <- db.transaction(ctx.app.db, 3)
-    use _ <- result.try(account_repository.debit_wc(conn, validated.from_id, validated.amount))
-    use _ <- result.try(account_repository.credit_wc(conn, validated.to_id, validated.amount))
+    use _ <- result.try(account.debit_wc(conn, validated.from_id, validated.amount))
+    use _ <- result.try(account.credit_wc(conn, validated.to_id, validated.amount))
     Ok(Nil)
   } {
     Ok(_) -> {
