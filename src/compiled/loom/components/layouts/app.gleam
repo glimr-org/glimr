@@ -6,42 +6,46 @@
 //// loom:compile`.
 ////
 
+import gleam/string_tree.{type StringTree}
 import glimr/loom/runtime
 import glimr/vite
 
 pub fn render(
-  slot slot: String,
-  slot_footer slot_footer: String,
-  slot_footer_scripts slot_footer_scripts: String,
-  slot_head slot_head: String,
-  slot_meta_title slot_meta_title: String,
+  slot slot: StringTree,
+  slot_footer slot_footer: StringTree,
+  slot_footer_scripts slot_footer_scripts: StringTree,
+  slot_head slot_head: StringTree,
+  slot_meta_title slot_meta_title: StringTree,
   attributes attributes: List(runtime.Attribute),
-) -> String {
-  ""
-  <> "\n<!doctype html>\n<html>\n  <head>\n    <meta charset=\"utf-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n    <link rel=\"icon\" type=\"image/svg+xml\" href=\"/static/images/favicon.svg\" />\n\n    <link\n      href=\"https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600\"\n      rel=\"stylesheet\"\n    />\n\n    "
-  <> vite.tags("src/resources/ts/app.ts")
-  <> "\n\n    <!-- header scripts and meta tags -->\n    "
-  <> slot_head
-  <> "\n\n    <title "
-  <> " "
-  <> runtime.render_attributes(attributes)
-  <> ">"
-  <> slot_meta_title
-  <> "</title>\n  </head>\n  <body class=\"antialiased\">\n    "
-  <> slot
-  <> "\n\n    "
-  <> case slot_footer != "" {
-    True -> {
-      ""
-      <> "<footer"
-      <> ">"
-      <> "\n      "
-      <> slot_footer
-      <> "\n    "
-      <> "</footer>"
-    }
-    False -> ""
-  }
-  <> slot_footer_scripts
-  <> "\n  </body>\n</html>\n"
+) -> StringTree {
+  string_tree.concat([
+    string_tree.from_strings([
+      "\n<!doctype html>\n<html>\n  <head>\n    <meta charset=\"utf-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n    <link rel=\"icon\" type=\"image/svg+xml\" href=\"/static/images/favicon.svg\" />\n\n    <link\n      href=\"https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600\"\n      rel=\"stylesheet\"\n    />\n\n    ",
+      vite.tags("src/resources/ts/app.ts"),
+      "\n\n    <!-- header scripts and meta tags -->\n    ",
+    ]),
+    slot_head,
+    string_tree.from_strings([
+      "\n\n    <title ",
+      " " <> runtime.render_attributes(attributes),
+      ">",
+    ]),
+    slot_meta_title,
+    string_tree.from_strings([
+      "</title>\n  </head>\n  <body class=\"antialiased\">\n    ",
+    ]),
+    slot,
+    string_tree.from_strings(["\n\n    "]),
+    case !string_tree.is_empty(slot_footer) {
+      True ->
+        string_tree.concat([
+          string_tree.from_strings(["<footer", ">", "\n      "]),
+          slot_footer,
+          string_tree.from_strings(["\n    ", "</footer>"]),
+        ])
+      False -> string_tree.new()
+    },
+    slot_footer_scripts,
+    string_tree.from_strings(["\n  </body>\n</html>\n"]),
+  ])
 }

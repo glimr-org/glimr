@@ -6,28 +6,30 @@
 //// loom:compile`.
 ////
 
+import gleam/string_tree.{type StringTree}
 import glimr/loom/runtime
 
-pub fn render(attributes attributes: List(runtime.Attribute)) -> String {
-  ""
-  <> "<svg "
-  <> " "
-  <> runtime.render_attributes(runtime.merge_attributes(
-    [
-      runtime.Attribute("width", "auto"),
-      runtime.Attribute("height", "auto"),
-      runtime.Attribute("viewBox", "0 0 1480 1389"),
-      runtime.Attribute("version", "1.1"),
-      runtime.Attribute("xmlns", "http://www.w3.org/2000/svg"),
-      runtime.Attribute("xmlns:xlink", "http://www.w3.org/1999/xlink"),
-      runtime.Attribute("xml:space", "preserve"),
-      runtime.Attribute("xmlns:serif", "http://www.serif.com/"),
-      runtime.Attribute(
-        "style",
-        "\n    fill-rule: evenodd;\n    clip-rule: evenodd;\n    stroke-linejoin: round;\n    stroke-miterlimit: 2;\n  ",
-      ),
-    ],
-    attributes,
-  ))
-  <> ">\n  <g>\n    <g>\n      <path\n        d=\"M1157.84,1388.78l-668.356,-0l417.921,-572.436l250.435,572.436Z\"\n      />\n      <g>\n        <g>\n          <rect x=\"0\" y=\"0\" width=\"503.073\" height=\"1388.78\" />\n          <path\n            d=\"M1479.84,412.006l-0,-412.006l-1479.84,0l0,412.006l1479.84,-0Z\"\n          />\n          <path\n            d=\"M1479.84,1388.78l-0,-572.436l-572.436,-0l-0,572.436l572.436,-0Z\"\n          />\n        </g>\n      </g>\n    </g>\n  </g>\n</svg>\n"
+pub fn render(attributes attributes: List(runtime.Attribute)) -> StringTree {
+  string_tree.from_strings([
+    "<svg ",
+    " "
+      <> runtime.render_attributes(runtime.merge_attributes(
+      [
+        runtime.Attribute("width", "auto"),
+        runtime.Attribute("height", "auto"),
+        runtime.Attribute("viewBox", "0 0 1480 1389"),
+        runtime.Attribute("version", "1.1"),
+        runtime.Attribute("xmlns", "http://www.w3.org/2000/svg"),
+        runtime.Attribute("xmlns:xlink", "http://www.w3.org/1999/xlink"),
+        runtime.Attribute("xml:space", "preserve"),
+        runtime.Attribute("xmlns:serif", "http://www.serif.com/"),
+        runtime.Attribute(
+          "style",
+          "\n    fill-rule: evenodd;\n    clip-rule: evenodd;\n    stroke-linejoin: round;\n    stroke-miterlimit: 2;\n  ",
+        ),
+      ],
+      attributes,
+    )),
+    ">\n  <g>\n    <g>\n      <path\n        d=\"M1157.84,1388.78l-668.356,-0l417.921,-572.436l250.435,572.436Z\"\n      />\n      <g>\n        <g>\n          <rect x=\"0\" y=\"0\" width=\"503.073\" height=\"1388.78\" />\n          <path\n            d=\"M1479.84,412.006l-0,-412.006l-1479.84,0l0,412.006l1479.84,-0Z\"\n          />\n          <path\n            d=\"M1479.84,1388.78l-0,-572.436l-572.436,-0l-0,572.436l572.436,-0Z\"\n          />\n        </g>\n      </g>\n    </g>\n  </g>\n</svg>\n",
+  ])
 }

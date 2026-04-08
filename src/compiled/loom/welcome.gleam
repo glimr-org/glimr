@@ -11,74 +11,81 @@ import compiled/loom/components/icons/reader as components_icons_reader
 import compiled/loom/components/icons/star as components_icons_star
 import compiled/loom/components/layouts/app as components_layouts_app
 import compiled/loom/components/logo as components_logo
+import gleam/string_tree.{type StringTree}
 import glimr/loom/runtime
 
-pub fn render() -> String {
-  ""
-  <> components_layouts_app.render(
-    slot_meta_title: { "" <> "Glimr ✨" },
-    slot_footer: "",
-    slot_footer_scripts: "",
-    slot_head: "",
-    slot: {
-      ""
-      <> "\n  "
-      <> "\n\n  <div\n    class=\"flex flex-col items-center justify-center min-h-screen bg-mist-50\"\n  >\n    <div class=\"w-full max-w-md p-8 bg-white rounded-xl shadow-md text-center\">\n      <div class=\"flex justify-center\">\n        "
-      <> components_logo.render(attributes: [
-        runtime.Attribute("width", "25"),
-        runtime.Attribute("class", "mb-3 fill-mist-200"),
-      ])
-      <> "\n      </div>\n\n      <div class=\"text-[19px] font-semibold text-mist-700 leading-tight mb-3\">\n        Welcome to Glimr\n      </div>\n\n      <div class=\"mb-6 text-[16px] text-mist-400 leading-snug\">\n        Build scalable web applications that LLM's can understand, and you can\n        trust.\n      </div>\n\n      <div class=\"flex items-center justify-center gap-3\">\n        "
-      <> components_button.render(
-        href: "https://github.com/glimr-org/glimr?tab=readme-ov-file#glimr-",
-        variant: "",
-        slot: {
-          ""
-          <> "\n          "
-          <> components_icons_reader.render(attributes: [
-            runtime.Attribute("width", "14"),
-            runtime.Attribute("class", "text-mist-400 relative top-[.5px]"),
-          ])
-          <> "\n          <span>Documentation</span>\n        "
-        },
-        attributes: [
-          runtime.Attribute("target", "_blank"),
-          runtime.Attribute(
-            "href",
-            "https://github.com/glimr-org/glimr?tab=readme-ov-file#glimr-",
-          ),
-          runtime.Attribute(
-            "class",
-            "flex justify-center gap-1.5 items-center text-[14.5px]",
-          ),
-        ],
-      )
-      <> "\n\n        "
-      <> components_button.render(
-        variant: "secondary",
-        href: "https://gleam.run",
-        slot: {
-          ""
-          <> "\n          "
-          <> components_icons_star.render(attributes: [
-            runtime.Attribute("width", "15"),
-            runtime.Attribute("class", "text-mist-400 relative top-[.5px]"),
-          ])
-          <> "\n          <span>Learn Gleam</span>\n        "
-        },
-        attributes: [
-          runtime.Attribute("variant", "secondary"),
-          runtime.Attribute("href", "https://gleam.run"),
-          runtime.Attribute("target", "_blank"),
-          runtime.Attribute(
-            "class",
-            "flex justify-center gap-1.5 items-center text-[14.5px]",
-          ),
-        ],
-      )
-      <> "\n      </div>\n    </div>\n  </div>\n"
-    },
-    attributes: [],
-  )
-  <> "\n"
+pub fn render() -> StringTree {
+  string_tree.concat([
+    components_layouts_app.render(
+      slot_meta_title: string_tree.from_strings(["Glimr ✨"]),
+      slot_footer: string_tree.new(),
+      slot_footer_scripts: string_tree.new(),
+      slot_head: string_tree.new(),
+      slot: string_tree.concat([
+        string_tree.from_strings([
+          "\n  ",
+          "\n\n  <div\n    class=\"flex flex-col items-center justify-center min-h-screen bg-mist-50\"\n  >\n    <div class=\"w-full max-w-md p-8 bg-white rounded-xl shadow-md text-center\">\n      <div class=\"flex justify-center\">\n        ",
+        ]),
+        components_logo.render(attributes: [
+          runtime.Attribute("width", "25"),
+          runtime.Attribute("class", "mb-3 fill-mist-200"),
+        ]),
+        string_tree.from_strings([
+          "\n      </div>\n\n      <div class=\"text-[19px] font-semibold text-mist-700 leading-tight mb-3\">\n        Welcome to Glimr\n      </div>\n\n      <div class=\"mb-6 text-[16px] text-mist-400 leading-snug\">\n        Build scalable web applications that LLM's can understand, and you can\n        trust.\n      </div>\n\n      <div class=\"flex items-center justify-center gap-3\">\n        ",
+        ]),
+        components_button.render(
+          href: "https://github.com/glimr-org/glimr?tab=readme-ov-file#glimr-",
+          variant: "",
+          slot: string_tree.concat([
+            string_tree.from_strings(["\n          "]),
+            components_icons_reader.render(attributes: [
+              runtime.Attribute("width", "14"),
+              runtime.Attribute("class", "text-mist-400 relative top-[.5px]"),
+            ]),
+            string_tree.from_strings([
+              "\n          <span>Documentation</span>\n        ",
+            ]),
+          ]),
+          attributes: [
+            runtime.Attribute("target", "_blank"),
+            runtime.Attribute(
+              "href",
+              "https://github.com/glimr-org/glimr?tab=readme-ov-file#glimr-",
+            ),
+            runtime.Attribute(
+              "class",
+              "flex justify-center gap-1.5 items-center text-[14.5px]",
+            ),
+          ],
+        ),
+        string_tree.from_strings(["\n\n        "]),
+        components_button.render(
+          variant: "secondary",
+          href: "https://gleam.run",
+          slot: string_tree.concat([
+            string_tree.from_strings(["\n          "]),
+            components_icons_star.render(attributes: [
+              runtime.Attribute("width", "15"),
+              runtime.Attribute("class", "text-mist-400 relative top-[.5px]"),
+            ]),
+            string_tree.from_strings([
+              "\n          <span>Learn Gleam</span>\n        ",
+            ]),
+          ]),
+          attributes: [
+            runtime.Attribute("variant", "secondary"),
+            runtime.Attribute("href", "https://gleam.run"),
+            runtime.Attribute("target", "_blank"),
+            runtime.Attribute(
+              "class",
+              "flex justify-center gap-1.5 items-center text-[14.5px]",
+            ),
+          ],
+        ),
+        string_tree.from_strings(["\n      </div>\n    </div>\n  </div>\n"]),
+      ]),
+      attributes: [],
+    ),
+    string_tree.from_strings(["\n"]),
+  ])
 }

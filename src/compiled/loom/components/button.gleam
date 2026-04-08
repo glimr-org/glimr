@@ -7,79 +7,85 @@
 ////
 
 import gleam/string
+import gleam/string_tree.{type StringTree}
 import glimr/loom/runtime
 
 pub fn render(
   variant variant: String,
   href href: String,
-  slot slot: String,
+  slot slot: StringTree,
   attributes attributes: List(runtime.Attribute),
-) -> String {
-  ""
-  <> "\n<!-- if no href is present, then use a regular button-->\n"
-  <> case string.is_empty(href) {
-    True -> {
-      ""
-      <> "<button"
-      <> " "
-      <> runtime.render_attributes(runtime.merge_attributes(
-        [
-          runtime.Attribute(
-            "class",
-            runtime.build_classes([
-              runtime.class(
-                "w-full py-2.5 px-4 font-medium rounded-lg cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2",
-              ),
-              runtime.class(case variant {
-                "secondary" ->
-                  "bg-mist-100 text-gray-700 hover:bg-mist-200 focus:ring-mist-400"
-                "danger" ->
-                  "bg-red-500 text-white hover:bg-red-600 focus:ring-red-500"
-                _ ->
-                  "bg-mist-900 text-white hover:bg-mist-700 focus:ring-mist-500"
-              }),
-            ]),
-          ),
-        ],
-        attributes,
-      ))
-      <> ">"
-      <> "\n  "
-      <> slot
-      <> "\n"
-      <> "</button>"
-    }
-    False -> {
-      ""
-      <> "<a"
-      <> " "
-      <> runtime.render_attributes(runtime.merge_attributes(
-        [
-          runtime.Attribute("href", href),
-          runtime.Attribute(
-            "class",
-            runtime.build_classes([
-              runtime.class(
-                "w-full py-2.5 px-4 font-medium rounded-lg cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2",
-              ),
-              runtime.class(case variant {
-                "secondary" ->
-                  "bg-mist-100 text-gray-700 hover:bg-mist-200 focus:ring-mist-400"
-                "danger" ->
-                  "bg-red-500 text-white hover:bg-red-600 focus:ring-red-500"
-                _ ->
-                  "bg-mist-900 text-white hover:bg-mist-700 focus:ring-mist-500"
-              }),
-            ]),
-          ),
-        ],
-        attributes,
-      ))
-      <> ">"
-      <> "\n  "
-      <> slot
-      <> "\n"
-      <> "</a>"
-    }
-  }
+) -> StringTree {
+  string_tree.concat([
+    string_tree.from_strings([
+      "\n<!-- if no href is present, then use a regular button-->\n",
+    ]),
+    case string.is_empty(href) {
+      True ->
+        string_tree.concat([
+          string_tree.from_strings([
+            "<button",
+            " "
+              <> runtime.render_attributes(runtime.merge_attributes(
+              [
+                runtime.Attribute(
+                  "class",
+                  runtime.build_classes([
+                    runtime.class(
+                      "w-full py-2.5 px-4 font-medium rounded-lg cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2",
+                    ),
+                    runtime.class(case variant {
+                      "secondary" ->
+                        "bg-mist-100 text-gray-700 hover:bg-mist-200 focus:ring-mist-400"
+                      "danger" ->
+                        "bg-red-500 text-white hover:bg-red-600 focus:ring-red-500"
+                      _ ->
+                        "bg-mist-900 text-white hover:bg-mist-700 focus:ring-mist-500"
+                    }),
+                  ]),
+                ),
+              ],
+              attributes,
+            )),
+            ">",
+            "\n  ",
+          ]),
+          slot,
+          string_tree.from_strings(["\n", "</button>"]),
+        ])
+      False ->
+        string_tree.concat([
+          string_tree.from_strings([
+            "<a",
+            " "
+              <> runtime.render_attributes(runtime.merge_attributes(
+              [
+                runtime.Attribute("href", href),
+                runtime.Attribute(
+                  "class",
+                  runtime.build_classes([
+                    runtime.class(
+                      "w-full py-2.5 px-4 font-medium rounded-lg cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2",
+                    ),
+                    runtime.class(case variant {
+                      "secondary" ->
+                        "bg-mist-100 text-gray-700 hover:bg-mist-200 focus:ring-mist-400"
+                      "danger" ->
+                        "bg-red-500 text-white hover:bg-red-600 focus:ring-red-500"
+                      _ ->
+                        "bg-mist-900 text-white hover:bg-mist-700 focus:ring-mist-500"
+                    }),
+                  ]),
+                ),
+              ],
+              attributes,
+            )),
+            ">",
+            "\n  ",
+          ]),
+          slot,
+          string_tree.from_strings(["\n", "</a>"]),
+        ])
+    },
+  ])
 }

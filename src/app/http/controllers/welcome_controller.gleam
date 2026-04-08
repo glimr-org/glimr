@@ -21,5 +21,5 @@ import glimr/response/response
 /// @get "/"
 ///
 pub fn show() -> Response {
-  response.html(welcome.render(), 200)
+  response.loom(welcome.render(), 200)
 }

@@ -355,7 +355,7 @@ import glimr/http/http.{type Response}
 
 /// @get "/welcome"
 pub fn show() -> Response {
-  response.html(welcome.render(), 200)
+  response.loom(welcome.render(), 200)
 }
 
 // ...
@@ -375,7 +375,7 @@ pub fn show(ctx: Context(App)) -> Response {
   // Access the request via ctx.req
   // Access app state via ctx.app
 
-  response.html(welcome.render(), 200)
+  response.loom(welcome.render(), 200)
 }
 
 // ...
@@ -450,7 +450,7 @@ Route parameters are strings by default, but if you type a parameter as `Int` in
 pub fn show(ctx: Context(App), id: Int) -> Response {
   // id is already an Int — no manual parsing needed
   let post = post.find_or_fail(ctx.app.db, id)
-  response.html(post_show.render(post: post), 200)
+  response.loom(post_show.render(post: post), 200)
 }
 ```
 
@@ -765,7 +765,7 @@ import glimr/response/response
 pub fn show(ctx: Context(App), user: String) -> Response {
   // get the user...
 
-  response.html(user_show.render(user: user), 200)
+  response.loom(user_show.render(user: user), 200)
 }
 
 /// @post "/users"
@@ -983,7 +983,7 @@ pub fn dashboard(ctx: Context(App)) -> Response {
   // Safe to assert because auth middleware guarantees this
   let assert Some(user) = ctx.app.user
 
-  response.html(dashboard.render(user: user), 200)
+  response.loom(dashboard.render(user: user), 200)
 }
 ```
 
@@ -1396,7 +1396,7 @@ pub fn login(ctx: Context(App)) -> Response {
 
 /// @get "/dashboard"
 pub fn dashboard(ctx: Context(App)) -> Response {
-  response.html(dashboard.render(ctx), 200)
+  response.loom(dashboard.render(ctx), 200)
 }
 ```
 And then in your loom file
@@ -1548,7 +1548,7 @@ import glimr/http/http.{type Response}
 /// @get "/dashboard"
 pub fn show(ctx: Context(App)) -> Response {
   let assert option.Some(user) = ctx.app.user
-  response.html(dashboard.render(ctx: ctx, user: user), 200)
+  response.loom(dashboard.render(ctx: ctx, user: user), 200)
 }
 
 // src/app/http/controllers/admin_dashboard_controller.gleam
@@ -1557,7 +1557,7 @@ import glimr/http/http.{type Response}
 /// @get "/admin/dashboard"
 pub fn show(ctx: Context(App)) -> Response {
   let assert option.Some(admin) = ctx.app.admin
-  response.html(dashboard.render(ctx: ctx, admin: admin), 200)
+  response.loom(dashboard.render(ctx: ctx, admin: admin), 200)
 }
 ```
 
@@ -1701,7 +1701,7 @@ pub fn middleware() -> List(Middleware(App)) {
 
 /// @get "/login"
 pub fn show(ctx: Context(App)) -> Response {
-  response.html(login.render(ctx: ctx), 200)
+  response.loom(login.render(ctx: ctx), 200)
 }
 
 /// @post "/login"
@@ -1760,7 +1760,7 @@ import glimr/http/http.{type Response}
 
 /// @get "/register"
 pub fn show(ctx: Context(App)) -> Response {
-  response.html(register.render(ctx: ctx), 200)
+  response.loom(register.render(ctx: ctx), 200)
 }
 
 /// @post "/register"
@@ -1816,7 +1816,7 @@ pub fn middleware() -> List(Middleware(App)) {
 /// @get "/dashboard"
 pub fn show(ctx: Context(App)) -> Response {
   let assert option.Some(user) = ctx.app.user
-  response.html(dashboard.render(ctx: ctx, user: user), 200)
+  response.loom(dashboard.render(ctx: ctx, user: user), 200)
 }
 ```
 
@@ -2228,6 +2228,22 @@ These are shorthand for `session.get_flash(session, "old.<field>")`, `session.ge
 
 Glimr provides a powerful templating engine called Loom, along with a fluent builder pattern for rendering simple html files. To learn more about Loom, check out the [Loom Template Engine](#loom-template-engine).
 
+### Rendering Loom Templates
+
+Loom templates compile to `render()` functions that return a `StringTree`. Use `response.loom()` to send one as an HTML response:
+
+```gleam
+import glimr/http/http.{type Response}
+import glimr/response/response
+import compiled/loom/home
+
+pub fn show(ctx: Context(App)) -> Response {
+  response.loom(home.render(name: "John"), 200)
+}
+```
+
+`response.loom()` takes a `StringTree` and sets the correct `content-type` header for you. Use this for every Loom template — `response.html()` is reserved for raw HTML strings you've built yourself.
+
 ### Rendering HTML Files
 
 ```gleam
@@ -2328,7 +2344,7 @@ import glimr/response/response
 
 /// @get "/"
 pub fn show() {
-  response.html(home.render(), 200)
+  response.loom(home.render(), 200)
 }
 ```
 
@@ -2352,7 +2368,7 @@ import glimr/response/response
 
 /// @get "/counter"
 pub fn show() {
-  response.html(counter.render(count: 0), 200)
+  response.loom(counter.render(count: 0), 200)
 }
 ```
 
@@ -2673,7 +2689,7 @@ import glimr/response/response
 
 /// @get "/"
 pub fn show() {
-  response.html(
+  response.loom(
     home.render(name: "John"),
     200,
   )
@@ -3449,7 +3465,7 @@ import glimr/http/http.{type Response}
 pub fn show(ctx: Context(App), user_id: Int) -> Response {
   case user.find(ctx.app.db, user_id) {
     Ok(user) -> {
-      response.html(user_show.render(user: user), 200)
+      response.loom(user_show.render(user: user), 200)
     }
     Error(NotFound) -> response.not_found()
     Error(_) -> response.internal_server_error()
@@ -3563,7 +3579,7 @@ import glimr/http/http.{type Response}
 pub fn show(ctx: Context(App), user_id: Int) -> Response {
   case user.find(ctx.app.db, user_id) {
     Ok(user) -> {
-      response.html(user_show.render(user: user), 200)
+      response.loom(user_show.render(user: user), 200)
     }
     Error(NotFound) -> response.not_found()
     Error(_) -> response.internal_server_error()
@@ -4065,7 +4081,7 @@ import glimr/http/http.{type Response}
 pub fn show(ctx: Context(App), id: Int) -> Response {
   let user = user.find_or_fail(ctx.app.db, id)
 
-  response.html(user_show.render(user: user), 200)
+  response.loom(user_show.render(user: user), 200)
 }
 ```
 
@@ -4079,7 +4095,7 @@ pub fn index(ctx: Context(App)) -> Response {
   let users = user.list_or_fail(ctx.app.db)
   let count = int.to_string(list.length(users))
 
-  response.html(user_index.render(count: count), 200)
+  response.loom(user_index.render(count: count), 200)
 }
 ```
 
@@ -4093,7 +4109,7 @@ import glimr/http/http.{type Response}
 pub fn show(ctx: Context(App), id: Int) -> Response {
   case user.find(ctx.app.db, id) {
     Ok(user) -> {
-      response.html(user_show.render(user: user), 200)
+      response.loom(user_show.render(user: user), 200)
     }
     Error(NotFound) -> response.not_found()
     Error(_) -> response.internal_server_error()

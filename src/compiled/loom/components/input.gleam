@@ -6,6 +6,7 @@
 //// loom:compile`.
 ////
 
+import gleam/string_tree.{type StringTree}
 import glimr/loom/runtime
 import glimr/session/session.{type Session}
 
@@ -15,50 +16,56 @@ pub fn render(
   name name: String,
   session session: Session,
   attributes attributes: List(runtime.Attribute),
-) -> String {
-  ""
-  <> "\n<div>\n  "
-  <> "<label"
-  <> " "
-  <> runtime.render_attributes([
-    runtime.Attribute("for", id),
-    runtime.Attribute("class", "block text-sm font-medium text-mist-800 mb-1"),
+) -> StringTree {
+  string_tree.concat([
+    string_tree.from_strings([
+      "\n<div>\n  ",
+      "<label",
+      " "
+        <> runtime.render_attributes([
+        runtime.Attribute("for", id),
+        runtime.Attribute(
+          "class",
+          "block text-sm font-medium text-mist-800 mb-1",
+        ),
+      ]),
+      ">",
+      "\n    ",
+      runtime.escape(label),
+      "\n  ",
+      "</label>",
+      "\n\n  ",
+      "<input",
+      " "
+        <> runtime.render_attributes(runtime.merge_attributes(
+        [
+          runtime.Attribute("value", session.old(session, name)),
+          runtime.Attribute(
+            "class",
+            "w-full px-3 py-2 border border-mist-200 rounded-md focus:outline-none focus:ring-2 focus:ring-mist-500 focus:border-transparent placeholder:text-mist-400",
+          ),
+        ],
+        attributes,
+      )),
+      " />",
+      "\n\n  ",
+    ]),
+    case session.has_error(session, name) {
+      True ->
+        string_tree.from_strings([
+          "<small",
+          " "
+            <> runtime.render_attributes([
+            runtime.Attribute("class", "mt-1 text-sm text-red-600"),
+          ]),
+          ">",
+          "\n    ",
+          runtime.display(session.error(session, name)),
+          "\n  ",
+          "</small>",
+        ])
+      False -> string_tree.new()
+    },
+    string_tree.from_strings(["\n</div>\n"]),
   ])
-  <> ">"
-  <> "\n    "
-  <> runtime.display(label)
-  <> "\n  "
-  <> "</label>"
-  <> "\n\n  "
-  <> "<input"
-  <> " "
-  <> runtime.render_attributes(runtime.merge_attributes(
-    [
-      runtime.Attribute("value", session.old(session, name)),
-      runtime.Attribute(
-        "class",
-        "w-full px-3 py-2 border border-mist-200 rounded-md focus:outline-none focus:ring-2 focus:ring-mist-500 focus:border-transparent placeholder:text-mist-400",
-      ),
-    ],
-    attributes,
-  ))
-  <> " />"
-  <> "\n\n  "
-  <> case session.has_error(session, name) {
-    True -> {
-      ""
-      <> "<small"
-      <> " "
-      <> runtime.render_attributes([
-        runtime.Attribute("class", "mt-1 text-sm text-red-600"),
-      ])
-      <> ">"
-      <> "\n    "
-      <> runtime.display(session.error(session, name))
-      <> "\n  "
-      <> "</small>"
-    }
-    False -> ""
-  }
-  <> "\n</div>\n"
 }

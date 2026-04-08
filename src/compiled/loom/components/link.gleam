@@ -6,34 +6,36 @@
 //// loom:compile`.
 ////
 
+import gleam/string_tree.{type StringTree}
 import glimr/loom/runtime
 
 pub fn render(
   variant variant: String,
-  slot slot: String,
+  slot slot: StringTree,
   attributes attributes: List(runtime.Attribute),
-) -> String {
-  ""
-  <> "<a"
-  <> " "
-  <> runtime.render_attributes(runtime.merge_attributes(
-    [
-      runtime.Attribute(
-        "class",
-        runtime.build_classes([
-          runtime.class("font-medium"),
-          runtime.class(case variant {
-            _ -> "text-mist-800 hover:text-mist-600"
-          }),
-        ]),
-      ),
-    ],
-    attributes,
-  ))
-  <> ">"
-  <> "\n  "
-  <> slot
-  <> "\n"
-  <> "</a>"
-  <> "\n"
+) -> StringTree {
+  string_tree.concat([
+    string_tree.from_strings([
+      "<a",
+      " "
+        <> runtime.render_attributes(runtime.merge_attributes(
+        [
+          runtime.Attribute(
+            "class",
+            runtime.build_classes([
+              runtime.class("font-medium"),
+              runtime.class(case variant {
+                _ -> "text-mist-800 hover:text-mist-600"
+              }),
+            ]),
+          ),
+        ],
+        attributes,
+      )),
+      ">",
+      "\n  ",
+    ]),
+    slot,
+    string_tree.from_strings(["\n", "</a>", "\n"]),
+  ])
 }
