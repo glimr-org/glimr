@@ -47,7 +47,7 @@ pub fn render(
         ],
         attributes,
       )),
-      " />",
+      ">",
       "\n\n  ",
     ]),
     case session.has_error(session, name) {

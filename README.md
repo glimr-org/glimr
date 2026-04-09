@@ -220,6 +220,33 @@ import glimr/vite
 
 In dev mode, this emits tags pointing at Vite's dev server. In production, it reads the Vite manifest and outputs hashed filenames with `/static/` prefixes.
 
+#### Structured Tags (Lustre)
+
+If you're rendering your HTML with a typed UI library like Lustre instead of Loom templates, use `vite.to_tags()` to get structured tag data instead of raw HTML strings:
+
+```gleam
+import glimr/vite.{Script, Stylesheet}
+import lustre/attribute
+import lustre/element/html
+
+vite.to_tags("src/resources/ts/app.ts")
+|> list.map(fn(tag) {
+  case tag {
+    Script(src) -> html.script([attribute.type_("module"), attribute.src(src)], [])
+    Stylesheet(href) -> html.link([attribute.rel("stylesheet"), attribute.href(href)])
+  }
+})
+```
+
+Each entry in the returned list is either a `Script(src: String)` or `Stylesheet(href: String)`. The resolution logic is the same as `vite.tags()` -- dev mode points at the Vite dev server, production reads hashed filenames from the manifest.
+
+If you have a `List(Tag)` and want to convert it to an HTML string, use `vite.render_tags()`:
+
+```gleam
+vite.to_tags("src/resources/ts/app.ts")
+|> vite.render_tags
+```
+
 #### Adding JavaScript
 
 Your `src/resources/ts/app.ts` is the entry point. The Loom client runtime is already imported — add your own code below:
