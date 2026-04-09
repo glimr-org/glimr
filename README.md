@@ -2291,26 +2291,6 @@ src/resources/views/errors/
 
 Any status code you don't provide a custom page for will use the built-in default.
 
-### `fail.with()`
-
-You can trigger an error response from anywhere in a request handler using `fail.with()`:
-
-```gleam
-import glimr/http/fail
-import glimr/http/http.{type Response}
-
-pub fn show(ctx: Context(App), id: String) -> Response {
-  let user = case get_user(id) {
-    Ok(user) -> user
-    Error(_) -> fail.with(404)  // stops execution, renders 404 error page
-  }
-
-  // ...
-}
-```
-
-`fail.with()` raises an internal exception that is caught by the `rescue_crashes` middleware. The request is halted and the appropriate error page is rendered. This is the same mechanism that the `_or_fail` [database query variants](#queries) use under the hood.
-
 ### Loom Template Engine
 
 Loom is Glimr's template engine — `.loom.html` files that compile to type-safe Gleam code. But Loom is more than a template engine: templates with event handlers (`l-on:*`) automatically become reactive, establishing a WebSocket connection where all state and logic lives on the server. Inspired by [Phoenix LiveView](https://hexdocs.pm/phoenix_live_view), this server-driven model means you build interactive UIs without writing JavaScript.
@@ -4021,14 +4001,12 @@ This generates a fully-typed repository file with Gleam functions for each query
 
 | Function | Accepts | Returns | Use Case |
 |----------|---------|---------|----------|
-| `find(pool, id)` | Pool | `Result(User, DbError)` | Standard queries with error handling |
+| `find(pool, id)` | Pool | `Result(User, DbError)` | Standard queries with explicit error handling |
 | `find_wc(conn, id)` | Connection | `Result(User, DbError)` | Inside transactions |
-| `find_or_fail(pool, id)` | Pool | `User` | HTTP handlers — fails with appropriate status on error |
-| `find_or_fail_wc(conn, id)` | Connection | `User` | Transactions in HTTP handlers |
+| `find_or_fail(pool, id, then)` | Pool + continuation | `Response` | HTTP handlers — short-circuits to a status response on error |
+| `find_or_fail_wc(conn, id, then)` | Connection + continuation | `Response` | Transactions in HTTP handlers |
 
-The `_or_fail` variants unwrap the result automatically. On error, they halt the request and render the appropriate [error page](#error-pages) — 404 for not found, 503 for connection issues, 500 for everything else. This is the most convenient option for HTTP handlers where you'd otherwise just convert the error to a status code anyway.
-
-If the request is expecting a json response, it will instead return the appropriate  error message as json.
+The `_or_fail` variants take a continuation and return a `Response` directly. On success, they invoke your continuation with the decoded value so you can render the success response. On error, they short-circuit and return a status response — 404 for not found, 503 for connection issues, 500 for everything else — which the global error-handler middleware renders as the appropriate [error page](#error-pages). This means the happy path in a controller reads as a single `use` expression and the failure path is handled centrally, without exception-style control flow.
 
 ```gleam
 // src/database/main/models/user/gen/user.gleam (auto-generated)
@@ -4043,15 +4021,15 @@ pub fn find_wc(conn, id) -> Result(User, DbError)
 pub fn by_email_wc(conn, email) -> Result(User, DbError)
 pub fn list_wc(conn) -> Result(List(User), DbError)
 
-// Or-fail variants - unwrap result or halt with HTTP status
-pub fn find_or_fail(pool, id) -> User
-pub fn by_email_or_fail(pool, email) -> User
-pub fn list_or_fail(pool) -> List(User)
+// Or-fail variants - continuation-style, short-circuit to a status Response on error
+pub fn find_or_fail(pool, id, then: fn(User) -> Response) -> Response
+pub fn by_email_or_fail(pool, email, then: fn(User) -> Response) -> Response
+pub fn list_or_fail(pool, then: fn(List(User)) -> Response) -> Response
 
 // Or-fail with-connection variants
-pub fn find_or_fail_wc(conn, id) -> User
-pub fn by_email_or_fail_wc(conn, email) -> User
-pub fn list_or_fail_wc(conn) -> List(User)
+pub fn find_or_fail_wc(conn, id, then: fn(User) -> Response) -> Response
+pub fn by_email_or_fail_wc(conn, email, then: fn(User) -> Response) -> Response
+pub fn list_or_fail_wc(conn, then: fn(List(User)) -> Response) -> Response
 ```
 
 #### Connection Pooling
@@ -4072,15 +4050,14 @@ This means each query holds a connection only for the duration of the query itse
 
 #### Using Queries in Controllers
 
-The `_or_fail` variants are the most convenient for HTTP handlers — they return values directly and automatically render the appropriate [error page](#error-pages) on failure:
+The `_or_fail` variants are the most convenient for HTTP handlers — they take a continuation that receives the decoded value on success, and short-circuit to the appropriate [error page](#error-pages) on failure. Using `use` gives you a flat, readable happy path:
 
 ```gleam
 import database/models/user/gen/user
 import glimr/http/http.{type Response}
 
 pub fn show(ctx: Context(App), id: Int) -> Response {
-  let user = user.find_or_fail(ctx.app.db, id)
-
+  use user <- user.find_or_fail(ctx.app.db, id)
   response.loom(user_show.render(user: user), 200)
 }
 ```
@@ -4092,9 +4069,8 @@ import database/models/user/gen/user
 import glimr/http/http.{type Response}
 
 pub fn index(ctx: Context(App)) -> Response {
-  let users = user.list_or_fail(ctx.app.db)
+  use users <- user.list_or_fail(ctx.app.db)
   let count = int.to_string(list.length(users))
-
   response.loom(user_index.render(count: count), 200)
 }
 ```
@@ -4639,69 +4615,62 @@ let my_decoder = {
 
 #### Remember Pattern
 
-The remember pattern gets a value from cache, or computes and stores it if missing. The compute callback is only called on a cache miss — its return value gets cached and returned directly.
+The remember pattern gets a value from cache, or computes and stores it on a miss. The `try_*` variants take a `Result`-returning compute callback and cache only on success — errors propagate untouched, so transient failures don't poison the TTL.
 
-Use `remember` for string values:
+Use `try_remember` for string values:
 
 ```gleam
-let cache_key = "user:" <> id <> ":name"
+let cache_key = "external_api:status"
 
-// Remember a string value for 1 hour
-let name = {
-  use <- cache.remember(ctx.app.cache, cache_key, 3600)
-  user.find_or_fail(ctx.app.db, id).name
-}
-
-// Remember forever (only cleared by forget or flush)
-let name = {
-  use <- cache.remember_forever(ctx.app.cache, cache_key)
-  user.find_or_fail(ctx.app.db, id).name
+let status_result = {
+  use <- cache.try_remember(ctx.app.cache, cache_key, 60)
+  http.fetch_status("https://example.com/health")
 }
 ```
 
-Use `remember_json` for structured data — the compute callback goes last so you can use `use <-` syntax:
+Use `try_remember_json` for structured data — the compute callback goes last so you can use `use <-` syntax. Map the `Result` to HTTP status codes in the controller:
 
 ```gleam
-// Remember a JSON object for 1 hour
-let user = {
-  use <- cache.remember_json(
-    ctx.app.cache,
-    "user:" <> id,
-    3600,
-    user.decoder(),
-    user.encoder(),
-  )
+pub fn show(ctx: Context(App), id: Int) -> Response {
+  let user_result = {
+    use <- cache.try_remember_json(
+      ctx.app.cache,
+      "user:" <> int.to_string(id),
+      3600,
+      user.decoder(),
+      user.encoder(),
+    )
+    user.find(ctx.app.db, id)
+  }
 
-  user.find_or_fail(ctx.app.db, id)
+  case user_result {
+    Ok(user) -> response.html(user_show.render(user: user), 200)
+    Error(db.NotFound) -> response.not_found()
+    Error(_) -> response.internal_server_error()
+  }
 }
+```
 
-// Remember a JSON object forever
-let user = {
-  use <- cache.remember_json_forever(
+If you want to cache a fallback on `NotFound` instead of propagating it, turn it into an `Ok` inside the callback — anything returned as `Ok` gets cached like a normal success:
+
+```gleam
+let user_result = {
+  use <- cache.try_remember_json(
     ctx.app.cache,
-    "user:" <> id,
-    user.decoder(),
-    user.encoder(),
-  )
-
-  user.find_or_fail(ctx.app.db, id)
-}
-
-// Handle errors yourself inside the callback
-let user = {
-  use <- cache.remember_json(
-    ctx.app.cache,
-    "user:" <> id,
+    "user:" <> int.to_string(id),
     3600,
     user.decoder(),
     user.encoder(),
   )
   case user.find(ctx.app.db, id) {
-    Ok(user) -> user
-    Error(_) -> User(name: "Guest", email: "")
+    Ok(user) -> Ok(user)
+    Error(db.NotFound) -> Ok(User(name: "Guest", email: ""))
+    Error(e) -> Error(e)
   }
 }
 ```
+
+For values that should live until an explicit `forget` or `flush`, use `try_remember_forever` and `try_remember_json_forever`, which take the same shape minus the `ttl_seconds` argument.
 
 #### Increment/Decrement
 
