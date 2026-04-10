@@ -382,7 +382,7 @@ import glimr/http/http.{type Response}
 
 /// @get "/welcome"
 pub fn show() -> Response {
-  response.loom(welcome.render(), 200)
+  welcome.render() |> response.string_tree(200)
 }
 
 // ...
@@ -402,7 +402,7 @@ pub fn show(ctx: Context(App)) -> Response {
   // Access the request via ctx.req
   // Access app state via ctx.app
 
-  response.loom(welcome.render(), 200)
+  welcome.render() |> response.string_tree(200)
 }
 
 // ...
@@ -477,7 +477,9 @@ Route parameters are strings by default, but if you type a parameter as `Int` in
 pub fn show(ctx: Context(App), id: Int) -> Response {
   // id is already an Int — no manual parsing needed
   let post = post.find_or_fail(ctx.app.db, id)
-  response.loom(post_show.render(post: post), 200)
+  
+  post_show.render(post: post)
+  |> response.string_tree(200)
 }
 ```
 
@@ -792,7 +794,8 @@ import glimr/response/response
 pub fn show(ctx: Context(App), user: String) -> Response {
   // get the user...
 
-  response.loom(user_show.render(user: user), 200)
+  user_show.render(user: user)
+  |> response.string_tree(200)
 }
 
 /// @post "/users"
@@ -1010,7 +1013,8 @@ pub fn dashboard(ctx: Context(App)) -> Response {
   // Safe to assert because auth middleware guarantees this
   let assert Some(user) = ctx.app.user
 
-  response.loom(dashboard.render(user: user), 200)
+  dashboard.render(user: user)
+  |> response.string_tree(200)
 }
 ```
 
@@ -1423,7 +1427,8 @@ pub fn login(ctx: Context(App)) -> Response {
 
 /// @get "/dashboard"
 pub fn dashboard(ctx: Context(App)) -> Response {
-  response.loom(dashboard.render(ctx), 200)
+  dashboard.render(ctx)
+  |> response.string_tree(200)
 }
 ```
 And then in your loom file
@@ -1575,7 +1580,9 @@ import glimr/http/http.{type Response}
 /// @get "/dashboard"
 pub fn show(ctx: Context(App)) -> Response {
   let assert option.Some(user) = ctx.app.user
-  response.loom(dashboard.render(ctx: ctx, user: user), 200)
+  
+  dashboard.render(ctx: ctx, user: user)
+  |> response.string_tree(200)
 }
 
 // src/app/http/controllers/admin_dashboard_controller.gleam
@@ -1584,7 +1591,9 @@ import glimr/http/http.{type Response}
 /// @get "/admin/dashboard"
 pub fn show(ctx: Context(App)) -> Response {
   let assert option.Some(admin) = ctx.app.admin
-  response.loom(dashboard.render(ctx: ctx, admin: admin), 200)
+
+  dashboard.render(ctx: ctx, admin: admin)
+  |> response.string_tree(200)
 }
 ```
 
@@ -1728,7 +1737,7 @@ pub fn middleware() -> List(Middleware(App)) {
 
 /// @get "/login"
 pub fn show(ctx: Context(App)) -> Response {
-  response.loom(login.render(ctx: ctx), 200)
+  login.render(ctx: ctx) |> response.string_tree(200)
 }
 
 /// @post "/login"
@@ -1787,7 +1796,7 @@ import glimr/http/http.{type Response}
 
 /// @get "/register"
 pub fn show(ctx: Context(App)) -> Response {
-  response.loom(register.render(ctx: ctx), 200)
+  register.render(ctx: ctx) |> response.string_tree(200)
 }
 
 /// @post "/register"
@@ -1843,7 +1852,9 @@ pub fn middleware() -> List(Middleware(App)) {
 /// @get "/dashboard"
 pub fn show(ctx: Context(App)) -> Response {
   let assert option.Some(user) = ctx.app.user
-  response.loom(dashboard.render(ctx: ctx, user: user), 200)
+  
+  dashboard.render(ctx: ctx, user: user)
+  |> response.string_tree(200)
 }
 ```
 
@@ -2257,7 +2268,7 @@ Glimr provides a powerful templating engine called Loom, along with a fluent bui
 
 ### Rendering Loom Templates
 
-Loom templates compile to `render()` functions that return a `StringTree`. Use `response.loom()` to send one as an HTML response:
+Loom templates compile to `render()` functions that return a `StringTree`. Use `response.string_tree()` to send one as an HTML response:
 
 ```gleam
 import glimr/http/http.{type Response}
@@ -2265,11 +2276,11 @@ import glimr/response/response
 import compiled/loom/home
 
 pub fn show(ctx: Context(App)) -> Response {
-  response.loom(home.render(name: "John"), 200)
+  home.render(name: "John") |> response.string_tree(200)
 }
 ```
 
-`response.loom()` takes a `StringTree` and sets the correct `content-type` header for you. Use this for every Loom template — `response.html()` is reserved for raw HTML strings you've built yourself.
+`response.string_tree()` takes a `StringTree` and sets the correct `content-type` header for you. Use this for every Loom template.
 
 ### Rendering HTML Files
 
@@ -2351,7 +2362,7 @@ import glimr/response/response
 
 /// @get "/"
 pub fn show() {
-  response.loom(home.render(), 200)
+  home.render() |> response.string_tree(200)
 }
 ```
 
@@ -2375,7 +2386,7 @@ import glimr/response/response
 
 /// @get "/counter"
 pub fn show() {
-  response.loom(counter.render(count: 0), 200)
+  counter.render(count: 0) |> response.string_tree(200)
 }
 ```
 
@@ -2696,10 +2707,8 @@ import glimr/response/response
 
 /// @get "/"
 pub fn show() {
-  response.loom(
-    home.render(name: "John"),
-    200,
-  )
+  home.render(name: "John")
+  |> response.string_tree(200)
 }
 ```
 
@@ -3472,7 +3481,8 @@ import glimr/http/http.{type Response}
 pub fn show(ctx: Context(App), user_id: Int) -> Response {
   case user.find(ctx.app.db, user_id) {
     Ok(user) -> {
-      response.loom(user_show.render(user: user), 200)
+      user_show.render(user: user) 
+      |> response.string_tree(200)
     }
     Error(NotFound) -> response.not_found()
     Error(_) -> response.internal_server_error()
@@ -3586,7 +3596,8 @@ import glimr/http/http.{type Response}
 pub fn show(ctx: Context(App), user_id: Int) -> Response {
   case user.find(ctx.app.db, user_id) {
     Ok(user) -> {
-      response.loom(user_show.render(user: user), 200)
+      user_show.render(user: user)
+      |> response.string_tree(200)
     }
     Error(NotFound) -> response.not_found()
     Error(_) -> response.internal_server_error()
@@ -4085,7 +4096,9 @@ import glimr/http/http.{type Response}
 
 pub fn show(ctx: Context(App), id: Int) -> Response {
   use user <- user.find_or_fail(ctx.app.db, id)
-  response.loom(user_show.render(user: user), 200)
+
+  user_show.render(user: user)
+  |> response.string_tree(200)
 }
 ```
 
@@ -4098,7 +4111,9 @@ import glimr/http/http.{type Response}
 pub fn index(ctx: Context(App)) -> Response {
   use users <- user.list_or_fail(ctx.app.db)
   let count = int.to_string(list.length(users))
-  response.loom(user_index.render(count: count), 200)
+
+  user_index.render(count: count)
+  |> response.string_tree(200)
 }
 ```
 
@@ -4112,7 +4127,8 @@ import glimr/http/http.{type Response}
 pub fn show(ctx: Context(App), id: Int) -> Response {
   case user.find(ctx.app.db, id) {
     Ok(user) -> {
-      response.loom(user_show.render(user: user), 200)
+      user_show.render(user: user)
+      |> response.string_tree(200)
     }
     Error(NotFound) -> response.not_found()
     Error(_) -> response.internal_server_error()
@@ -4671,7 +4687,10 @@ pub fn show(ctx: Context(App), id: Int) -> Response {
   }
 
   case user_result {
-    Ok(user) -> response.html(user_show.render(user: user), 200)
+    Ok(user) -> {
+      user_show.render(user: user) 
+      |> response.string_tree(200)
+    }
     Error(db.NotFound) -> response.not_found()
     Error(_) -> response.internal_server_error()
   }
