@@ -13,11 +13,19 @@
 //// https://github.com/glimr-org/glimr?tab=readme-ov-file#loom-template-engine
 ////
 
-import bootstrap/bootstrap
+import app/http/kernel
+import bootstrap/app
+import bootstrap/routes
 import dot_env/env
 import gleam/erlang/process
 import glimr/config/config
+import glimr/http/context
 import glimr/http/glimr_mist
+import glimr/http/request.{type Request}
+import glimr/http/response.{type Response}
+import glimr/routing/router
+import glimr/session/session
+import glimr_sqlite/sqlite
 import mist
 
 /// Starts the Glimr web application server. Initializes the
@@ -26,12 +34,32 @@ import mist
 ///
 pub fn main() -> Nil {
   let assert Ok(_) =
-    glimr_mist.handler(bootstrap.init(), config.get_string("app.key"))
+    glimr_mist.handler(init(), config.get_string("app.key"))
     |> mist.new()
     |> mist.port(get_port())
     |> mist.start()
 
   process.sleep_forever()
+}
+
+/// Initializes the HTTP application and returns the request
+/// handler. Configures the logger, loads environment variables
+/// and config, starts the app, and sets up the router with
+/// your context, routes, and middleware kernel.
+///
+pub fn init() -> fn(Request) -> Response {
+  glimr_mist.configure_logger()
+  config.load()
+
+  let app = app.start()
+  let route_groups = routes.groups()
+
+  sqlite.session_store(app.db) |> session.setup()
+
+  fn(req) {
+    let ctx = context.new(req, app)
+    router.handle(ctx, route_groups, kernel.handle)
+  }
 }
 
 /// The network port the web server listens on. When running

@@ -10,7 +10,7 @@
 
 import app/http/controllers/api/welcome_controller as api_welcome_controller
 import gleam/http.{Get}
-import glimr/response/response
+import glimr/http/response
 
 pub fn routes(path, method, _ctx) {
   case path {

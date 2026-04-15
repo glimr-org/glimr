@@ -12,8 +12,7 @@
 ////
 
 import gleam/json
-import glimr/http/http.{type Response}
-import glimr/response/response
+import glimr/http/response.{type Response}
 
 /// Welcome to Glimr ✨
 /// Build something beautiful...
