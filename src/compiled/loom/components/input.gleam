@@ -8,7 +8,7 @@
 
 import gleam/string_tree.{type StringTree}
 import glimr/loom/runtime
-import glimr/session/session.{type Session}
+import glimr/session.{type Session}
 
 pub fn render(
   label label: String,

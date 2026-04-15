@@ -476,7 +476,7 @@ Route parameters are strings by default, but if you type a parameter as `Int` in
 /// @get "/posts/:id"
 pub fn show(ctx: Context(App), id: Int) -> Response {
   // id is already an Int — no manual parsing needed
-  let post = post.find_or_fail(ctx.app.db, id)
+  use post <- post.find_or_fail(ctx.app.db, id)
   
   post_show.render(post: post)
   |> response.string_tree(200)
@@ -1375,7 +1375,7 @@ All session operations interact with the per-request OTP actor through `ctx.sess
 
 ```gleam
 import glimr/http/response.{type Response}
-import glimr/session/session
+import glimr/session
 
 /// @post "/profile"
 pub fn update(ctx: Context(App)) -> Response {
@@ -1412,7 +1412,7 @@ Flash messages are one-shot values: set during this request, available only on t
 ```gleam
 import glimr/http/context.{type Context}
 import glimr/http/response.{type Response}
-import glimr/session/session
+import glimr/session
 
 /// @post "/login"
 pub fn login(ctx: Context(App)) -> Response {
@@ -1432,7 +1432,7 @@ And then in your loom file
 
 ```html
 ---
-import glimr/session/session
+import glimr/session
 import glimr/http/context.{type Context}
 import app/app.{type App}
 
@@ -1452,7 +1452,7 @@ props(ctx: Context(App))
 
 ```gleam
 import glimr/http/response.{type Response}
-import glimr/session/session
+import glimr/session
 
 /// @post "/logout"
 pub fn logout(ctx: Context(App)) -> Response {
@@ -2225,7 +2225,7 @@ Your templates can use the `session.old`, `session.error`, and `session.has_erro
 ```html
 ---
 import glimr/http/context
-import glimr/session/session
+import glimr/session
 import app/app.{type App}
 
 props(ctx: context.Context(App))

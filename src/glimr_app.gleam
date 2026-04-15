@@ -24,7 +24,7 @@ import glimr/http/glimr_mist
 import glimr/http/request.{type Request}
 import glimr/http/response.{type Response}
 import glimr/routing/router
-import glimr/session/session
+import glimr/session
 import glimr_sqlite/sqlite
 import mist
 
