@@ -5,7 +5,7 @@
 //// live here so controllers can access them via ctx.app.
 ////
 
-import glimr/cache/cache.{type CachePool}
+import glimr/cache.{type CachePool}
 import glimr/db/db.{type DbPool}
 
 pub type App {

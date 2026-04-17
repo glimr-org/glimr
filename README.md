@@ -4321,11 +4321,11 @@ Set up the store in `config/cache.toml`:
 Start the cache in `bootstrap/app.gleam`:
 
 ```gleam
-import glimr/cache/file_cache
+import glimr/cache
 
 pub fn start() -> app.App {
   app.App(
-    cache: file_cache.start("main"),
+    cache: cache.start_file("main"),
     // ...
   )
 }
@@ -4334,7 +4334,7 @@ pub fn start() -> app.App {
 Use it in your controllers:
 
 ```gleam
-import glimr/cache/cache
+import glimr/cache
 import glimr/http/response.{type Response}
 
 pub fn show(ctx: Context(App)) -> Response {
@@ -4390,7 +4390,7 @@ pub fn start() -> app.App {
 Use it in your controllers:
 
 ```gleam
-import glimr/cache/cache
+import glimr/cache
 import glimr/http/response.{type Response}
 
 pub fn show(ctx: Context(App)) -> Response {
@@ -4463,7 +4463,7 @@ Generate and run the cache table migration:
 Use it in your controllers:
 
 ```gleam
-import glimr/cache/cache
+import glimr/cache
 import glimr/http/response.{type Response}
 
 pub fn show(ctx: Context(App)) -> Response {
@@ -4526,7 +4526,7 @@ Generate and run the cache table migration:
 Use it in your controllers:
 
 ```gleam
-import glimr/cache/cache
+import glimr/cache
 import glimr/http/response.{type Response}
 
 pub fn show(ctx: Context(App)) -> Response {
@@ -4543,7 +4543,7 @@ pub fn show(ctx: Context(App)) -> Response {
 All cache backends share the same unified API through a single import:
 
 ```gleam
-import glimr/cache/cache
+import glimr/cache
 ```
 
 The `CachePool` type returned by all backends (`file_cache.start`, `redis.start`, `postgres.start_cache`, `sqlite.start_cache`) is driver-agnostic — you use the same `cache.get`, `cache.put`, etc. regardless of which backend is active.
@@ -4575,7 +4575,7 @@ All cache drivers support these operations:
 | `put_json_forever(pool, key, value, encoder)` | Store JSON permanently |
 | `remember_json(pool, key, ttl, decoder, fn, encoder)` | Get or compute JSON |
 
-**Database-only operations** (via `glimr/cache/database`):
+**Database-only operations** (via `glimr/cache`):
 
 | Operation | Description |
 |-----------|-------------|
@@ -4585,7 +4585,7 @@ All cache drivers support these operations:
 #### Basic Usage
 
 ```gleam
-import glimr/cache/cache
+import glimr/cache
 
 // Store a value for 1 hour (3600 seconds)
 cache.put(ctx.app.cache, "user:123:name", "Alice", 3600)
@@ -4651,23 +4651,23 @@ let my_decoder = {
 
 The remember pattern gets a value from cache, or computes and stores it on a miss. The `try_*` variants take a `Result`-returning compute callback and cache only on success — errors propagate untouched, so transient failures don't poison the TTL.
 
-Use `try_remember` for string values:
+Use `remember` for string values:
 
 ```gleam
 let cache_key = "external_api:status"
 
 let status_result = {
-  use <- cache.try_remember(ctx.app.cache, cache_key, 60)
+  use <- cache.remember(ctx.app.cache, cache_key, 60)
   http.fetch_status("https://example.com/health")
 }
 ```
 
-Use `try_remember_json` for structured data — the compute callback goes last so you can use `use <-` syntax. Map the `Result` to HTTP status codes in the controller:
+Use `remember_json` for structured data — the compute callback goes last so you can use `use <-` syntax. Map the `Result` to HTTP status codes in the controller:
 
 ```gleam
 pub fn show(ctx: Context(App), id: Int) -> Response {
   let user_result = {
-    use <- cache.try_remember_json(
+    use <- cache.remember_json(
       ctx.app.cache,
       "user:" <> int.to_string(id),
       3600,
@@ -4692,7 +4692,7 @@ If you want to cache a fallback on `NotFound` instead of propagating it, turn it
 
 ```gleam
 let user_result = {
-  use <- cache.try_remember_json(
+  use <- cache.remember_json(
     ctx.app.cache,
     "user:" <> int.to_string(id),
     3600,
@@ -4707,7 +4707,7 @@ let user_result = {
 }
 ```
 
-For values that should live until an explicit `forget` or `flush`, use `try_remember_forever` and `try_remember_json_forever`, which take the same shape minus the `ttl_seconds` argument.
+For values that should live until an explicit `forget` or `flush`, use `remember_forever` and `remember_json_forever`, which take the same shape minus the `ttl_seconds` argument.
 
 #### Increment/Decrement
 
@@ -4731,7 +4731,7 @@ case cache.increment(ctx.app.cache, rate_key, 1) {
 All cache operations return `Result(value, CacheError)`:
 
 ```gleam
-import glimr/cache/cache.{type CacheError, NotFound, SerializationError, ConnectionError}
+import glimr/cache.{type CacheError, NotFound, SerializationError, ConnectionError}
 
 case cache.get(pool, key) {
   Ok(value) -> // success
@@ -5069,7 +5069,7 @@ The framework provides a `Context(app)` type that carries the HTTP request, resp
 The framework owns the outer `Context` — it manages the request, session, and response format automatically. You define only your application-specific state in `src/app/app.gleam`:
 
 ```gleam
-import glimr/cache/cache.{type CachePool}
+import glimr/cache.{type CachePool}
 import glimr/db/db.{type DbPool}
 
 pub type App {
