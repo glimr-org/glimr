@@ -5005,7 +5005,7 @@ Available inline color functions: `console.success()` (green), `console.warning(
 All configuration lives in TOML files under `config/`. At boot, `config.load()` reads every `*.toml` file in that directory and caches the merged result. You then access values anywhere via dot-separated paths where the first segment is the filename:
 
 ```gleam
-import glimr/config/config
+import glimr/config
 import glimr/http/response.{type Response}
 
 pub fn show(ctx: Context(App)) -> Response {

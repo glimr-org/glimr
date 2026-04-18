@@ -18,7 +18,7 @@ import bootstrap/app
 import bootstrap/routes
 import dot_env/env
 import gleam/erlang/process
-import glimr/config/config
+import glimr/config
 import glimr/http/context
 import glimr/http/glimr_mist
 import glimr/http/request.{type Request}
