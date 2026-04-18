@@ -9,7 +9,7 @@ import app/app.{type App}
 import compiled/routes/api
 import compiled/routes/web
 import glimr/http/context.{type Context}
-import glimr/routing/router.{type RouteGroup}
+import glimr/router.{type RouteGroup}
 
 /// Returns the list of route groups for the application.
 /// Each group maps a name to its compiled route module.

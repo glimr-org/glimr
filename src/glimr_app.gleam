@@ -23,7 +23,7 @@ import glimr/http/context
 import glimr/http/glimr_mist
 import glimr/http/request.{type Request}
 import glimr/http/response.{type Response}
-import glimr/routing/router
+import glimr/router
 import glimr/session
 import glimr_sqlite/sqlite
 import mist
