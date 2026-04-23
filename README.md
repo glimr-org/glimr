@@ -3664,7 +3664,7 @@ Start by creating a data model using the following command:
 
 This creates a `user/` folder inside your default database directory `src/database/main/models/`. The folder contains `user_schema.gleam` for defining your table schema, and a `queries/` folder with pre-generated CRUD queries that get compiled into fully typed gleam code. You can add custom queries to this folder as well (see [Queries](#queries) section).
 
-The `make:model` command defines your default connection as the very first one in your `config/database.toml`. All other commands that accept the `--database` flag define it as the first of its driver type instead.
+The `make_model` command defines your default connection as the very first one in your `config/database.toml`. All other commands that accept the `--database` flag define it as the first of its driver type instead.
 
 If you need to specify the connection folder you can always pass a `--database` flag:
 
