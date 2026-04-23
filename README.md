@@ -873,7 +873,7 @@ import glimr/db/db.{NotFound}
 import glimr/http/response.{type Response}
 
 /// @put "/submissions/:submission_id"
-pub fn update(ctx: Context(App), submission: String) -> Response {
+pub fn update(ctx: Context(App), submission_id: Int) -> Response {
   use validated <- contact_store.validate(ctx)
 
   case update_submission.run(ctx.app.db, submission_id, validated) {
