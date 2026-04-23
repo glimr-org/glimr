@@ -595,7 +595,7 @@ See [Form Validation](#form-validation) for details on creating validators.
 
 ### Route Groups
 
-Route groups determine which compiled file your routes end up in and which middleware stack they use. Groups are configured in `config/route_group.gleam`:
+Route groups determine which compiled file your routes end up in and which middleware stack they use. Groups are configured in `config/route_group.toml`:
 
 ```toml
 # config/route_group.toml
