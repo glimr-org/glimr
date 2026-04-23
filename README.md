@@ -843,12 +843,12 @@ This creates `update_submission.gleam`. Actions follow a simple pattern - they p
 ```gleam
 // src/app/actions/update_submission.gleam
 import app/http/requests/contact_store_request.{type Data}
-import database/models/submission/gen/submission.{type CreateRow}
+import database/models/submission/gen/submission.{type UpdateRow}
 import glimr/db/db.{type DbError}
 import glimr/utils/unix_timestamp
 import glimr/db/pool.{type Pool}
 
-pub fn run(pool: Pool, id: Int, data: Data) -> Result(CreateRow, DbError) {
+pub fn run(pool: Pool, id: Int, data: Data) -> Result(UpdateRow, DbError) {
   let now = unix_timestamp.now()
 
   submission.update(
@@ -867,15 +867,14 @@ Use actions in controllers with `case` for error handling:
 
 ```gleam
 // src/app/http/controllers/contact_controller.gleam
-import app/http/actions/create_submission
+import app/http/actions/update_submission
 import app/http/validators/contact_store
 import glimr/db/db.{NotFound}
 import glimr/http/response.{type Response}
 
-/// @put "/submissions/:submission"
+/// @put "/submissions/:submission_id"
 pub fn update(ctx: Context(App), submission: String) -> Response {
   use validated <- contact_store.validate(ctx)
-  let assert Ok(submission_id) = int.parse(submission_id)
 
   case update_submission.run(ctx.app.db, submission_id, validated) {
     Ok(submission) -> {
