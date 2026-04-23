@@ -1416,7 +1416,7 @@ import glimr/session
 /// @post "/login"
 pub fn login(ctx: Context(App)) -> Response {
   // Set flash messages for the next request
-  session.flash(ctx.session, "success", "Welcome back!")
+  session.flash(ctx.session, "message", "Welcome back!")
 
   response.redirect("/dashboard")
 }
