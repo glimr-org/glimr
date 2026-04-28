@@ -13,66 +13,82 @@
 //// https://github.com/glimr-org/glimr?tab=readme-ov-file#loom-template-engine
 ////
 
+import app/app.{type App}
 import app/http/kernel
-import bootstrap/app
-import bootstrap/routes
-import dot_env/env
+import compiled/routes/api
+import compiled/routes/web
 import gleam/erlang/process
+import glimr/cache
 import glimr/config
-import glimr/http/context
+import glimr/http/context.{type Context}
 import glimr/http/glimr_mist
-import glimr/http/request.{type Request}
-import glimr/http/response.{type Response}
-import glimr/router
+import glimr/router.{type RouteGroup}
 import glimr/session
 import glimr_sqlite/sqlite
 import mist
 
-/// Starts the Glimr web application server. Initializes the
-/// Wisp HTTP handler with the application's router, configures
-/// the Mist server on the specified port, and runs indefinitely.
-///
-pub fn main() -> Nil {
-  let assert Ok(_) =
-    glimr_mist.handler(init(), config.get_string("app.key"))
-    |> mist.new()
-    |> mist.port(get_port())
-    |> mist.start()
+// ------------------------------------------------------------- Configuration
 
-  process.sleep_forever()
+/// Initialize your global app state with all necessary shared
+/// resources (database pools, caches, etc.)
+///
+fn app() -> App {
+  app.App(
+    db: sqlite.start("main"),
+    cache: cache.start_file("main"),
+    // ...
+  )
 }
 
-/// Initializes the HTTP application and returns the request
-/// handler. Configures the logger, loads environment variables
-/// and config, starts the app, and sets up the router with
-/// your context, routes, and middleware kernel.
+/// Register your route groups by mapping group names to their
+/// compiled route modules. Add new route groups here by adding
+/// a case clause before the default web group.
 ///
-pub fn init() -> fn(Request) -> Response {
+fn route_groups() -> List(RouteGroup(Context(App))) {
+  use name <- router.load()
+
+  case name {
+    "api" -> api.routes
+    // Register custom route groups here before the
+    // default "web" group below.
+    _ -> web.routes
+  }
+}
+
+/// Configure where session data is persisted. The session store
+/// is registered globally so middleware can read and write
+/// sessions on every request without threading it through the
+/// pipeline. Swap to a different driver (e.g. cookie_store,
+/// postgres) by changing the line below.
+///
+fn session_setup(app: App) {
+  sqlite.session_store(app.db) |> session.setup()
+}
+
+// ------------------------------------------------------------- Main
+
+/// Starts the Glimr web application server. Initializes the
+/// Wisp HTTP handler with the application's router, configures
+/// the Mist server on the specified port, and runs your app
+/// indefinitely.
+///
+pub fn main() -> Nil {
   glimr_mist.configure_logger()
   config.load()
 
-  let app = app.start()
-  let route_groups = routes.groups()
+  let app = app()
+  session_setup(app)
 
-  sqlite.session_store(app.db) |> session.setup()
-
-  fn(req) {
+  let init = fn(req) {
     let ctx = context.new(req, app)
-    router.handle(ctx, route_groups, kernel.handle)
+    router.handle(ctx, route_groups(), kernel.handle)
   }
-}
 
-/// The network port the web server listens on. When running
-/// via ./glimr run, uses DEV_PROXY_PORT so the dev proxy can
-/// handle the main APP_PORT.
-///
-fn get_port() -> Int {
-  case env.get_string("_GLIMR_RUN") {
-    Ok("true") -> {
-      config.dev_proxy_port()
-    }
-    _ -> {
-      config.get_int("app.port")
-    }
-  }
+  let assert Ok(_) =
+    glimr_mist.handler(init, config.get_string("app.key"))
+    |> mist.new()
+    |> mist.port(config.listen_port())
+    |> mist.start()
+
+  process.sleep_forever()
 }
