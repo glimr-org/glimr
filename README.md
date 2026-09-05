@@ -58,7 +58,7 @@ If you'd like to stay updated on Glimr's development, Follow [@migueljarias](htt
   - [Setup](#setup)
       - [SQLite](#sqlite)
       - [PostgreSQL](#postgresql)
-      - [Multiple Databases](#multiple-database-connections)
+      - [Multiple Databases](#multiple-databases)
   - [Migrations](#migrations)
   - [Queries](#queries)
 - [Cache](#cache)
